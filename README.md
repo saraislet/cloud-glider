@@ -5,14 +5,12 @@ generation may create its successor only through an approved, immutable
 CloudFormation template and only after configuration, security, health,
 coordination, concurrency, and cost-safety gates pass.
 
-The repository currently implements the safety foundation. Propagation is
-disabled by default, and the first deployment is limited to a single sandbox
-generation.
+The repository currently implements the safety foundation. Propagation is disabled by default, and the first trial is bounded through generation `2`.
 
 ## Project goals
 
 - Safely replace EC2 generations without retiring generation `N` until
-  generation `N+2` has been provisioned and validated.
+  generation `N+1` is healthy and `N+2` has passed its continuation preflight.
 - Keep propagation operator-controlled through durable DynamoDB state and an
   emergency hold mechanism.
 - Make lifecycle operations idempotent, observable, and safe to retry after
@@ -32,6 +30,14 @@ generation.
   contains no IAM or networking resources.
 - `scripts/initialize_control.py` creates the initial DynamoDB control records
   transactionally. It is dry-run unless `--apply` is supplied.
+<<<<<<< HEAD
+=======
+- `config/runtime-defaults.json` is the single source for configurable sandbox
+  runtime defaults, including Region, instance type, readiness timing,
+  propagation limits, and cost thresholds.
+- `scripts/validate_generation_inputs.py` rejects non-`us-west-2`, non-ARM64,
+  unavailable, or non-EBS AMIs before a stack is submitted.
+>>>>>>> 8e33a27 (Add readme and define runtime-defaults)
 - `docs/safety-contract.md` records the invariants that implementations and
   infrastructure changes must preserve.
 - `docs/audit-logging.md` defines audit categories, fields, retention, and known
@@ -45,13 +51,17 @@ generation.
 - environment: `sandbox`
 - propagation: disabled
 - emergency hold: disabled
-- maximum generation: `1`
+- maximum generation: `2`
 - absolute live-generation ceiling: `3`
 - concurrency model: `PREFLIGHT_THEN_RETIRE`
-- approved instance type: `t3.micro`
+- Region: `us-west-2`
+- architecture: Linux `arm64`
+- approved instance type: `t4g.micro`
+- readiness: two healthy heartbeats, 30 seconds apart
 - readiness polling: 15 seconds
-- heartbeat freshness: 5 minutes
-- readiness timeout: 15 minutes
+- readiness timeout: 10 minutes after `CREATE_COMPLETE`
+- monthly budget: `$10`, with `$5`, `$8`, and `$10` actual alerts, a `$10`
+  forecast alert, and a `$2` anomaly threshold
 
 ## Validation
 
@@ -77,8 +87,7 @@ cfn-lint cfn/foundation.yaml cfn/generation.yaml
    artifact bucket.
 4. Initialize DynamoDB with `scripts/initialize_control.py`; inspect the dry run
    before using `--apply`.
-5. Bootstrap generation `000000` or `000001` through the approved operator path
-   while propagation remains disabled.
+5. Bootstrap generation `000000` or `000001` through the approved operator path while propagation remains disabled.
 
 Do not enable propagation until the negative-security and failure-path tests in
 the safety contract pass in the sandbox account.

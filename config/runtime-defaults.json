@@ -1,0 +1,16 @@
+{
+  "aws_region": "us-west-2",
+  "instance_type": "t4g.micro",
+  "image_architecture": "arm64",
+  "heartbeat_interval_seconds": 30,
+  "readiness_poll_seconds": 15,
+  "readiness_required_heartbeats": 2,
+  "readiness_timeout_seconds": 600,
+  "max_generation": 2,
+  "max_live_generations": 3,
+  "concurrency_model": "PREFLIGHT_THEN_RETIRE",
+  "monthly_budget_usd": 10,
+  "actual_budget_alerts_usd": [5, 8, 10],
+  "forecast_budget_alert_usd": 10,
+  "cost_anomaly_threshold_usd": 2
+}
