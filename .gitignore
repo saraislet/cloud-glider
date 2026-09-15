@@ -6,6 +6,24 @@ local*
 
 # Temp files
 .~*
+work/*
+
+# AWS/SAM build output
+.aws-sam/
+.aws/
+
+# Additional tool caches
+.ruff_cache/
+.pyright/
+.pyre/
+
+# Local IDE settings
+.idea/
+.vscode/
+
+# Generated deployment packages
+.artifacts/
+packaged/
 
 # dotenv
 .env
