@@ -1,0 +1,61 @@
+name: Deploy Cloud Glider sandbox
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: cloud-glider-sandbox
+  cancel-in-progress: false
+
+jobs:
+  validate-and-deploy:
+    name: Validate and deploy foundation
+    runs-on: ubuntu-latest
+    environment: sandbox
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Run repository checks
+        run: |
+          python3 -m unittest discover -s tests -v
+          python3 scripts/validate_repository.py
+
+      - name: Authenticate to AWS using OIDC
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          role-session-name: glider-${{ github.run_id }}
+          aws-region: ${{ vars.AWS_REGION }}
+          allowed-account-ids: 123456789012
+
+      - name: Verify AWS identity
+        run: |
+          test "$(aws sts get-caller-identity --query Account --output text)" = "123456789012"
+
+      - name: Validate CloudFormation
+        run: |
+          aws cloudformation validate-template \
+            --template-body file://cfn/foundation.yaml
+
+      - name: Deploy foundation
+        run: |
+          aws cloudformation deploy \
+            --template-file cfn/foundation.yaml \
+            --stack-name cloud-glider-sandbox \
+            --region "${{ vars.AWS_REGION }}" \
+            --role-arn "${{ vars.CFN_SERVICE_ROLE_ARN }}" \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --no-fail-on-empty-changeset \
+            --parameter-overrides \
+              Environment=sandbox \
+              Owner="${{ vars.OWNER }}" \
+              AllowedImageId="${{ vars.ALLOWED_AMI_ID }}" \
+              AllowedSubnetId="${{ vars.ALLOWED_SUBNET_ID }}" \
+              AllowedSecurityGroupId="${{ vars.ALLOWED_SECURITY_GROUP_ID }}" \
+              AuditLogRetentionDays=365
