@@ -8,8 +8,8 @@
 - Networking: existing private subnet and existing security group; no inbound
   rule is created by Cloud Glider.
 - Region and compute: `us-west-2`, Linux `arm64`, and `t4g.micro` only.
-- Readiness: two healthy heartbeats 30 seconds apart, 15-second polling, and a
-  10-minute timeout after `CREATE_COMPLETE`.
+- Readiness: two consecutive healthy heartbeats at a 5-second cadence,
+  2-second predecessor polling, and a 10-minute timeout after `CREATE_COMPLETE`.
 - Runtime defaults: `config/runtime-defaults.json` is authoritative for values
   written into initial control state. Agents read those values from DynamoDB.
 - Control store: DynamoDB, not S3.
