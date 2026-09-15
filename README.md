@@ -31,7 +31,12 @@ The repository currently implements the safety foundation. Propagation is disabl
 - `scripts/initialize_control.py` creates the initial DynamoDB control records
   transactionally. It is dry-run unless `--apply` is supplied.
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
+=======
+- `scripts/clear_emergency_hold.py` is the operator-only, audited path for
+  deleting `HOLD/ACTIVE`; it is also dry-run unless `--apply` is supplied.
+>>>>>>> e3c8cd1 (update readme)
 - `config/runtime-defaults.json` is the single source for configurable sandbox
   runtime defaults, including Region, instance type, readiness timing,
   propagation limits, and cost thresholds.
