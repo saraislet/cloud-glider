@@ -1,0 +1,114 @@
+# Cloud Glider safety contract
+
+This contract is normative. A change that violates an invariant must not be
+merged or deployed, even if it makes a happy-path propagation test pass.
+
+## System invariants
+
+1. **Fresh operator control.** The agent must strongly read `CONTROL/GLOBAL` and
+   `HOLD/ACTIVE` immediately before every `CreateStack` or `ExecuteChangeSet`
+   operation that can provision compute. `propagation_enabled=false` or the
+   existence of `HOLD/ACTIVE` stops that operation.
+2. **Approved definitions only.** Generation stacks use the prescribed stack
+   name, generation service role, allowed parameters, S3 object version, and
+   SHA-256 digest. Arbitrary template URLs and parameters are forbidden.
+3. **No self-escalation.** A generation identity cannot create, modify, attach,
+   detach, or delete IAM policies, roles, instance profiles, permission
+   boundaries, or SCPs.
+4. **Safe predecessor survival.** A predecessor is not retired until its
+   successor is healthy, the continuation gate has passed, and ownership has
+   changed through a successful conditional write.
+5. **Idempotent coordination.** Leases, state transitions, request tokens, and
+   ownership changes are deterministic or protected by conditional writes.
+   Timeouts are reconciled against AWS state before retry.
+6. **Attribution.** Supported resources carry `project=cloud-glider`,
+   `environment`, `generation`, `owner`, and `purpose` tags. Every change is
+   preserved in the canonical CloudTrail archive and projected to its audit
+   category where supported.
+7. **Operator precedence.** Operator stop state takes precedence over retries,
+   automated recovery, handoff, and propagation.
+8. **Bounded concurrency.** Three live generation instances is the absolute
+   ceiling. Preferred operation has two or fewer by preflighting N+2, retiring
+   N, and only then provisioning N+2. A fourth instance is an invariant breach.
+
+## Accepted starting decisions
+
+- One AWS account in `us-west-2`; account identifiers are supplied at deployment
+  time by CloudFormation pseudo-parameters.
+- Existing private subnet and security group are supplied as parameters. Cloud
+  Glider does not create or mutate networking in its first implementation.
+- `t4g.micro` is the only initially approved instance type. The AMI and every
+  bootstrap dependency must support Linux `arm64`.
+- Successor readiness requires CloudFormation `CREATE_COMPLETE` followed by two
+  consecutive eligible DynamoDB heartbeats 30 seconds apart.
+- An eligible heartbeat must match the expected generation ID, instance ID,
+  stack ID, complete template identity, bootstrap version, and observed
+  propagation state.
+- Readiness is polled every 15 seconds for at most 10 minutes after
+  `CREATE_COMPLETE`. These values must be revisited after the first trial run.
+- The current implementation can carry S3 bucket/key, immutable VersionId,
+  SHA-256 digest, and Git commit or build ID. The final required template
+  identity tuple remains an explicit decision; once adopted, any mismatch is
+  terminal.
+- A terminal policy, identity, ownership, or invariant error atomically records
+  `ERROR`, creates `HOLD/ACTIVE`, and preserves the recoverable generation. The
+  agent invokes a dedicated function that can create but not delete the record;
+  only an operator can clear it.
+- DynamoDB tables, CloudWatch log groups, and audit archives are retained on
+  stack deletion and replacement.
+
+## Initial control state
+
+`scripts/initialize_control.py` creates these records in one transaction:
+
+- `CONTROL/GLOBAL`: propagation disabled, maximum generation 2, ceiling 3,
+  `us-west-2`, `t4g.micro`, `arm64`, readiness values, and the complete immutable
+  template identity tuple.
+- `CURRENT/GLOBAL`: no authoritative running generation and status
+  `UNINITIALIZED`.
+- `AUDIT#PROPAGATION/EVENT#...`: attribution for the initialization operation.
+
+No `HOLD/ACTIVE` item means the system is not held. Its existence means the hold
+is active; the `active` Boolean is descriptive and is not used to clear it.
+
+### HOLD record representation
+
+The hold is a normal DynamoDB item, not a special DynamoDB data type:
+
+- `PK`: String (`S`) with value `HOLD`
+- `SK`: String (`S`) with value `ACTIVE`
+- `active`: Boolean (`BOOL`) with value `true`, for readability only
+- `created_at`, `created_by`, `generation`, `error_code`, `correlation_id`,
+  `event_id`, and `environment`: Strings (`S`)
+
+The item has no TTL. The Lambda creates it with
+`attribute_not_exists(PK) AND attribute_not_exists(SK)`, cannot update or delete
+it, and records the generation error in the same transaction. The operator-only
+clear path deletes the item and appends a separate audit event atomically.
+
+The transaction refuses to overwrite existing records. Subsequent changes must
+use a separate, conditionally guarded operator workflow and emit before/after
+audit values.
+
+## Required negative tests before propagation
+
+- Disable propagation between the cycle read and final provisioning read; no
+  create or execute call occurs.
+- Start duplicate agents for one generation; only one lease owner and at most
+  one successor result.
+- Inject a timeout after CloudFormation request submission; reconciliation does
+  not create a duplicate stack.
+- Break successor bootstrap; the predecessor remains.
+- Fail the conditional handoff; the predecessor is not deleted.
+- Attempt arbitrary `iam:PassRole`, IAM mutation, direct EC2 creation or
+  termination, unrelated stack creation, and foundation deletion; all fail.
+- Change the template version, digest, or parameters; the agent rejects it.
+- Keep propagation enabled at `max_generation`; the chain stops.
+- Exercise preferred concurrency across multiple cycles; never observe four
+  live generations.
+
+## Review rule
+
+Any change to an invariant, IAM permission, audit category, or default safety
+value requires a security-focused review and a corresponding audit entry. The
+generation template must never use `CAPABILITY_IAM` or contain `AWS::IAM::*`.

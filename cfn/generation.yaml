@@ -1,0 +1,219 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: One Cloud Glider generation instance; contains no IAM or networking resources.
+
+Parameters:
+  Environment:
+    Type: String
+    Default: sandbox
+    AllowedPattern: '^[a-z][a-z0-9-]{1,15}$'
+  Owner:
+    Type: String
+    MinLength: 1
+    MaxLength: 64
+  Generation:
+    Type: String
+    AllowedPattern: '^[0-9]{6}$'
+  PredecessorStackId:
+    Type: String
+    Default: NONE
+    MaxLength: 1024
+  ApprovedImageId:
+    Type: AWS::EC2::Image::Id
+  InstanceType:
+    Type: String
+    Default: t4g.micro
+    AllowedValues: [t4g.micro]
+  ImageArchitecture:
+    Type: String
+    Default: arm64
+    AllowedValues: [arm64]
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+  SecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+  AgentInstanceProfileName:
+    Type: String
+  StateTableName:
+    Type: String
+  AgentArtifactBucket:
+    Type: String
+  AgentArtifactKey:
+    Type: String
+    AllowedPattern: '^generation/.+$'
+  AgentArtifactVersionId:
+    Type: String
+    MinLength: 1
+  AgentArtifactSha256:
+    Type: String
+    AllowedPattern: '^[A-Fa-f0-9]{64}$'
+  BootstrapVersion:
+    Type: String
+    MinLength: 1
+    MaxLength: 128
+  TemplateVersion:
+    Type: String
+    MinLength: 1
+    MaxLength: 128
+  TemplateBucket:
+    Type: String
+    MinLength: 3
+  TemplateKey:
+    Type: String
+    AllowedPattern: '^generation/.+$'
+  TemplateS3VersionId:
+    Type: String
+    MinLength: 1
+  TemplateSha256:
+    Type: String
+    AllowedPattern: '^[A-Fa-f0-9]{64}$'
+  TemplateBuildId:
+    Type: String
+    MinLength: 7
+    MaxLength: 128
+  PropagationAuditLogGroupName:
+    Type: String
+  AgentOperationsLogGroupName:
+    Type: String
+  EmergencyHoldFunctionName:
+    Type: String
+  RootDeviceName:
+    Type: String
+    Default: /dev/xvda
+    AllowedValues: [/dev/xvda, /dev/sda1]
+  RootVolumeGiB:
+    Type: Number
+    Default: 8
+    MinValue: 8
+    MaxValue: 16
+
+Rules:
+  SandboxRegionIsUsWest2:
+    Assertions:
+      - Assert: !Equals [!Ref 'AWS::Region', us-west-2]
+        AssertDescription: Cloud Glider's initial sandbox is restricted to us-west-2.
+  SandboxArchitectureIsArm64:
+    Assertions:
+      - Assert: !Equals [!Ref ImageArchitecture, arm64]
+        AssertDescription: Cloud Glider's initial sandbox requires a prevalidated arm64 AMI.
+
+Resources:
+  GenerationInstance:
+    Type: AWS::EC2::Instance
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      ImageId: !Ref ApprovedImageId
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref AgentInstanceProfileName
+      MetadataOptions:
+        HttpEndpoint: enabled
+        HttpPutResponseHopLimit: 1
+        HttpTokens: required
+        InstanceMetadataTags: enabled
+      Monitoring: true
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: false
+          DeleteOnTermination: true
+          DeviceIndex: '0'
+          GroupSet:
+            - !Ref SecurityGroupId
+          SubnetId: !Ref SubnetId
+      BlockDeviceMappings:
+        - DeviceName: !Ref RootDeviceName
+          Ebs:
+            DeleteOnTermination: true
+            Encrypted: true
+            VolumeSize: !Ref RootVolumeGiB
+            VolumeType: gp3
+      Tags:
+        - Key: Name
+          Value: !Sub 'cloud-glider-${Environment}-gen-${Generation}'
+        - Key: project
+          Value: cloud-glider
+        - Key: environment
+          Value: !Ref Environment
+        - Key: generation
+          Value: !Ref Generation
+        - Key: owner
+          Value: !Ref Owner
+        - Key: purpose
+          Value: generation-compute
+        - Key: template-version
+          Value: !Ref TemplateVersion
+        - Key: template-sha256
+          Value: !Ref TemplateSha256
+        - Key: template-build-id
+          Value: !Ref TemplateBuildId
+        - Key: bootstrap-version
+          Value: !Ref BootstrapVersion
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -euo pipefail
+          test "$(uname -m)" = "aarch64"
+          install -d -m 0750 /etc/cloud-glider /opt/cloud-glider
+          cat >/etc/cloud-glider/bootstrap.json <<'JSON'
+          {
+            "environment": "${Environment}",
+            "generation": "${Generation}",
+            "predecessor_stack_id": "${PredecessorStackId}",
+            "state_table_name": "${StateTableName}",
+            "bootstrap_version": "${BootstrapVersion}",
+            "template_version": "${TemplateVersion}",
+            "template_bucket": "${TemplateBucket}",
+            "template_key": "${TemplateKey}",
+            "template_s3_version_id": "${TemplateS3VersionId}",
+            "template_sha256": "${TemplateSha256}",
+            "template_build_id": "${TemplateBuildId}",
+            "propagation_audit_log_group": "${PropagationAuditLogGroupName}",
+            "agent_operations_log_group": "${AgentOperationsLogGroupName}",
+            "emergency_hold_function_name": "${EmergencyHoldFunctionName}"
+          }
+          JSON
+          chmod 0640 /etc/cloud-glider/bootstrap.json
+          aws s3api get-object \
+            --bucket '${AgentArtifactBucket}' \
+            --key '${AgentArtifactKey}' \
+            --version-id '${AgentArtifactVersionId}' \
+            /opt/cloud-glider/agent.tar.gz
+          echo '${AgentArtifactSha256}  /opt/cloud-glider/agent.tar.gz' | sha256sum -c -
+          tar -xzf /opt/cloud-glider/agent.tar.gz -C /opt/cloud-glider
+          test -x /opt/cloud-glider/bin/cloud-glider
+          cat >/etc/systemd/system/cloud-glider.service <<'UNIT'
+          [Unit]
+          Description=Cloud Glider propagation agent
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          Type=simple
+          ExecStart=/opt/cloud-glider/bin/cloud-glider --config /etc/cloud-glider/bootstrap.json
+          Restart=on-failure
+          RestartSec=15
+          User=root
+          NoNewPrivileges=true
+          PrivateTmp=true
+          ProtectHome=true
+          ProtectSystem=strict
+          ReadWritePaths=/var/lib/cloud-glider
+
+          [Install]
+          WantedBy=multi-user.target
+          UNIT
+          install -d -m 0750 /var/lib/cloud-glider
+          systemctl daemon-reload
+          systemctl enable --now cloud-glider.service
+
+Outputs:
+  InstanceId:
+    Value: !Ref GenerationInstance
+  Generation:
+    Value: !Ref Generation
+  TemplateVersion:
+    Value: !Ref TemplateVersion
+  TemplateS3VersionId:
+    Value: !Ref TemplateS3VersionId
+  TemplateSha256:
+    Value: !Ref TemplateSha256
+  TemplateBuildId:
+    Value: !Ref TemplateBuildId

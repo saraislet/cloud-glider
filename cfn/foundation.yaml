@@ -1,0 +1,1031 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  Cloud Glider retained control plane, audit foundation, artifact store, and
+  least-privilege generation roles. Deploy only from an administrative principal.
+
+Parameters:
+  Environment:
+    Type: String
+    Default: sandbox
+    AllowedPattern: '^[a-z][a-z0-9-]{1,15}$'
+  Owner:
+    Type: String
+    Description: Owner tag value for cost and operational attribution.
+    MinLength: 1
+    MaxLength: 64
+  AllowedImageId:
+    Type: AWS::EC2::Image::Id
+    Description: Approved AMI for generation instances in this Region.
+  AllowedSubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Description: Existing private subnet used by generation instances.
+  AllowedSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: Existing no-inbound security group used by generation instances.
+  AuditLogRetentionDays:
+    Type: Number
+    Default: 365
+    AllowedValues: [90, 180, 365, 731, 1827, 3653]
+
+Rules:
+  SandboxRegionIsUsWest2:
+    Assertions:
+      - Assert: !Equals [!Ref 'AWS::Region', us-west-2]
+        AssertDescription: Cloud Glider's initial sandbox is restricted to us-west-2.
+
+Resources:
+  StateTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: !Sub 'cloud-glider-${Environment}-state'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      DeletionProtectionEnabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+        RecoveryPeriodInDays: 35
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+      TimeToLiveSpecification:
+        AttributeName: expires_at
+        Enabled: true
+      Tags:
+        - Key: project
+          Value: cloud-glider
+        - Key: environment
+          Value: !Ref Environment
+        - Key: owner
+          Value: !Ref Owner
+        - Key: purpose
+          Value: control-and-coordination
+
+  ArtifactBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub 'cloud-glider-${Environment}-${AWS::AccountId}-${AWS::Region}-artifacts'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: retain-noncurrent-approved-artifacts
+            Status: Enabled
+            NoncurrentVersionTransitions:
+              - StorageClass: GLACIER_IR
+                TransitionInDays: 90
+      Tags:
+        - Key: project
+          Value: cloud-glider
+        - Key: environment
+          Value: !Ref Environment
+        - Key: owner
+          Value: !Ref Owner
+        - Key: purpose
+          Value: immutable-approved-artifacts
+
+  ArtifactBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref ArtifactBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: '*'
+            Action: 's3:*'
+            Resource:
+              - !GetAtt ArtifactBucket.Arn
+              - !Sub '${ArtifactBucket.Arn}/*'
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+
+  AuditArchiveBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub 'cloud-glider-${Environment}-${AWS::AccountId}-${AWS::Region}-audit'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerPreferred
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      Tags:
+        - Key: project
+          Value: cloud-glider
+        - Key: environment
+          Value: !Ref Environment
+        - Key: owner
+          Value: !Ref Owner
+        - Key: purpose
+          Value: canonical-audit-archive
+
+  AuditArchiveBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref AuditArchiveBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: CloudTrailAclCheck
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: s3:GetBucketAcl
+            Resource: !GetAtt AuditArchiveBucket.Arn
+            Condition:
+              StringEquals:
+                aws:SourceArn: !Sub 'arn:${AWS::Partition}:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/cloud-glider-${Environment}-audit'
+          - Sid: CloudTrailWrite
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: s3:PutObject
+            Resource: !Sub '${AuditArchiveBucket.Arn}/AWSLogs/${AWS::AccountId}/*'
+            Condition:
+              StringEquals:
+                s3:x-amz-acl: bucket-owner-full-control
+                aws:SourceArn: !Sub 'arn:${AWS::Partition}:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/cloud-glider-${Environment}-audit'
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: '*'
+            Action: 's3:*'
+            Resource:
+              - !GetAtt AuditArchiveBucket.Arn
+              - !Sub '${AuditArchiveBucket.Arn}/*'
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+
+  AccountAuditTrail:
+    Type: AWS::CloudTrail::Trail
+    DependsOn: AuditArchiveBucketPolicy
+    Properties:
+      TrailName: !Sub 'cloud-glider-${Environment}-audit'
+      S3BucketName: !Ref AuditArchiveBucket
+      IncludeGlobalServiceEvents: true
+      IsLogging: true
+      IsMultiRegionTrail: true
+      EnableLogFileValidation: true
+      EventSelectors:
+        - IncludeManagementEvents: true
+          ReadWriteType: WriteOnly
+      Tags:
+        - Key: project
+          Value: cloud-glider
+        - Key: environment
+          Value: !Ref Environment
+        - Key: owner
+          Value: !Ref Owner
+        - Key: purpose
+          Value: canonical-change-audit
+
+  InfrastructureAuditLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub '/cloud-glider/${Environment}/audit/infrastructure'
+      RetentionInDays: !Ref AuditLogRetentionDays
+      Tags:
+        - Key: project
+          Value: cloud-glider
+        - Key: environment
+          Value: !Ref Environment
+        - Key: owner
+          Value: !Ref Owner
+        - Key: purpose
+          Value: infrastructure-audit
+
+  IamAccountAuditLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub '/cloud-glider/${Environment}/audit/iam-account'
+      RetentionInDays: !Ref AuditLogRetentionDays
+      Tags:
+        - Key: project
+          Value: cloud-glider
+        - Key: environment
+          Value: !Ref Environment
+        - Key: owner
+          Value: !Ref Owner
+        - Key: purpose
+          Value: iam-account-audit
+
+  NetworkAuditLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub '/cloud-glider/${Environment}/audit/network'
+      RetentionInDays: !Ref AuditLogRetentionDays
+      Tags:
+        - Key: project
+          Value: cloud-glider
+        - Key: environment
+          Value: !Ref Environment
+        - Key: owner
+          Value: !Ref Owner
+        - Key: purpose
+          Value: network-audit
+
+  PropagationAuditLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub '/cloud-glider/${Environment}/audit/propagation'
+      RetentionInDays: !Ref AuditLogRetentionDays
+      Tags:
+        - Key: project
+          Value: cloud-glider
+        - Key: environment
+          Value: !Ref Environment
+        - Key: owner
+          Value: !Ref Owner
+        - Key: purpose
+          Value: propagation-audit
+
+  AgentOperationsLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub '/cloud-glider/${Environment}/operations/agent'
+      RetentionInDays: 90
+      Tags:
+        - Key: project
+          Value: cloud-glider
+        - Key: environment
+          Value: !Ref Environment
+        - Key: owner
+          Value: !Ref Owner
+        - Key: purpose
+          Value: agent-diagnostics
+
+  SecurityFindingsLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub '/cloud-glider/${Environment}/security/findings'
+      RetentionInDays: !Ref AuditLogRetentionDays
+      Tags:
+        - Key: project
+          Value: cloud-glider
+        - Key: environment
+          Value: !Ref Environment
+        - Key: owner
+          Value: !Ref Owner
+        - Key: purpose
+          Value: security-findings
+
+  CostAlertsLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub '/cloud-glider/${Environment}/cost/alerts'
+      RetentionInDays: !Ref AuditLogRetentionDays
+      Tags:
+        - Key: project
+          Value: cloud-glider
+        - Key: environment
+          Value: !Ref Environment
+        - Key: owner
+          Value: !Ref Owner
+        - Key: purpose
+          Value: cost-alerts
+
+  EmergencyHoldFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/cloud-glider-${Environment}-emergency-hold'
+      RetentionInDays: !Ref AuditLogRetentionDays
+      Tags:
+        - Key: project
+          Value: cloud-glider
+        - Key: environment
+          Value: !Ref Environment
+        - Key: owner
+          Value: !Ref Owner
+        - Key: purpose
+          Value: terminal-error-handler
+
+  EmergencyHoldFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'cloud-glider-${Environment}-emergency-hold'
+      Path: /cloud-glider/
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: set-hold-and-record-terminal-error
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: ReadActiveHold
+                Effect: Allow
+                Action: dynamodb:GetItem
+                Resource: !GetAtt StateTable.Arn
+                Condition:
+                  ForAllValues:StringEquals:
+                    dynamodb:LeadingKeys:
+                      - HOLD
+              - Sid: CreateHoldAndAuditRecord
+                Effect: Allow
+                Action:
+                  - dynamodb:ConditionCheckItem
+                  - dynamodb:PutItem
+                Resource: !GetAtt StateTable.Arn
+                Condition:
+                  ForAllValues:StringLike:
+                    dynamodb:LeadingKeys:
+                      - HOLD
+                      - AUDIT#PROPAGATION
+              - Sid: RecordGenerationError
+                Effect: Allow
+                Action: dynamodb:UpdateItem
+                Resource: !GetAtt StateTable.Arn
+                Condition:
+                  ForAllValues:StringLike:
+                    dynamodb:LeadingKeys:
+                      - 'GEN#*'
+              - Sid: WriteFunctionLogs
+                Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub '${EmergencyHoldFunctionLogGroup.Arn}:log-stream:*'
+      Tags:
+        - Key: project
+          Value: cloud-glider
+        - Key: environment
+          Value: !Ref Environment
+        - Key: owner
+          Value: !Ref Owner
+        - Key: purpose
+          Value: terminal-error-handler
+
+  EmergencyHoldFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: EmergencyHoldFunctionLogGroup
+    Properties:
+      FunctionName: !Sub 'cloud-glider-${Environment}-emergency-hold'
+      Description: Atomically create the append-only HOLD/ACTIVE item and record a terminal error.
+      Runtime: python3.12
+      Handler: index.handler
+      Role: !GetAtt EmergencyHoldFunctionRole.Arn
+      ReservedConcurrentExecutions: 2
+      Timeout: 10
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref StateTable
+          ENVIRONMENT: !Ref Environment
+      Code:
+        ZipFile: |
+          import datetime
+          import os
+          import re
+          import uuid
+
+          import boto3
+
+          dynamodb = boto3.client("dynamodb")
+          generation_pattern = re.compile(r"^[0-9]{6}$")
+          error_pattern = re.compile(r"^[A-Z][A-Z0-9_]{2,63}$")
+
+          def handler(event, context):
+              generation = str(event.get("generation", ""))
+              error_code = str(event.get("error_code", ""))
+              correlation_id = str(event.get("correlation_id", ""))
+              if not generation_pattern.fullmatch(generation):
+                  raise ValueError("generation must be six digits")
+              if not error_pattern.fullmatch(error_code):
+                  raise ValueError("invalid terminal error code")
+              if not correlation_id or len(correlation_id) > 128:
+                  raise ValueError("invalid correlation ID")
+
+              now = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+              event_id = str(uuid.uuid4())
+              actor = context.invoked_function_arn
+              table = os.environ["TABLE_NAME"]
+              environment = os.environ["ENVIRONMENT"]
+              generation_values = {
+                  ":error": {"S": "ERROR"},
+                  ":code": {"S": error_code},
+                  ":correlation": {"S": correlation_id},
+                  ":now": {"S": now},
+              }
+              hold = {
+                  "PK": {"S": "HOLD"},
+                  "SK": {"S": "ACTIVE"},
+                  "active": {"BOOL": True},
+                  "created_at": {"S": now},
+                  "created_by": {"S": actor},
+                  "generation": {"S": generation},
+                  "error_code": {"S": error_code},
+                  "correlation_id": {"S": correlation_id},
+                  "event_id": {"S": event_id},
+                  "environment": {"S": environment},
+              }
+              audit = {
+                  "PK": {"S": "AUDIT#PROPAGATION"},
+                  "SK": {"S": f"EVENT#{now}#{event_id}"},
+                  "schema_version": {"S": "1.0"},
+                  "event_id": {"S": event_id},
+                  "occurred_at": {"S": now},
+                  "category": {"S": "PROPAGATION"},
+                  "actor": {"S": actor},
+                  "action": {"S": "CREATE_EMERGENCY_HOLD"},
+                  "resource_type": {"S": "HOLD_RECORD"},
+                  "resource_id": {"S": "HOLD/ACTIVE"},
+                  "result": {"S": "APPLIED"},
+                  "reason": {"S": error_code},
+                  "correlation_id": {"S": correlation_id},
+                  "environment": {"S": environment},
+                  "generation": {"S": generation},
+              }
+
+              for attempt in range(2):
+                  existing = dynamodb.get_item(
+                      TableName=table,
+                      Key={"PK": {"S": "HOLD"}, "SK": {"S": "ACTIVE"}},
+                      ConsistentRead=True,
+                  ).get("Item")
+                  hold_operation = (
+                      {
+                          "ConditionCheck": {
+                              "TableName": table,
+                              "Key": {"PK": {"S": "HOLD"}, "SK": {"S": "ACTIVE"}},
+                              "ConditionExpression": "attribute_exists(PK) AND attribute_exists(SK)",
+                          }
+                      }
+                      if existing
+                      else {
+                          "Put": {
+                              "TableName": table,
+                              "Item": hold,
+                              "ConditionExpression": "attribute_not_exists(PK) AND attribute_not_exists(SK)",
+                          }
+                      }
+                  )
+                  try:
+                      dynamodb.transact_write_items(
+                          TransactItems=[
+                              hold_operation,
+                              {
+                                  "Update": {
+                                      "TableName": table,
+                                      "Key": {"PK": {"S": f"GEN#{generation}"}, "SK": {"S": "STATE"}},
+                                      "UpdateExpression": "SET #status = :error, error_code = :code, error_correlation_id = :correlation, updated_at = :now",
+                                      "ConditionExpression": "attribute_exists(PK) AND attribute_exists(SK)",
+                                      "ExpressionAttributeNames": {"#status": "status"},
+                                      "ExpressionAttributeValues": generation_values,
+                                  }
+                              },
+                              {
+                                  "Put": {
+                                      "TableName": table,
+                                      "Item": audit,
+                                      "ConditionExpression": "attribute_not_exists(PK) AND attribute_not_exists(SK)",
+                                  }
+                              },
+                          ]
+                      )
+                      return {"hold_active": True, "hold_created": not bool(existing), "event_id": event_id, "occurred_at": now}
+                  except dynamodb.exceptions.TransactionCanceledException:
+                      if attempt == 1:
+                          raise
+
+  EventBridgeLogResourcePolicy:
+    Type: AWS::Logs::ResourcePolicy
+    Properties:
+      PolicyName: !Sub 'cloud-glider-${Environment}-eventbridge-audit'
+      PolicyDocument: !Sub |
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "AllowEventBridgeAuditDelivery",
+              "Effect": "Allow",
+              "Principal": {"Service": "events.amazonaws.com"},
+              "Action": ["logs:CreateLogStream", "logs:PutLogEvents"],
+              "Resource": [
+                "${InfrastructureAuditLogGroup.Arn}:*",
+                "${IamAccountAuditLogGroup.Arn}:*",
+                "${NetworkAuditLogGroup.Arn}:*"
+              ]
+            }
+          ]
+        }
+
+  IamAccountAuditRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub 'cloud-glider-${Environment}-iam-account-audit'
+      Description: Project IAM and account control-plane changes into a dedicated log.
+      State: ENABLED
+      EventPattern:
+        detail-type:
+          - AWS API Call via CloudTrail
+        source:
+          - aws.iam
+          - aws.organizations
+          - aws.account
+          - aws.sso
+          - aws.sso-admin
+      Targets:
+        - Id: IamAccountAuditLog
+          Arn: !GetAtt IamAccountAuditLogGroup.Arn
+
+  NetworkAuditRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub 'cloud-glider-${Environment}-network-audit'
+      Description: Project enumerated EC2 networking changes into a dedicated log.
+      State: ENABLED
+      EventPattern:
+        detail-type:
+          - AWS API Call via CloudTrail
+        source:
+          - aws.ec2
+        detail:
+          eventSource:
+            - ec2.amazonaws.com
+          eventName:
+            - CreateVpc
+            - DeleteVpc
+            - ModifyVpcAttribute
+            - CreateSubnet
+            - DeleteSubnet
+            - ModifySubnetAttribute
+            - CreateSecurityGroup
+            - DeleteSecurityGroup
+            - AuthorizeSecurityGroupIngress
+            - RevokeSecurityGroupIngress
+            - AuthorizeSecurityGroupEgress
+            - RevokeSecurityGroupEgress
+            - ModifySecurityGroupRules
+            - CreateSecurityGroupRule
+            - DeleteSecurityGroupRule
+            - CreateRouteTable
+            - DeleteRouteTable
+            - AssociateRouteTable
+            - DisassociateRouteTable
+            - CreateRoute
+            - ReplaceRoute
+            - DeleteRoute
+            - CreateInternetGateway
+            - AttachInternetGateway
+            - DetachInternetGateway
+            - DeleteInternetGateway
+            - CreateNatGateway
+            - DeleteNatGateway
+            - CreateNetworkAcl
+            - DeleteNetworkAcl
+            - CreateNetworkAclEntry
+            - ReplaceNetworkAclEntry
+            - DeleteNetworkAclEntry
+            - CreateVpcEndpoint
+            - ModifyVpcEndpoint
+            - DeleteVpcEndpoints
+            - CreateVpcPeeringConnection
+            - AcceptVpcPeeringConnection
+            - DeleteVpcPeeringConnection
+            - AllocateAddress
+            - AssociateAddress
+            - DisassociateAddress
+            - ReleaseAddress
+            - CreateTransitGateway
+            - DeleteTransitGateway
+      Targets:
+        - Id: NetworkAuditLog
+          Arn: !GetAtt NetworkAuditLogGroup.Arn
+
+  InfrastructureServiceAuditRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub 'cloud-glider-${Environment}-infrastructure-audit'
+      Description: Project non-network infrastructure management calls into a dedicated log.
+      State: ENABLED
+      EventPattern:
+        detail-type:
+          - AWS API Call via CloudTrail
+        source:
+          - aws.cloudformation
+          - aws.dynamodb
+          - aws.s3
+          - aws.logs
+          - aws.cloudtrail
+          - aws.events
+          - aws.sns
+          - aws.ssm
+      Targets:
+        - Id: InfrastructureAuditLog
+          Arn: !GetAtt InfrastructureAuditLogGroup.Arn
+
+  ComputeAuditRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub 'cloud-glider-${Environment}-compute-audit'
+      Description: Project EC2 compute lifecycle changes into infrastructure audit.
+      State: ENABLED
+      EventPattern:
+        detail-type:
+          - AWS API Call via CloudTrail
+        source:
+          - aws.ec2
+        detail:
+          eventSource:
+            - ec2.amazonaws.com
+          eventName:
+            - RunInstances
+            - TerminateInstances
+            - StartInstances
+            - StopInstances
+            - RebootInstances
+            - ModifyInstanceAttribute
+            - CreateTags
+            - DeleteTags
+      Targets:
+        - Id: ComputeAuditLog
+          Arn: !GetAtt InfrastructureAuditLogGroup.Arn
+
+  CloudFormationStatusAuditRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub 'cloud-glider-${Environment}-stack-status-audit'
+      Description: Record CloudFormation stack lifecycle state changes.
+      State: ENABLED
+      EventPattern:
+        source:
+          - aws.cloudformation
+        detail-type:
+          - CloudFormation Stack Status Change
+      Targets:
+        - Id: StackStatusAuditLog
+          Arn: !GetAtt InfrastructureAuditLogGroup.Arn
+
+  GenerationServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'cloud-glider-${Environment}-generation-cfn'
+      Path: /cloud-glider/
+      Description: CloudFormation service role restricted to the generation template.
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudformation.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: generation-template-resources
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: RunApprovedGenerationInputs
+                Effect: Allow
+                Action: ec2:RunInstances
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}::image/${AllowedImageId}'
+                  - !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:subnet/${AllowedSubnetId}'
+                  - !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:security-group/${AllowedSecurityGroupId}'
+              - Sid: RunTaggedT4gMicroResources
+                Effect: Allow
+                Action: ec2:RunInstances
+                Resource: !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*'
+                Condition:
+                  StringEquals:
+                    ec2:InstanceType: t4g.micro
+                    ec2:MetadataHttpTokens: required
+                    aws:RequestTag/project: cloud-glider
+                    aws:RequestTag/environment: !Ref Environment
+              - Sid: RunGenerationStorageAndInterface
+                Effect: Allow
+                Action: ec2:RunInstances
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:volume/*'
+                  - !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:network-interface/*'
+                Condition:
+                  StringEquals:
+                    ec2:InstanceType: t4g.micro
+              - Sid: TagGenerationResourcesAtCreation
+                Effect: Allow
+                Action: ec2:CreateTags
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*'
+                  - !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:volume/*'
+                  - !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:network-interface/*'
+                Condition:
+                  StringEquals:
+                    aws:RequestTag/project: cloud-glider
+                    aws:RequestTag/environment: !Ref Environment
+              - Sid: RetireTaggedGenerationInstances
+                Effect: Allow
+                Action: ec2:TerminateInstances
+                Resource: !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*'
+                Condition:
+                  StringEquals:
+                    ec2:ResourceTag/project: cloud-glider
+                    ec2:ResourceTag/environment: !Ref Environment
+              - Sid: InspectGenerationResources
+                Effect: Allow
+                Action:
+                  - ec2:DescribeImages
+                  - ec2:DescribeInstances
+                  - ec2:DescribeInstanceStatus
+                  - ec2:DescribeSecurityGroups
+                  - ec2:DescribeSubnets
+                  - ec2:DescribeVolumes
+                Resource: '*'
+              - Sid: PassOnlyAgentRoleToEc2
+                Effect: Allow
+                Action: iam:PassRole
+                Resource: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider/cloud-glider-${Environment}-agent'
+                Condition:
+                  StringEquals:
+                    iam:PassedToService: ec2.amazonaws.com
+      Tags:
+        - Key: project
+          Value: cloud-glider
+        - Key: environment
+          Value: !Ref Environment
+        - Key: owner
+          Value: !Ref Owner
+        - Key: purpose
+          Value: generation-cloudformation-service-role
+
+  AgentRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'cloud-glider-${Environment}-agent'
+      Path: /cloud-glider/
+      Description: Orchestration role for a Cloud Glider generation instance.
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: control-coordination-and-generation-stacks
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: ReadControlAndState
+                Effect: Allow
+                Action:
+                  - dynamodb:BatchGetItem
+                  - dynamodb:GetItem
+                  - dynamodb:Query
+                Resource: !GetAtt StateTable.Arn
+              - Sid: ConditionallyWriteCoordinationState
+                Effect: Allow
+                Action:
+                  - dynamodb:ConditionCheckItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                Resource: !GetAtt StateTable.Arn
+                Condition:
+                  ForAllValues:StringLike:
+                    dynamodb:LeadingKeys:
+                      - CURRENT
+                      - 'GEN#*'
+                      - LOCK
+                      - 'AUDIT#PROPAGATION'
+              - Sid: ReleaseOnlyPropagationLease
+                Effect: Allow
+                Action: dynamodb:DeleteItem
+                Resource: !GetAtt StateTable.Arn
+                Condition:
+                  ForAllValues:StringEquals:
+                    dynamodb:LeadingKeys:
+                      - LOCK
+              - Sid: CreateGenerationStacksWithApprovedRole
+                Effect: Allow
+                Action:
+                  - cloudformation:CreateChangeSet
+                  - cloudformation:CreateStack
+                  - cloudformation:DeleteStack
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/cloud-glider-${Environment}-gen-*/*'
+                  - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:changeSet/cloud-glider-${Environment}-gen-*/*'
+                Condition:
+                  StringEquals:
+                    cloudformation:RoleARN: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider/cloud-glider-${Environment}-generation-cfn'
+              - Sid: ExecuteOrDiscardApprovedGenerationChangeSets
+                Effect: Allow
+                Action:
+                  - cloudformation:DeleteChangeSet
+                  - cloudformation:ExecuteChangeSet
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/cloud-glider-${Environment}-gen-*/*'
+                  - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:changeSet/cloud-glider-${Environment}-gen-*/*'
+              - Sid: InspectGenerationStacks
+                Effect: Allow
+                Action:
+                  - cloudformation:DescribeChangeSet
+                  - cloudformation:DescribeStackEvents
+                  - cloudformation:DescribeStackResources
+                  - cloudformation:DescribeStacks
+                  - cloudformation:GetTemplate
+                  - cloudformation:ListStackResources
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/cloud-glider-${Environment}-gen-*/*'
+                  - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:changeSet/cloud-glider-${Environment}-gen-*/*'
+              - Sid: PassOnlyGenerationServiceRole
+                Effect: Allow
+                Action: iam:PassRole
+                Resource: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider/cloud-glider-${Environment}-generation-cfn'
+                Condition:
+                  StringEquals:
+                    iam:PassedToService: cloudformation.amazonaws.com
+              - Sid: ReadVersionedApprovedArtifacts
+                Effect: Allow
+                Action:
+                  - s3:GetObjectVersion
+                  - s3:GetObjectVersionAttributes
+                Resource: !Sub '${ArtifactBucket.Arn}/generation/*'
+              - Sid: InspectArtifactBucket
+                Effect: Allow
+                Action:
+                  - s3:GetBucketLocation
+                  - s3:GetBucketVersioning
+                  - s3:ListBucket
+                Resource: !GetAtt ArtifactBucket.Arn
+                Condition:
+                  StringLike:
+                    s3:prefix: 'generation/*'
+              - Sid: WriteAgentAndPropagationLogs
+                Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - !Sub '${AgentOperationsLogGroup.Arn}:log-stream:*'
+                  - !Sub '${PropagationAuditLogGroup.Arn}:log-stream:*'
+              - Sid: PublishCloudGliderMetrics
+                Effect: Allow
+                Action: cloudwatch:PutMetricData
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    cloudwatch:namespace: CloudGlider
+              - Sid: InspectCapacityAndReadiness
+                Effect: Allow
+                Action:
+                  - ec2:DescribeAccountAttributes
+                  - ec2:DescribeInstances
+                  - ec2:DescribeInstanceStatus
+                  - servicequotas:GetServiceQuota
+                  - servicequotas:ListServiceQuotas
+                Resource: '*'
+              - Sid: CreateButNeverClearEmergencyHold
+                Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: !GetAtt EmergencyHoldFunction.Arn
+              - Sid: DenyDirectComputeMutation
+                Effect: Deny
+                Action:
+                  - ec2:RunInstances
+                  - ec2:TerminateInstances
+                Resource: '*'
+              - Sid: DenyIamMutation
+                Effect: Deny
+                Action:
+                  - iam:AddRoleToInstanceProfile
+                  - iam:AttachGroupPolicy
+                  - iam:AttachRolePolicy
+                  - iam:AttachUserPolicy
+                  - iam:CreateGroup
+                  - iam:CreateInstanceProfile
+                  - iam:CreatePolicy
+                  - iam:CreatePolicyVersion
+                  - iam:CreateRole
+                  - iam:CreateUser
+                  - iam:DeleteGroup
+                  - iam:DeleteGroupPolicy
+                  - iam:DeleteInstanceProfile
+                  - iam:DeletePolicy
+                  - iam:DeletePolicyVersion
+                  - iam:DeleteRole
+                  - iam:DeleteRolePermissionsBoundary
+                  - iam:DeleteRolePolicy
+                  - iam:DeleteUser
+                  - iam:DeleteUserPermissionsBoundary
+                  - iam:DeleteUserPolicy
+                  - iam:DetachGroupPolicy
+                  - iam:DetachRolePolicy
+                  - iam:DetachUserPolicy
+                  - iam:PutGroupPolicy
+                  - iam:PutRolePermissionsBoundary
+                  - iam:PutRolePolicy
+                  - iam:PutUserPermissionsBoundary
+                  - iam:PutUserPolicy
+                  - iam:RemoveRoleFromInstanceProfile
+                  - iam:SetDefaultPolicyVersion
+                  - iam:TagPolicy
+                  - iam:TagRole
+                  - iam:UntagPolicy
+                  - iam:UntagRole
+                  - iam:UpdateAssumeRolePolicy
+                  - iam:UpdateRole
+                  - iam:UpdateRoleDescription
+                Resource: '*'
+              - Sid: DenyFoundationDeletion
+                Effect: Deny
+                Action: cloudformation:DeleteStack
+                Resource: !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/cloud-glider-${Environment}/*'
+      Tags:
+        - Key: project
+          Value: cloud-glider
+        - Key: environment
+          Value: !Ref Environment
+        - Key: owner
+          Value: !Ref Owner
+        - Key: purpose
+          Value: generation-orchestration
+
+  AgentInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub 'cloud-glider-${Environment}-agent'
+      Path: /cloud-glider/
+      Roles:
+        - !Ref AgentRole
+
+Outputs:
+  StateTableName:
+    Value: !Ref StateTable
+  ArtifactBucketName:
+    Value: !Ref ArtifactBucket
+  AuditArchiveBucketName:
+    Value: !Ref AuditArchiveBucket
+  AgentRoleArn:
+    Value: !GetAtt AgentRole.Arn
+  AgentInstanceProfileName:
+    Value: !Ref AgentInstanceProfile
+  GenerationServiceRoleArn:
+    Value: !GetAtt GenerationServiceRole.Arn
+  InfrastructureAuditLogGroupName:
+    Value: !Ref InfrastructureAuditLogGroup
+  IamAccountAuditLogGroupName:
+    Value: !Ref IamAccountAuditLogGroup
+  NetworkAuditLogGroupName:
+    Value: !Ref NetworkAuditLogGroup
+  PropagationAuditLogGroupName:
+    Value: !Ref PropagationAuditLogGroup
+  AgentOperationsLogGroupName:
+    Value: !Ref AgentOperationsLogGroup
+  EmergencyHoldFunctionName:
+    Value: !Ref EmergencyHoldFunction
+  EmergencyHoldFunctionArn:
+    Value: !GetAtt EmergencyHoldFunction.Arn
