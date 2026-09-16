@@ -19,6 +19,7 @@ Parameters:
     MaxLength: 1024
   ApprovedImageId:
     Type: AWS::EC2::Image::Id
+    Default: ami-08dd4258d4d19fe06
   InstanceType:
     Type: String
     Default: t4g.micro
@@ -29,8 +30,10 @@ Parameters:
     AllowedValues: [arm64]
   SubnetId:
     Type: AWS::EC2::Subnet::Id
+    Default: subnet-0a00b98420d660d03
   SecurityGroupId:
     Type: AWS::EC2::SecurityGroup::Id
+    Default: sg-0da9cdee2a98d8dc2
   AgentInstanceProfileName:
     Type: String
   StateTableName:
@@ -76,6 +79,10 @@ Parameters:
     Type: String
   EmergencyHoldFunctionName:
     Type: String
+  OperationalAlertsTopicArn:
+    Type: String
+    AllowedPattern: '^arn:[a-z0-9-]+:sns:us-west-2:[0-9]{12}:cloud-glider-[a-z][a-z0-9-]{1,15}-operational-alerts$'
+    Description: Foundation SNS topic ARN for generation health notifications.
   RootDeviceName:
     Type: String
     Default: /dev/xvda
@@ -112,7 +119,7 @@ Resources:
         InstanceMetadataTags: enabled
       Monitoring: true
       NetworkInterfaces:
-        - AssociatePublicIpAddress: false
+        - AssociatePublicIpAddress: true
           DeleteOnTermination: true
           DeviceIndex: '0'
           GroupSet:
@@ -204,11 +211,33 @@ Resources:
           systemctl daemon-reload
           systemctl enable --now cloud-glider.service
 
+  GenerationStatusCheckAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'cloud-glider-${Environment}-gen-${Generation}-status-check'
+      AlarmDescription: !Sub 'Generation ${Generation} failed an EC2 system or instance status check.'
+      Namespace: AWS/EC2
+      MetricName: StatusCheckFailed
+      Dimensions:
+        - Name: InstanceId
+          Value: !Ref GenerationInstance
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 2
+      DatapointsToAlarm: 2
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: missing
+      AlarmActions:
+        - !Ref OperationalAlertsTopicArn
+
 Outputs:
   InstanceId:
     Value: !Ref GenerationInstance
   Generation:
     Value: !Ref Generation
+  StatusCheckAlarmName:
+    Value: !Ref GenerationStatusCheckAlarm
   TemplateVersion:
     Value: !Ref TemplateVersion
   TemplateS3VersionId:

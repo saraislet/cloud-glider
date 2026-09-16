@@ -1,0 +1,160 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  Cloud Glider sandbox network: one VPC, one public subnet, an internet gateway,
+  and a no-ingress generation security group with HTTPS-only egress.
+
+Parameters:
+  Environment:
+    Type: String
+    Default: sandbox
+    AllowedPattern: '^[a-z][a-z0-9-]{1,15}$'
+  Owner:
+    Type: String
+    Description: Owner tag value for cost and operational attribution.
+    MinLength: 1
+    MaxLength: 64
+  VpcCidr:
+    Type: String
+    Default: 10.42.0.0/16
+    AllowedPattern: '^(10)(\.([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])){2}\.0/16$'
+    Description: Private IPv4 CIDR for the dedicated Cloud Glider VPC.
+  PublicSubnetCidr:
+    Type: String
+    Default: 10.42.0.0/24
+    AllowedPattern: '^(10)(\.([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])){2}\.0/24$'
+    Description: IPv4 CIDR contained within VpcCidr for the generation subnet.
+
+Rules:
+  SandboxRegionIsUsWest2:
+    Assertions:
+      - Assert: !Equals [!Ref 'AWS::Region', us-west-2]
+        AssertDescription: Cloud Glider's initial sandbox network is restricted to us-west-2.
+
+Resources:
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      InstanceTenancy: default
+      Tags:
+        - Key: Name
+          Value: !Sub 'cloud-glider-${Environment}'
+        - Key: project
+          Value: cloud-glider
+        - Key: environment
+          Value: !Ref Environment
+        - Key: owner
+          Value: !Ref Owner
+        - Key: purpose
+          Value: generation-network
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub 'cloud-glider-${Environment}'
+        - Key: project
+          Value: cloud-glider
+        - Key: environment
+          Value: !Ref Environment
+        - Key: owner
+          Value: !Ref Owner
+        - Key: purpose
+          Value: generation-egress
+
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref Vpc
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [0, !GetAZs '']
+      CidrBlock: !Ref PublicSubnetCidr
+      MapPublicIpOnLaunch: false
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub 'cloud-glider-${Environment}-public-a'
+        - Key: project
+          Value: cloud-glider
+        - Key: environment
+          Value: !Ref Environment
+        - Key: owner
+          Value: !Ref Owner
+        - Key: purpose
+          Value: generation-public-subnet
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub 'cloud-glider-${Environment}-public'
+        - Key: project
+          Value: cloud-glider
+        - Key: environment
+          Value: !Ref Environment
+        - Key: owner
+          Value: !Ref Owner
+        - Key: purpose
+          Value: generation-public-routing
+
+  DefaultIpv4Route:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet
+
+  GenerationSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Cloud Glider generations; no ingress and HTTPS-only egress.
+      GroupName: !Sub 'cloud-glider-${Environment}-generation'
+      SecurityGroupIngress: []
+      SecurityGroupEgress:
+        - Description: HTTPS access to required AWS APIs
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub 'cloud-glider-${Environment}-generation'
+        - Key: project
+          Value: cloud-glider
+        - Key: environment
+          Value: !Ref Environment
+        - Key: owner
+          Value: !Ref Owner
+        - Key: purpose
+          Value: generation-egress
+
+Outputs:
+  VpcId:
+    Description: Dedicated Cloud Glider VPC ID.
+    Value: !Ref Vpc
+  PublicSubnetId:
+    Description: Pass as AllowedSubnetId to the foundation stack.
+    Value: !Ref PublicSubnet
+  GenerationSecurityGroupId:
+    Description: Pass as AllowedSecurityGroupId to the foundation stack.
+    Value: !GetAtt GenerationSecurityGroup.GroupId
+  AvailabilityZone:
+    Description: Availability Zone selected for the generation subnet.
+    Value: !GetAtt PublicSubnet.AvailabilityZone

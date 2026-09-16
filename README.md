@@ -24,29 +24,27 @@ The repository currently implements the safety foundation. Propagation is disabl
 
 ## Repository layout
 
+- `cfn/network.yaml` creates the dedicated VPC, public subnet, internet gateway,
+  route, and no-ingress generation security group.
 - `cfn/foundation.yaml` creates the retained control table, audit archive,
   category-specific log groups, artifact bucket, and IAM roles.
 - `cfn/generation.yaml` defines one generation EC2 instance. It deliberately
   contains no IAM or networking resources.
 - `scripts/initialize_control.py` creates the initial DynamoDB control records
   transactionally. It is dry-run unless `--apply` is supplied.
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-=======
 - `scripts/clear_emergency_hold.py` is the operator-only, audited path for
   deleting `HOLD/ACTIVE`; it is also dry-run unless `--apply` is supplied.
->>>>>>> e3c8cd1 (update readme)
 - `config/runtime-defaults.json` is the single source for configurable sandbox
   runtime defaults, including Region, instance type, readiness timing,
   propagation limits, and cost thresholds.
 - `scripts/validate_generation_inputs.py` rejects non-`us-west-2`, non-ARM64,
   unavailable, or non-EBS AMIs before a stack is submitted.
->>>>>>> 8e33a27 (Add readme and define runtime-defaults)
 - `docs/safety-contract.md` records the invariants that implementations and
   infrastructure changes must preserve.
 - `docs/audit-logging.md` defines audit categories, fields, retention, and known
   cross-account limitations.
+- `iam/runtime-role-assumptions.md` records why public IPv4 assignment adds no
+  runtime allow permission and which direct network mutations remain denied.
 - `iam/scp-requirements.md` records the future account SCP requirements that
   cannot be safely rendered until the account and administrative principals
   are known.
@@ -62,10 +60,11 @@ The repository currently implements the safety foundation. Propagation is disabl
 - Region: `us-west-2`
 - architecture: Linux `arm64`
 - approved instance type: `t4g.micro`
+- networking: public subnet, ephemeral public IPv4, and zero inbound rules
 - readiness: two healthy heartbeats, 30 seconds apart
 - readiness polling: 15 seconds
 - readiness timeout: 10 minutes after `CREATE_COMPLETE`
-- monthly budget: `$10`, with `$5`, `$8`, and `$10` actual alerts, a `$10`
+- monthly budget: `$20`, with `$10`, `$15`, and `$20` actual alerts, a `$20`
   forecast alert, and a `$2` anomaly threshold
 
 ## Validation
@@ -80,19 +79,21 @@ python3 scripts/validate_repository.py
 When `cfn-lint` is installed, also run:
 
 ```sh
-cfn-lint cfn/foundation.yaml cfn/generation.yaml
+cfn-lint cfn/network.yaml cfn/billing-alerts.yaml cfn/foundation.yaml cfn/generation.yaml
 ```
 
 ## Deployment order
 
 1. Review the deferred values in `docs/decisions.md`.
-2. Validate and deploy `cfn/foundation.yaml` from an administrative deployment
+2. Validate and deploy `cfn/network.yaml` from an administrative deployment
+   principal. Record its subnet and security-group outputs.
+3. Deploy `cfn/foundation.yaml` using those outputs from an administrative deployment
    principal, not from a generation instance.
-3. Upload immutable generation template and agent artifacts to the versioned
+4. Upload immutable generation template and agent artifacts to the versioned
    artifact bucket.
-4. Initialize DynamoDB with `scripts/initialize_control.py`; inspect the dry run
+5. Initialize DynamoDB with `scripts/initialize_control.py`; inspect the dry run
    before using `--apply`.
-5. Bootstrap generation `000000` or `000001` through the approved operator path while propagation remains disabled.
+6. Bootstrap generation `000000` or `000001` through the approved operator path while propagation remains disabled.
 
 Do not enable propagation until the negative-security and failure-path tests in
 the safety contract pass in the sandbox account.

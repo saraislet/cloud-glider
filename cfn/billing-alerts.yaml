@@ -1,0 +1,72 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Cloud Glider account billing alarm. Deploy only in us-east-1.
+
+Parameters:
+  NotificationEmail:
+    Type: String
+    Default: hi@sar.ai
+    AllowedPattern: '^[^@\s]+@[^@\s]+\.[^@\s]+$'
+    Description: Address that confirms and receives billing alarm notifications.
+  BillingThresholdUsd:
+    Type: Number
+    Default: 15
+    MinValue: 1
+    Description: Estimated month-to-date account charge that triggers the alarm.
+
+Rules:
+  BillingMetricsRegionIsUsEast1:
+    Assertions:
+      - Assert: !Equals [!Ref 'AWS::Region', us-east-1]
+        AssertDescription: AWS/Billing metrics are available only in us-east-1.
+
+Resources:
+  BillingAlertsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: cloud-glider-billing-alerts
+      DisplayName: Cloud Glider billing alerts
+      Tags:
+        - Key: project
+          Value: cloud-glider
+        - Key: purpose
+          Value: billing-alerts
+
+  BillingEmailSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Protocol: email
+      Endpoint: !Ref NotificationEmail
+      TopicArn: !Ref BillingAlertsTopic
+
+  EstimatedChargesAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'cloud-glider-estimated-charges-${BillingThresholdUsd}'
+      AlarmDescription: >-
+        Estimated month-to-date AWS account charges have reached the Cloud Glider
+        warning threshold. Disable propagation before investigating unexpected spend.
+      Namespace: AWS/Billing
+      MetricName: EstimatedCharges
+      Dimensions:
+        - Name: Currency
+          Value: USD
+      Statistic: Maximum
+      Period: 21600
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: !Ref BillingThresholdUsd
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: missing
+      AlarmActions:
+        - !Ref BillingAlertsTopic
+      Tags:
+        - Key: project
+          Value: cloud-glider
+        - Key: purpose
+          Value: billing-alert
+
+Outputs:
+  BillingAlertsTopicArn:
+    Value: !Ref BillingAlertsTopic
+  EstimatedChargesAlarmName:
+    Value: !Ref EstimatedChargesAlarm

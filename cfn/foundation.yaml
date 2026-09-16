@@ -18,7 +18,7 @@ Parameters:
     Description: Approved AMI for generation instances in this Region.
   AllowedSubnetId:
     Type: AWS::EC2::Subnet::Id
-    Description: Existing private subnet used by generation instances.
+    Description: Existing public subnet with an internet-gateway route used by generation instances.
   AllowedSecurityGroupId:
     Type: AWS::EC2::SecurityGroup::Id
     Description: Existing no-inbound security group used by generation instances.
@@ -26,6 +26,11 @@ Parameters:
     Type: Number
     Default: 365
     AllowedValues: [90, 180, 365, 731, 1827, 3653]
+  OperationalNotificationEmail:
+    Type: String
+    Default: hi@sar.ai
+    AllowedPattern: '^[^@\s]+@[^@\s]+\.[^@\s]+$'
+    Description: Address that confirms and receives operational alarm notifications.
 
 Rules:
   SandboxRegionIsUsWest2:
@@ -34,6 +39,28 @@ Rules:
         AssertDescription: Cloud Glider's initial sandbox is restricted to us-west-2.
 
 Resources:
+  OperationalAlertsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub 'cloud-glider-${Environment}-operational-alerts'
+      DisplayName: Cloud Glider operational alerts
+      Tags:
+        - Key: project
+          Value: cloud-glider
+        - Key: environment
+          Value: !Ref Environment
+        - Key: owner
+          Value: !Ref Owner
+        - Key: purpose
+          Value: operational-alerts
+
+  OperationalEmailSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Protocol: email
+      Endpoint: !Ref OperationalNotificationEmail
+      TopicArn: !Ref OperationalAlertsTopic
+
   StateTable:
     Type: AWS::DynamoDB::Table
     DeletionPolicy: Retain
@@ -543,6 +570,195 @@ Resources:
                       if attempt == 1:
                           raise
 
+  EmergencyHoldErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'cloud-glider-${Environment}-emergency-hold-errors'
+      AlarmDescription: Emergency-hold Lambda returned an execution error.
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref EmergencyHoldFunction
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref OperationalAlertsTopic
+
+  EmergencyHoldThrottlesAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'cloud-glider-${Environment}-emergency-hold-throttles'
+      AlarmDescription: Emergency-hold Lambda invocation was throttled.
+      Namespace: AWS/Lambda
+      MetricName: Throttles
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref EmergencyHoldFunction
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref OperationalAlertsTopic
+
+  StateTableReadThrottleAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'cloud-glider-${Environment}-ddb-read-throttles'
+      AlarmDescription: Cloud Glider state table experienced a throttled read.
+      Namespace: AWS/DynamoDB
+      MetricName: ReadThrottleEvents
+      Dimensions:
+        - Name: TableName
+          Value: !Ref StateTable
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref OperationalAlertsTopic
+
+  StateTableWriteThrottleAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'cloud-glider-${Environment}-ddb-write-throttles'
+      AlarmDescription: Cloud Glider state table experienced a throttled write.
+      Namespace: AWS/DynamoDB
+      MetricName: WriteThrottleEvents
+      Dimensions:
+        - Name: TableName
+          Value: !Ref StateTable
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref OperationalAlertsTopic
+
+  StateTableSystemErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'cloud-glider-${Environment}-ddb-system-errors'
+      AlarmDescription: Cloud Glider state table experienced an AWS service-side error.
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      Metrics:
+        - Id: total
+          Expression: SUM([FILL(getitem,0),FILL(batchget,0),FILL(query,0),FILL(putitem,0),FILL(updateitem,0),FILL(deleteitem,0),FILL(transactwrite,0)])
+          Label: State table system errors
+          ReturnData: true
+        - Id: getitem
+          ReturnData: false
+          MetricStat:
+            Metric:
+              Namespace: AWS/DynamoDB
+              MetricName: SystemErrors
+              Dimensions:
+                - Name: TableName
+                  Value: !Ref StateTable
+                - Name: Operation
+                  Value: GetItem
+            Period: 60
+            Stat: Sum
+        - Id: batchget
+          ReturnData: false
+          MetricStat:
+            Metric:
+              Namespace: AWS/DynamoDB
+              MetricName: SystemErrors
+              Dimensions:
+                - Name: TableName
+                  Value: !Ref StateTable
+                - Name: Operation
+                  Value: BatchGetItem
+            Period: 60
+            Stat: Sum
+        - Id: query
+          ReturnData: false
+          MetricStat:
+            Metric:
+              Namespace: AWS/DynamoDB
+              MetricName: SystemErrors
+              Dimensions:
+                - Name: TableName
+                  Value: !Ref StateTable
+                - Name: Operation
+                  Value: Query
+            Period: 60
+            Stat: Sum
+        - Id: putitem
+          ReturnData: false
+          MetricStat:
+            Metric:
+              Namespace: AWS/DynamoDB
+              MetricName: SystemErrors
+              Dimensions:
+                - Name: TableName
+                  Value: !Ref StateTable
+                - Name: Operation
+                  Value: PutItem
+            Period: 60
+            Stat: Sum
+        - Id: updateitem
+          ReturnData: false
+          MetricStat:
+            Metric:
+              Namespace: AWS/DynamoDB
+              MetricName: SystemErrors
+              Dimensions:
+                - Name: TableName
+                  Value: !Ref StateTable
+                - Name: Operation
+                  Value: UpdateItem
+            Period: 60
+            Stat: Sum
+        - Id: deleteitem
+          ReturnData: false
+          MetricStat:
+            Metric:
+              Namespace: AWS/DynamoDB
+              MetricName: SystemErrors
+              Dimensions:
+                - Name: TableName
+                  Value: !Ref StateTable
+                - Name: Operation
+                  Value: DeleteItem
+            Period: 60
+            Stat: Sum
+        - Id: transactwrite
+          ReturnData: false
+          MetricStat:
+            Metric:
+              Namespace: AWS/DynamoDB
+              MetricName: SystemErrors
+              Dimensions:
+                - Name: TableName
+                  Value: !Ref StateTable
+                - Name: Operation
+                  Value: TransactWriteItems
+            Period: 60
+            Stat: Sum
+      AlarmActions:
+        - !Ref OperationalAlertsTopic
+
   EventBridgeLogResourcePolicy:
     Type: AWS::Logs::ResourcePolicy
     Properties:
@@ -696,6 +912,8 @@ Resources:
       Targets:
         - Id: ComputeAuditLog
           Arn: !GetAtt InfrastructureAuditLogGroup.Arn
+        - Id: RunInstancesNetworkAuditLog
+          Arn: !GetAtt NetworkAuditLogGroup.Arn
 
   CloudFormationStatusAuditRule:
     Type: AWS::Events::Rule
@@ -784,6 +1002,16 @@ Resources:
                   - ec2:DescribeSecurityGroups
                   - ec2:DescribeSubnets
                   - ec2:DescribeVolumes
+                Resource: '*'
+              - Sid: ManageGenerationStatusAlarms
+                Effect: Allow
+                Action:
+                  - cloudwatch:DeleteAlarms
+                  - cloudwatch:PutMetricAlarm
+                Resource: !Sub 'arn:${AWS::Partition}:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:cloud-glider-${Environment}-gen-*'
+              - Sid: InspectGenerationStatusAlarms
+                Effect: Allow
+                Action: cloudwatch:DescribeAlarms
                 Resource: '*'
               - Sid: PassOnlyAgentRoleToEc2
                 Effect: Allow
@@ -938,6 +1166,17 @@ Resources:
                   - ec2:RunInstances
                   - ec2:TerminateInstances
                 Resource: '*'
+              - Sid: DenyDirectNetworkMutation
+                Effect: Deny
+                Action:
+                  - ec2:AllocateAddress
+                  - ec2:AssociateAddress
+                  - ec2:CreateNetworkInterface
+                  - ec2:DeleteNetworkInterface
+                  - ec2:DisassociateAddress
+                  - ec2:ModifyNetworkInterfaceAttribute
+                  - ec2:ReleaseAddress
+                Resource: '*'
               - Sid: DenyIamMutation
                 Effect: Deny
                 Action:
@@ -1003,6 +1242,8 @@ Resources:
         - !Ref AgentRole
 
 Outputs:
+  OperationalAlertsTopicArn:
+    Value: !Ref OperationalAlertsTopic
   StateTableName:
     Value: !Ref StateTable
   ArtifactBucketName:

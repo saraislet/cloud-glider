@@ -5,8 +5,11 @@
 - Naming: `cloud-glider-{environment}` foundation resources and
   `cloud-glider-{environment}-gen-{000001}` generation stacks.
 - Environment: `sandbox`.
-- Networking: existing private subnet and existing security group; no inbound
-  rule is created by Cloud Glider.
+- Networking: the operator-deployed `cfn/network.yaml` stack creates one
+  dedicated VPC, public subnet with an internet-gateway route, and no-inbound,
+  HTTPS-egress-only security group. The immutable generation template assigns
+  one ephemeral public IPv4 address to the primary ENI. Agents cannot mutate
+  networking directly and no SSH path is created.
 - Region and compute: `us-west-2`, Linux `arm64`, and `t4g.micro` only.
 - Readiness: two consecutive healthy heartbeats at a 5-second cadence,
   2-second predecessor polling, and a 10-minute timeout after `CREATE_COMPLETE`.
@@ -16,8 +19,8 @@
 - Template identity: decision pending; the implementation currently supports
   S3 bucket/key, VersionId, SHA-256 digest, and Git commit or build ID, but this
   tuple is not yet adopted as the final policy.
-- Cost controls: `$10` monthly sandbox budget; actual alerts at `$5`, `$8`, and
-  `$10`; forecast alert at `$10`; anomaly threshold at `$2`; notifications only.
+- Cost controls: `$20` monthly sandbox budget; actual alerts at `$10`, `$15`, and
+  `$20`; forecast alert at `$20`; anomaly threshold at `$2`; notifications only.
   Infrastructure creation remains pending until a monitored notification
   destination is supplied.
 - Propagation: initial `max_generation=2`, ceiling `3`, and
@@ -26,7 +29,8 @@
 
 ## Required before the first deployment
 
-- Existing VPC, private subnet, and no-inbound security-group IDs.
+- Successful deployment of `cfn/network.yaml`; its public-subnet and generation
+  security-group IDs are inputs to the foundation stack.
 - Approved Linux ARM64 AMI ID for `us-west-2`.
 - Owner tag value and monitored alert destination.
 - Initial immutable generation-template and agent-artifact object versions and
@@ -56,6 +60,16 @@ account or administrator ARNs would be a lockout risk.
   require operator confirmation. Policy/template/ownership mismatches remain
   fail-closed regardless.
 - Budget and anomaly thresholds.
+
+## Sandbox cost estimate
+
+At 730 hours per month, one steady generation is approximately `$12.52` before
+variable log ingestion, API requests, alarms, and retained storage: about
+`$6.13` for `t4g.micro`, `$3.65` for one public IPv4 address, `$0.64` for an
+8-GiB gp3 root volume, and up to `$2.10` for seven detailed-monitoring metrics.
+Temporary two-generation overlap is prorated by the hours of overlap. The `$20`
+budget is a guardrail rather than a guarantee; verify current `us-west-2` prices
+in AWS Pricing Calculator before the first trial.
 
 ## Revisit in v2
 

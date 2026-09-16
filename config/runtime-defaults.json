@@ -9,8 +9,8 @@
   "max_generation": 2,
   "max_live_generations": 3,
   "concurrency_model": "PREFLIGHT_THEN_RETIRE",
-  "monthly_budget_usd": 10,
-  "actual_budget_alerts_usd": [5, 8, 10],
-  "forecast_budget_alert_usd": 10,
+  "monthly_budget_usd": 20,
+  "actual_budget_alerts_usd": [10, 15, 20],
+  "forecast_budget_alert_usd": 20,
   "cost_anomaly_threshold_usd": 2
 }

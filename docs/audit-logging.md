@@ -23,6 +23,11 @@ objects remain authoritative when a projected category stream is incomplete.
 | Infrastructure | `/cloud-glider/{environment}/audit/infrastructure` | CloudFormation changes, instance lifecycle, DynamoDB/S3/logging/audit-resource changes |
 | Propagation | `/cloud-glider/{environment}/audit/propagation` | Control observations, hold creation/clearance, lease changes, gate results, handoff, quiescence, retries, and predecessor retirement decisions |
 
+`RunInstances` is projected to both infrastructure and networking audit because
+the approved launch request creates the generation and its primary ENI and
+assigns the ephemeral public IPv4 address. CloudTrail remains the canonical
+record of the complete request parameters.
+
 Every audit event should include:
 
 - schema version, event ID, UTC occurrence time, category, and correlation ID

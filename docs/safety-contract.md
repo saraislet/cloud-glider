@@ -35,8 +35,18 @@ merged or deployed, even if it makes a happy-path propagation test pass.
 
 - One AWS account in `us-west-2`; account identifiers are supplied at deployment
   time by CloudFormation pseudo-parameters.
-- Existing private subnet and security group are supplied as parameters. Cloud
-  Glider does not create or mutate networking in its first implementation.
+- The operator deploys `cfn/network.yaml` to create the dedicated VPC, public
+  subnet, internet-gateway route, and no-inbound security group. Its subnet and
+  security-group IDs are supplied to the foundation stack. Each generation
+  receives one ephemeral public IPv4 address at launch solely through the
+  approved generation template. Generation agents cannot create or mutate
+  VPCs, subnets, routes, gateways, or security groups.
+- Generation instances accept no inbound traffic: the approved security group
+  has no ingress rules, no SSH path is created, and IMDSv2 remains required.
+  Outbound access is limited to what is required for HTTPS AWS API calls.
+- Public IPv4 assignment is a property of the primary launch ENI. Agents cannot
+  allocate or associate Elastic IPs or directly create, delete, or modify
+  network interfaces.
 - `t4g.micro` is the only initially approved instance type. The AMI and every
   bootstrap dependency must support Linux `arm64`.
 - Successor readiness requires CloudFormation `CREATE_COMPLETE` followed by two
@@ -102,6 +112,9 @@ audit values.
 - Fail the conditional handoff; the predecessor is not deleted.
 - Attempt arbitrary `iam:PassRole`, IAM mutation, direct EC2 creation or
   termination, unrelated stack creation, and foundation deletion; all fail.
+- Attempt direct Elastic IP and network-interface mutation from the agent role;
+  all fail. Confirm the approved template launches exactly one primary ENI with
+  one ephemeral public IPv4 address and the no-inbound security group.
 - Change the template version, digest, or parameters; the agent rejects it.
 - Keep propagation enabled at `max_generation`; the chain stops.
 - Exercise preferred concurrency across multiple cycles; never observe four
