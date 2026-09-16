@@ -29,23 +29,11 @@
 
 ## Required before the first deployment
 
-- Successful deployment of `cfn/network.yaml`; its public-subnet and generation
-  security-group IDs are inputs to the foundation stack.
-- Approved Linux ARM64 AMI ID for `us-west-2`.
-- Owner tag value and monitored alert destination.
 - Initial immutable generation-template and agent-artifact object versions and
   SHA-256 digests if the proposed template identity policy is adopted.
-- Administrative deployment principal and break-glass principal ARNs.
 
 ## Required before SCP creation or attachment
 
-- AWS account ID and AWS Organizations management/delegated administrator
-  context.
-- Principal ARNs exempted for deployment and break glass.
-- Whether Cloud Glider is allowed in only the sandbox Region or in a short
-  Region allowlist.
-- Existing organization-wide CloudTrail, AWS Config, GuardDuty, Security Hub,
-  permission-boundary, and tag-policy controls.
 - Recovery process for an accidentally restrictive SCP.
 
 The SCP is intentionally not rendered yet. A placeholder SCP containing guessed
