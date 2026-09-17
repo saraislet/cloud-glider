@@ -61,6 +61,9 @@ def main() -> int:
     contract_path = ROOT / "docs" / "safety-contract.md"
     initializer_path = ROOT / "scripts" / "initialize_control.py"
     clear_hold_path = ROOT / "scripts" / "clear_emergency_hold.py"
+    agent_path = ROOT / "agent" / "cloud_glider" / "agent.py"
+    gateway_path = ROOT / "agent" / "cloud_glider" / "aws_cli.py"
+    builder_path = ROOT / "scripts" / "build_agent_artifact.py"
     foundation = foundation_path.read_text()
     billing = billing_path.read_text()
     network = network_path.read_text()
@@ -68,6 +71,9 @@ def main() -> int:
     contract = contract_path.read_text()
     initializer = initializer_path.read_text()
     clear_hold = clear_hold_path.read_text()
+    agent = agent_path.read_text()
+    gateway = gateway_path.read_text()
+    builder = builder_path.read_text()
 
     for marker in ("DeletionPolicy: Retain", "UpdateReplacePolicy: Retain", "PointInTimeRecoveryEnabled: true"):
         require(foundation, marker, str(foundation_path))
@@ -152,6 +158,24 @@ def main() -> int:
         require(network, marker, str(network_path))
     if "MapPublicIpOnLaunch: true" in network:
         raise SystemExit("network subnet must not assign public IPv4 addresses implicitly")
+    for marker in (
+        "read_control_and_hold",
+        "acquire_lease",
+        "wait_for_healthy_successor",
+        "continuation_preflight",
+        "conditional_handoff",
+        "delete_stack",
+    ):
+        require(agent, marker, str(agent_path))
+    for marker in (
+        '"--change-set-type", "CREATE"',
+        "transact-write-items",
+        "attribute_not_exists(PK) AND attribute_not_exists(SK)",
+        "service-quotas",
+    ):
+        require(gateway, marker, str(gateway_path))
+    for marker in ("mtime=0", "bin/cloud-glider", "sha256"):
+        require(builder, marker, str(builder_path))
 
     print("repository safety checks passed")
     return 0

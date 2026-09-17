@@ -49,17 +49,19 @@ merged or deployed, even if it makes a happy-path propagation test pass.
   network interfaces.
 - `t4g.micro` is the only initially approved instance type. The AMI and every
   bootstrap dependency must support Linux `arm64`.
-- Successor readiness requires CloudFormation `CREATE_COMPLETE` followed by two
-  consecutive eligible DynamoDB heartbeats 30 seconds apart.
+- Successor readiness requires CloudFormation `CREATE_COMPLETE` followed by the
+  configured number of consecutive eligible DynamoDB heartbeats, separated by
+  at least `heartbeat_interval_seconds` (two heartbeats and five seconds in the
+  sandbox baseline).
 - An eligible heartbeat must match the expected generation ID, instance ID,
   stack ID, complete template identity, bootstrap version, and observed
   propagation state.
 - Readiness is polled every 15 seconds for at most 10 minutes after
   `CREATE_COMPLETE`. These values must be revisited after the first trial run.
-- The current implementation can carry S3 bucket/key, immutable VersionId,
-  SHA-256 digest, and Git commit or build ID. The final required template
-  identity tuple remains an explicit decision; once adopted, any mismatch is
-  terminal.
+- The approved generation definition is the template bucket/key, immutable S3
+  VersionId, SHA-256 digest, template version, and Git commit or build ID. The
+  agent executable is independently approved by bucket/key, immutable S3
+  VersionId, and SHA-256 digest. Any mismatch is terminal.
 - A terminal policy, identity, ownership, or invariant error atomically records
   `ERROR`, creates `HOLD/ACTIVE`, and preserves the recoverable generation. The
   agent invokes a dedicated function that can create but not delete the record;
@@ -74,6 +76,7 @@ merged or deployed, even if it makes a happy-path propagation test pass.
 - `CONTROL/GLOBAL`: propagation disabled, maximum generation 2, ceiling 3,
   `us-west-2`, `t4g.micro`, `arm64`, readiness values, and the complete immutable
   template identity tuple.
+- `CONTROL/GLOBAL` also carries the immutable agent artifact identity tuple.
 - `CURRENT/GLOBAL`: no authoritative running generation and status
   `UNINITIALIZED`.
 - `AUDIT#PROPAGATION/EVENT#...`: attribution for the initialization operation.

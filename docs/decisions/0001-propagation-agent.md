@@ -1,0 +1,45 @@
+# Decision 0001: first-pass propagation agent
+
+Status: accepted for the sandbox first pass
+
+## Decision
+
+Use a dependency-free Python agent packaged as a deterministic `tar.gz`. The
+runtime calls AWS CLI v2, which is already required by generation bootstrap,
+instead of adding an SDK dependency or an on-instance build step.
+
+The approved template identity is its bucket, key, immutable S3 VersionId,
+SHA-256 digest, template version, and build ID. The approved executable identity
+is its bucket, key, immutable S3 VersionId, and SHA-256 digest. Both identities
+are stored in `CONTROL/GLOBAL`; successor parameters are derived from that
+record rather than trusted from the running predecessor.
+
+Coordination uses one expiring `LOCK/PROPAGATION` lease. This is deliberately a
+small first-pass coordination mechanism, not a distributed consensus system.
+All ownership transfer still occurs through a DynamoDB transaction conditioned
+on current ownership, lease ownership, enabled propagation, and absence of
+`HOLD/ACTIVE`.
+
+The agent itself is the initial workload health signal. An eligible heartbeat
+proves process liveness plus generation, stack, instance, predecessor, handoff
+token, template, bootstrap, agent-artifact, and observed operator-control
+identity. A future workload must add its own explicit health result before the
+meaning of `workload_healthy=true` is broadened.
+
+Continuation proof is an unexecuted CloudFormation `CREATE` change set after
+basic live-instance, regional offering, and standard-instance vCPU quota
+checks. The change set and its empty `REVIEW_IN_PROGRESS` stack are discarded.
+At `max_generation`, reaching the approved boundary satisfies the continuation
+gate without constructing an out-of-policy generation.
+
+## Consequences
+
+- No compiler, package index, long-lived key, direct EC2 mutation, or IAM
+  mutation is needed on a generation.
+- API submission timeouts reconcile by deterministic stack name and parameters.
+- Missing or ambiguous health, capacity, control, or AWS responses preserve the
+  predecessor and retry.
+- Identity, ownership, and invariant conflicts invoke the dedicated emergency
+  hold function and stop that agent process.
+- More robust lease coordination, automated cleanup/recovery, and multi-account
+  operation remain deferred.

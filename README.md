@@ -5,7 +5,9 @@ generation may create its successor only through an approved, immutable
 CloudFormation template and only after configuration, security, health,
 coordination, concurrency, and cost-safety gates pass.
 
-The repository currently implements the safety foundation. Propagation is disabled by default, and the first trial is bounded through generation `2`.
+The repository implements the safety foundation and the first-pass propagation
+agent. Propagation is disabled by default, and the first trial is bounded
+through generation `2`.
 
 ## Project goals
 
@@ -30,6 +32,10 @@ The repository currently implements the safety foundation. Propagation is disabl
   category-specific log groups, artifact bucket, and IAM roles.
 - `cfn/generation.yaml` defines one generation EC2 instance. It deliberately
   contains no IAM or networking resources.
+- `agent/` contains the dependency-free Python propagation state machine and
+  its AWS CLI adapter.
+- `scripts/build_agent_artifact.py` creates the deterministic tarball consumed
+  by generation user data.
 - `scripts/initialize_control.py` creates the initial DynamoDB control records
   transactionally. It is dry-run unless `--apply` is supplied.
 - `scripts/clear_emergency_hold.py` is the operator-only, audited path for
@@ -76,6 +82,16 @@ python3 -m unittest discover -s tests -v
 python3 scripts/validate_repository.py
 ```
 
+Build the agent artifact and record the printed SHA-256 digest:
+
+```sh
+python3 scripts/build_agent_artifact.py --output dist/cloud-glider-agent.tar.gz
+```
+
+Upload that exact tarball under `generation/` in the versioned artifact bucket.
+Pass its bucket, key, immutable S3 VersionId, and digest to both the initial
+generation stack and `scripts/initialize_control.py`.
+
 When `cfn-lint` is installed, also run:
 
 ```sh
@@ -91,9 +107,13 @@ cfn-lint cfn/network.yaml cfn/billing-alerts.yaml cfn/foundation.yaml cfn/genera
    principal, not from a generation instance.
 4. Upload immutable generation template and agent artifacts to the versioned
    artifact bucket.
-5. Initialize DynamoDB with `scripts/initialize_control.py`; inspect the dry run
-   before using `--apply`.
+5. Initialize DynamoDB with `scripts/initialize_control.py`, including both
+   template and agent artifact identity tuples; inspect the dry run before
+   using `--apply`.
 6. Bootstrap generation `000000` or `000001` through the approved operator path while propagation remains disabled.
 
 Do not enable propagation until the negative-security and failure-path tests in
 the safety contract pass in the sandbox account.
+
+See `docs/propagation-agent.md` for the state machine, record shapes, failure
+classification, and first-trial procedure.

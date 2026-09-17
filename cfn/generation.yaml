@@ -17,6 +17,11 @@ Parameters:
     Type: String
     Default: NONE
     MaxLength: 1024
+  HandoffToken:
+    Type: String
+    Default: OPERATOR_BOOTSTRAP
+    MinLength: 1
+    MaxLength: 128
   ApprovedImageId:
     Type: AWS::EC2::Image::Id
     Default: ami-08dd4258d4d19fe06
@@ -163,7 +168,9 @@ Resources:
           {
             "environment": "${Environment}",
             "generation": "${Generation}",
+            "stack_id": "${AWS::StackId}",
             "predecessor_stack_id": "${PredecessorStackId}",
+            "handoff_token": "${HandoffToken}",
             "state_table_name": "${StateTableName}",
             "bootstrap_version": "${BootstrapVersion}",
             "template_version": "${TemplateVersion}",
@@ -172,6 +179,10 @@ Resources:
             "template_s3_version_id": "${TemplateS3VersionId}",
             "template_sha256": "${TemplateSha256}",
             "template_build_id": "${TemplateBuildId}",
+            "agent_artifact_bucket": "${AgentArtifactBucket}",
+            "agent_artifact_key": "${AgentArtifactKey}",
+            "agent_artifact_version_id": "${AgentArtifactVersionId}",
+            "agent_artifact_sha256": "${AgentArtifactSha256}",
             "propagation_audit_log_group": "${PropagationAuditLogGroupName}",
             "agent_operations_log_group": "${AgentOperationsLogGroupName}",
             "emergency_hold_function_name": "${EmergencyHoldFunctionName}"
@@ -197,6 +208,7 @@ Resources:
           ExecStart=/opt/cloud-glider/bin/cloud-glider --config /etc/cloud-glider/bootstrap.json
           Restart=on-failure
           RestartSec=15
+          Environment=PYTHONUNBUFFERED=1
           User=root
           NoNewPrivileges=true
           PrivateTmp=true

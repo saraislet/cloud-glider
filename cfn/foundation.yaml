@@ -383,7 +383,6 @@ Resources:
     Type: AWS::IAM::Role
     Properties:
       RoleName: !Sub 'cloud-glider-${Environment}-emergency-hold'
-      Path: /cloud-glider/
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -488,6 +487,7 @@ Resources:
                   ":code": {"S": error_code},
                   ":correlation": {"S": correlation_id},
                   ":now": {"S": now},
+                  ":generation": {"S": generation},
               }
               hold = {
                   "PK": {"S": "HOLD"},
@@ -550,8 +550,7 @@ Resources:
                                   "Update": {
                                       "TableName": table,
                                       "Key": {"PK": {"S": f"GEN#{generation}"}, "SK": {"S": "STATE"}},
-                                      "UpdateExpression": "SET #status = :error, error_code = :code, error_correlation_id = :correlation, updated_at = :now",
-                                      "ConditionExpression": "attribute_exists(PK) AND attribute_exists(SK)",
+                                      "UpdateExpression": "SET #status = :error, generation = :generation, error_code = :code, error_correlation_id = :correlation, updated_at = :now",
                                       "ExpressionAttributeNames": {"#status": "status"},
                                       "ExpressionAttributeValues": generation_values,
                                   }
@@ -934,7 +933,6 @@ Resources:
     Type: AWS::IAM::Role
     Properties:
       RoleName: !Sub 'cloud-glider-${Environment}-generation-cfn'
-      Path: /cloud-glider/
       Description: CloudFormation service role restricted to the generation template.
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
@@ -1016,7 +1014,7 @@ Resources:
               - Sid: PassOnlyAgentRoleToEc2
                 Effect: Allow
                 Action: iam:PassRole
-                Resource: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider/cloud-glider-${Environment}-agent'
+                Resource: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider-${Environment}-agent'
                 Condition:
                   StringEquals:
                     iam:PassedToService: ec2.amazonaws.com
@@ -1034,7 +1032,6 @@ Resources:
     Type: AWS::IAM::Role
     Properties:
       RoleName: !Sub 'cloud-glider-${Environment}-agent'
-      Path: /cloud-glider/
       Description: Orchestration role for a Cloud Glider generation instance.
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
@@ -1069,6 +1066,14 @@ Resources:
                       - 'GEN#*'
                       - LOCK
                       - 'AUDIT#PROPAGATION'
+              - Sid: AssertNoEmergencyHoldAtHandoff
+                Effect: Allow
+                Action: dynamodb:ConditionCheckItem
+                Resource: !GetAtt StateTable.Arn
+                Condition:
+                  ForAllValues:StringEquals:
+                    dynamodb:LeadingKeys:
+                      - HOLD
               - Sid: ReleaseOnlyPropagationLease
                 Effect: Allow
                 Action: dynamodb:DeleteItem
@@ -1088,7 +1093,7 @@ Resources:
                   - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:changeSet/cloud-glider-${Environment}-gen-*/*'
                 Condition:
                   StringEquals:
-                    cloudformation:RoleARN: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider/cloud-glider-${Environment}-generation-cfn'
+                    cloudformation:RoleARN: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider-${Environment}-generation-cfn'
               - Sid: ExecuteOrDiscardApprovedGenerationChangeSets
                 Effect: Allow
                 Action:
@@ -1112,7 +1117,7 @@ Resources:
               - Sid: PassOnlyGenerationServiceRole
                 Effect: Allow
                 Action: iam:PassRole
-                Resource: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider/cloud-glider-${Environment}-generation-cfn'
+                Resource: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider-${Environment}-generation-cfn'
                 Condition:
                   StringEquals:
                     iam:PassedToService: cloudformation.amazonaws.com
@@ -1153,6 +1158,7 @@ Resources:
                   - ec2:DescribeAccountAttributes
                   - ec2:DescribeInstances
                   - ec2:DescribeInstanceStatus
+                  - ec2:DescribeInstanceTypeOfferings
                   - servicequotas:GetServiceQuota
                   - servicequotas:ListServiceQuotas
                 Resource: '*'

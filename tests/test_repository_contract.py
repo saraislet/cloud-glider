@@ -107,6 +107,17 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertNotIn("MapPublicIpOnLaunch: true", network)
         self.assertNotIn("AWS::EC2::NatGateway", network)
 
+    def test_agent_hold_access_is_condition_check_only(self):
+        foundation = (ROOT / "cfn" / "foundation.yaml").read_text(encoding="utf-8")
+        statement = foundation.split("- Sid: AssertNoEmergencyHoldAtHandoff", 1)[1].split(
+            "- Sid: ReleaseOnlyPropagationLease", 1
+        )[0]
+        self.assertIn("Action: dynamodb:ConditionCheckItem", statement)
+        self.assertIn("- HOLD", statement)
+        self.assertNotIn("dynamodb:PutItem", statement)
+        self.assertNotIn("dynamodb:UpdateItem", statement)
+        self.assertNotIn("dynamodb:DeleteItem", statement)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -16,9 +16,10 @@
 - Runtime defaults: `config/runtime-defaults.json` is authoritative for values
   written into initial control state. Agents read those values from DynamoDB.
 - Control store: DynamoDB, not S3.
-- Template identity: decision pending; the implementation currently supports
-  S3 bucket/key, VersionId, SHA-256 digest, and Git commit or build ID, but this
-  tuple is not yet adopted as the final policy.
+- Template identity: bucket/key, immutable S3 VersionId, SHA-256 digest,
+  template version, and Git commit or build ID are all required. Agent artifact
+  identity independently requires bucket/key, immutable S3 VersionId, and
+  SHA-256 digest. See `docs/decisions/0001-propagation-agent.md`.
 - Cost controls: `$20` monthly sandbox budget; actual alerts at `$10`, `$15`, and
   `$20`; forecast alert at `$20`; anomaly threshold at `$2`; notifications only.
   Infrastructure creation remains pending until a monitored notification

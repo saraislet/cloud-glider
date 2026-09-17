@@ -35,6 +35,8 @@ def build_transaction(args: argparse.Namespace, *, now: str, event_id: str) -> l
     defaults = load_defaults()
     if not SHA256_RE.fullmatch(args.template_sha256):
         raise ValueError("--template-sha256 must be exactly 64 hexadecimal characters")
+    if not SHA256_RE.fullmatch(args.agent_artifact_sha256):
+        raise ValueError("--agent-artifact-sha256 must be exactly 64 hexadecimal characters")
     if args.max_live_generations != 3:
         raise ValueError("the safety contract fixes --max-live-generations at 3")
 
@@ -49,6 +51,10 @@ def build_transaction(args: argparse.Namespace, *, now: str, event_id: str) -> l
         "template_s3_version_id": av_string(args.template_s3_version_id),
         "template_sha256": av_string(args.template_sha256.lower()),
         "template_build_id": av_string(args.template_build_id),
+        "agent_artifact_bucket": av_string(args.agent_artifact_bucket),
+        "agent_artifact_key": av_string(args.agent_artifact_key),
+        "agent_artifact_version_id": av_string(args.agent_artifact_version_id),
+        "agent_artifact_sha256": av_string(args.agent_artifact_sha256.lower()),
         "max_generation": {"N": str(args.max_generation)},
         "max_live_generations": {"N": "3"},
         "concurrency_model": av_string(defaults["concurrency_model"]),
@@ -91,6 +97,10 @@ def build_transaction(args: argparse.Namespace, *, now: str, event_id: str) -> l
         "template_s3_version_id": av_string(args.template_s3_version_id),
         "template_sha256": av_string(args.template_sha256.lower()),
         "template_build_id": av_string(args.template_build_id),
+        "agent_artifact_bucket": av_string(args.agent_artifact_bucket),
+        "agent_artifact_key": av_string(args.agent_artifact_key),
+        "agent_artifact_version_id": av_string(args.agent_artifact_version_id),
+        "agent_artifact_sha256": av_string(args.agent_artifact_sha256.lower()),
     }
 
     condition = "attribute_not_exists(PK) AND attribute_not_exists(SK)"
@@ -113,6 +123,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--template-s3-version-id", required=True)
     parser.add_argument("--template-sha256", required=True)
     parser.add_argument("--template-build-id", required=True, help="Git commit or immutable build ID")
+    parser.add_argument("--agent-artifact-bucket", required=True)
+    parser.add_argument("--agent-artifact-key", required=True)
+    parser.add_argument("--agent-artifact-version-id", required=True)
+    parser.add_argument("--agent-artifact-sha256", required=True)
     parser.add_argument("--environment", default="sandbox")
     parser.add_argument("--max-generation", type=int, default=defaults["max_generation"])
     parser.add_argument("--max-live-generations", type=int, default=defaults["max_live_generations"])
