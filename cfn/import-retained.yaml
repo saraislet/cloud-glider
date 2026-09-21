@@ -264,25 +264,3 @@ Resources:
           Value: !Ref Owner
         - Key: purpose
           Value: cost-alerts
-
-Outputs:
-  StateTableName:
-    Value: !Ref StateTable
-  ArtifactBucketName:
-    Value: !Ref ArtifactBucket
-  AuditArchiveBucketName:
-    Value: !Ref AuditArchiveBucket
-  InfrastructureAuditLogGroupName:
-    Value: !Ref InfrastructureAuditLogGroup
-  IamAccountAuditLogGroupName:
-    Value: !Ref IamAccountAuditLogGroup
-  NetworkAuditLogGroupName:
-    Value: !Ref NetworkAuditLogGroup
-  PropagationAuditLogGroupName:
-    Value: !Ref PropagationAuditLogGroup
-  AgentOperationsLogGroupName:
-    Value: !Ref AgentOperationsLogGroup
-  SecurityFindingsLogGroupName:
-    Value: !Ref SecurityFindingsLogGroup
-  CostAlertsLogGroupName:
-    Value: !Ref CostAlertsLogGroup
