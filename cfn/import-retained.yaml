@@ -1,0 +1,288 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  Cloud Glider retained control plane, audit foundation, artifact store, and
+  least-privilege generation roles. Deploy only from an administrative principal.
+
+Parameters:
+  Environment:
+    Type: String
+    Default: sandbox
+    AllowedPattern: '^[a-z][a-z0-9-]{1,15}$'
+  Owner:
+    Type: String
+    Description: Owner tag value for cost and operational attribution.
+    MinLength: 1
+    MaxLength: 64
+  AllowedImageId:
+    Type: AWS::EC2::Image::Id
+    Description: Approved AMI for generation instances in this Region.
+    Default: ami-08dd4258d4d19fe06
+  AllowedSubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Description: Existing public subnet with an internet-gateway route used by generation instances.
+    Default: subnet-0a00b98420d660d03
+  AllowedSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: Existing no-inbound security group used by generation instances.
+    Default: sg-0da9cdee2a98d8dc2
+  AuditLogRetentionDays:
+    Type: Number
+    Default: 365
+    AllowedValues: [90, 180, 365, 731, 1827, 3653]
+  OperationalNotificationEmail:
+    Type: String
+    Default: hi@sar.ai
+    AllowedPattern: '^[^@\s]+@[^@\s]+\.[^@\s]+$'
+    Description: Address that confirms and receives operational alarm notifications.
+
+Rules:
+  SandboxRegionIsUsWest2:
+    Assertions:
+      - Assert: !Equals [!Ref 'AWS::Region', us-west-2]
+        AssertDescription: Cloud Glider's initial sandbox is restricted to us-west-2.
+
+Resources:
+  StateTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: !Sub 'cloud-glider-${Environment}-state'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      DeletionProtectionEnabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+        RecoveryPeriodInDays: 35
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+      TimeToLiveSpecification:
+        AttributeName: expires_at
+        Enabled: true
+      Tags:
+        - Key: project
+          Value: cloud-glider
+        - Key: environment
+          Value: !Ref Environment
+        - Key: owner
+          Value: !Ref Owner
+        - Key: purpose
+          Value: control-and-coordination
+
+  ArtifactBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub 'cloud-glider-${Environment}-${AWS::AccountId}-${AWS::Region}-artifacts'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: retain-noncurrent-approved-artifacts
+            Status: Enabled
+            NoncurrentVersionTransitions:
+              - StorageClass: GLACIER_IR
+                TransitionInDays: 90
+      Tags:
+        - Key: project
+          Value: cloud-glider
+        - Key: environment
+          Value: !Ref Environment
+        - Key: owner
+          Value: !Ref Owner
+        - Key: purpose
+          Value: immutable-approved-artifacts
+
+  AuditArchiveBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub 'cloud-glider-${Environment}-${AWS::AccountId}-${AWS::Region}-audit'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerPreferred
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      Tags:
+        - Key: project
+          Value: cloud-glider
+        - Key: environment
+          Value: !Ref Environment
+        - Key: owner
+          Value: !Ref Owner
+        - Key: purpose
+          Value: canonical-audit-archive
+
+  InfrastructureAuditLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub '/cloud-glider/${Environment}/audit/infrastructure'
+      RetentionInDays: !Ref AuditLogRetentionDays
+      Tags:
+        - Key: project
+          Value: cloud-glider
+        - Key: environment
+          Value: !Ref Environment
+        - Key: owner
+          Value: !Ref Owner
+        - Key: purpose
+          Value: infrastructure-audit
+
+  IamAccountAuditLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub '/cloud-glider/${Environment}/audit/iam-account'
+      RetentionInDays: !Ref AuditLogRetentionDays
+      Tags:
+        - Key: project
+          Value: cloud-glider
+        - Key: environment
+          Value: !Ref Environment
+        - Key: owner
+          Value: !Ref Owner
+        - Key: purpose
+          Value: iam-account-audit
+
+  NetworkAuditLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub '/cloud-glider/${Environment}/audit/network'
+      RetentionInDays: !Ref AuditLogRetentionDays
+      Tags:
+        - Key: project
+          Value: cloud-glider
+        - Key: environment
+          Value: !Ref Environment
+        - Key: owner
+          Value: !Ref Owner
+        - Key: purpose
+          Value: network-audit
+
+  PropagationAuditLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub '/cloud-glider/${Environment}/audit/propagation'
+      RetentionInDays: !Ref AuditLogRetentionDays
+      Tags:
+        - Key: project
+          Value: cloud-glider
+        - Key: environment
+          Value: !Ref Environment
+        - Key: owner
+          Value: !Ref Owner
+        - Key: purpose
+          Value: propagation-audit
+
+  AgentOperationsLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub '/cloud-glider/${Environment}/operations/agent'
+      RetentionInDays: 90
+      Tags:
+        - Key: project
+          Value: cloud-glider
+        - Key: environment
+          Value: !Ref Environment
+        - Key: owner
+          Value: !Ref Owner
+        - Key: purpose
+          Value: agent-diagnostics
+
+  SecurityFindingsLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub '/cloud-glider/${Environment}/security/findings'
+      RetentionInDays: !Ref AuditLogRetentionDays
+      Tags:
+        - Key: project
+          Value: cloud-glider
+        - Key: environment
+          Value: !Ref Environment
+        - Key: owner
+          Value: !Ref Owner
+        - Key: purpose
+          Value: security-findings
+
+  CostAlertsLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub '/cloud-glider/${Environment}/cost/alerts'
+      RetentionInDays: !Ref AuditLogRetentionDays
+      Tags:
+        - Key: project
+          Value: cloud-glider
+        - Key: environment
+          Value: !Ref Environment
+        - Key: owner
+          Value: !Ref Owner
+        - Key: purpose
+          Value: cost-alerts
+
+Outputs:
+  StateTableName:
+    Value: !Ref StateTable
+  ArtifactBucketName:
+    Value: !Ref ArtifactBucket
+  AuditArchiveBucketName:
+    Value: !Ref AuditArchiveBucket
+  InfrastructureAuditLogGroupName:
+    Value: !Ref InfrastructureAuditLogGroup
+  IamAccountAuditLogGroupName:
+    Value: !Ref IamAccountAuditLogGroup
+  NetworkAuditLogGroupName:
+    Value: !Ref NetworkAuditLogGroup
+  PropagationAuditLogGroupName:
+    Value: !Ref PropagationAuditLogGroup
+  AgentOperationsLogGroupName:
+    Value: !Ref AgentOperationsLogGroup
+  SecurityFindingsLogGroupName:
+    Value: !Ref SecurityFindingsLogGroup
+  CostAlertsLogGroupName:
+    Value: !Ref CostAlertsLogGroup

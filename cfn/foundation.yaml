@@ -16,12 +16,15 @@ Parameters:
   AllowedImageId:
     Type: AWS::EC2::Image::Id
     Description: Approved AMI for generation instances in this Region.
+    Default: ami-08dd4258d4d19fe06
   AllowedSubnetId:
     Type: AWS::EC2::Subnet::Id
     Description: Existing public subnet with an internet-gateway route used by generation instances.
+    Default: subnet-0a00b98420d660d03
   AllowedSecurityGroupId:
     Type: AWS::EC2::SecurityGroup::Id
     Description: Existing no-inbound security group used by generation instances.
+    Default: sg-0da9cdee2a98d8dc2
   AuditLogRetentionDays:
     Type: Number
     Default: 365

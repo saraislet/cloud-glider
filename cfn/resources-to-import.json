@@ -1,0 +1,72 @@
+[
+  {
+    "ResourceType": "AWS::DynamoDB::Table",
+    "LogicalResourceId": "StateTable",
+    "ResourceIdentifier": {
+      "TableName": "cloud-glider-sandbox-state"
+    }
+  },
+  {
+    "ResourceType": "AWS::S3::Bucket",
+    "LogicalResourceId": "ArtifactBucket",
+    "ResourceIdentifier": {
+      "BucketName": "cloud-glider-sandbox-123456789012-us-west-2-artifacts"
+    }
+  },
+  {
+    "ResourceType": "AWS::S3::Bucket",
+    "LogicalResourceId": "AuditArchiveBucket",
+    "ResourceIdentifier": {
+      "BucketName": "cloud-glider-sandbox-123456789012-us-west-2-audit"
+    }
+  },
+  {
+    "ResourceType": "AWS::Logs::LogGroup",
+    "LogicalResourceId": "InfrastructureAuditLogGroup",
+    "ResourceIdentifier": {
+      "LogGroupName": "/cloud-glider/sandbox/audit/infrastructure"
+    }
+  },
+  {
+    "ResourceType": "AWS::Logs::LogGroup",
+    "LogicalResourceId": "IamAccountAuditLogGroup",
+    "ResourceIdentifier": {
+      "LogGroupName": "/cloud-glider/sandbox/audit/iam-account"
+    }
+  },
+  {
+    "ResourceType": "AWS::Logs::LogGroup",
+    "LogicalResourceId": "NetworkAuditLogGroup",
+    "ResourceIdentifier": {
+      "LogGroupName": "/cloud-glider/sandbox/audit/network"
+    }
+  },
+  {
+    "ResourceType": "AWS::Logs::LogGroup",
+    "LogicalResourceId": "PropagationAuditLogGroup",
+    "ResourceIdentifier": {
+      "LogGroupName": "/cloud-glider/sandbox/audit/propagation"
+    }
+  },
+  {
+    "ResourceType": "AWS::Logs::LogGroup",
+    "LogicalResourceId": "AgentOperationsLogGroup",
+    "ResourceIdentifier": {
+      "LogGroupName": "/cloud-glider/sandbox/operations/agent"
+    }
+  },
+  {
+    "ResourceType": "AWS::Logs::LogGroup",
+    "LogicalResourceId": "SecurityFindingsLogGroup",
+    "ResourceIdentifier": {
+      "LogGroupName": "/cloud-glider/sandbox/security/findings"
+    }
+  },
+  {
+    "ResourceType": "AWS::Logs::LogGroup",
+    "LogicalResourceId": "CostAlertsLogGroup",
+    "ResourceIdentifier": {
+      "LogGroupName": "/cloud-glider/sandbox/cost/alerts"
+    }
+  }
+]
