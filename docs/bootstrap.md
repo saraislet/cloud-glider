@@ -5,7 +5,7 @@ The bootstrap request and propagation permission are independent:
 | Record | Meaning |
 | --- | --- |
 | `CONTROL/GLOBAL.propagation_enabled` | Allows the EC2 agent to create successors. |
-| `BOOTSTRAP/REQUEST` | One-shot operator authorization to create generation 000000. |
+| `BOOTSTRAP/REQUEST.bootstrap_requested` | Boolean operator authorization to create generation 000000. |
 | `HOLD/ACTIVE` | Stops new bootstrap and successor provisioning at their fresh checks. |
 
 For the first trial, leave propagation disabled and inspect the first instance.
@@ -15,8 +15,8 @@ the first instance can immediately begin the bounded propagation cycle.
 ## Deploy the trigger before requesting bootstrap
 
 1. Confirm billing and operational notification delivery, cost limits, immutable
-   artifact approvals, and initialized CONTROL/CURRENT records. No request should
-   exist yet. Review the added runtime role, stream reads, alarm, Lambda/log costs,
+   artifact approvals, and initialized CONTROL/CURRENT records. A prepared READY
+   record may exist, but its `bootstrap_requested` Boolean must remain false. Review the added runtime role, stream reads, alarm, Lambda/log costs,
    and eventual generation compute costs.
 2. Review an UPDATE change set for `cfn/foundation.yaml` using the existing
    approved administrative path. The bootstrap-related change enables the state
@@ -29,8 +29,10 @@ the first instance can immediately begin the bounded propagation cycle.
 4. Review a CREATE change set for `cfn/bootstrap.yaml`, stack name
    `cloud-glider-sandbox-bootstrap`, in `us-west-2`. Supply `StateStreamArn` and
    those exact foundation inputs, plus the validated RootDeviceName. This creates
-   a new runtime role and needs CAPABILITY_IAM. Use the approved administrative
-   deployment principal; do not broaden deployment-role permissions to bypass
+   a new runtime role and needs CAPABILITY_IAM. GliderManager can submit it using
+   `--role-arn arn:aws:iam::123456789012:role/cloud-glider-sandbox-foundation-cfn`
+   after the [service-role supplement](../iam/glider-manager-policy-review.md)
+   is reviewed and applied; do not broaden deployment-role permissions to bypass
    authorization failures. The existing generation service role is reused.
 5. After approved deployment, verify the event source mapping is Enabled, points
    at the correct stream, and has the request-only filter and operational SNS
@@ -41,29 +43,51 @@ The Lambda source is `bootstrap/handler.py`. After editing it, run
 `cfn/bootstrap.yaml` is tested for exact agreement with the source. Deployment
 does not require a new EC2 agent tarball or generation template release.
 
-## Request the first generation
+## Prepare the Boolean, then request the first generation
 
-Preview the transaction (AWS reads only):
+Prepare `BOOTSTRAP/REQUEST` with `bootstrap_requested=false` and status READY.
+This does not launch compute, even if the Lambda is already deployed. Preview:
 
 ```sh
 python3 scripts/request_bootstrap.py --region us-west-2
 ```
 
-Inspect the pinned control digest and audit identity. Confirm the operator wants
-to start compute, and inspect `propagation_enabled` separately: the request does
-not set, disable, or require a particular Boolean value for that field.
-For the initial inspection trial, it should remain false.
-
-Once the compute cost and readiness prerequisites have been reviewed, submit:
+Apply the preparation after inspecting its approved control digest and identity:
 
 ```sh
 python3 scripts/request_bootstrap.py --region us-west-2 --apply
 ```
 
-The write requires CURRENT to be UNINITIALIZED, no HOLD, unchanged approved
-control, and no previous request. Re-running cannot overwrite/rearm a request.
-The Lambda must claim the request within 15 minutes; it has no TTL deletion.
-There is no boolean to toggle repeatedly. An existing request requires inspection.
+An unchanged READY record with `bootstrap_requested=false` reports
+`ALREADY_PREPARED` on repeat runs, without writes. This confirms preparation only,
+not deployment readiness. Active, completed, legacy, or stale records require
+inspection. The script never overwrites a request or changes propagation.
+The prepared record has no TTL or preparation expiry. If approved artifact/control
+values change, the fingerprint check fails closed; inspect before preparing a
+replacement. Existing legacy REQUESTED/CREATING/SUBMITTED records must not be
+blindly replaced or reset. Deploy the Boolean-aware Lambda/filter before toggling.
+
+When ready to start compute, edit the **Boolean** `bootstrap_requested` from
+`false` to `true` on `PK=BOOTSTRAP, SK=REQUEST` in DynamoDB. Leave the other
+attributes unchanged. This is the only switch needed; no script is required
+for the toggle. The equivalent conditional CLI command is:
+
+```sh
+aws dynamodb update-item --region us-west-2 \
+  --table-name cloud-glider-sandbox-state \
+  --key '{"PK":{"S":"BOOTSTRAP"},"SK":{"S":"REQUEST"}}' \
+  --update-expression 'SET bootstrap_requested = :yes' \
+  --condition-expression '#s = :ready AND bootstrap_requested = :no' \
+  --expression-attribute-names '{"#s":"status"}' \
+  --expression-attribute-values '{":ready":{"S":"READY"},":yes":{"BOOL":true},":no":{"BOOL":false}}'
+```
+
+Confirm compute costs and notification prerequisites before toggling. Keep
+`CONTROL/GLOBAL.propagation_enabled=false` for the initial inspection trial;
+bootstrap also supports it being true. CloudTrail records the operator toggle.
+Only MODIFY events whose old Boolean is false and new Boolean is true with READY
+status pass the filter. Insertion, repeated true writes, and status changes do
+not trigger bootstrap. The stream event has a 15-minute maximum delivery age.
 
 Inspect request status:
 
@@ -75,7 +99,7 @@ aws cloudformation describe-stacks --region us-west-2 \
   --stack-name cloud-glider-sandbox-gen-000000
 ```
 
-Expect REQUESTED -> CREATING -> SUBMITTED. SUBMITTED records a stack ID and only
+Expect READY -> CREATING -> SUBMITTED after the Boolean becomes true. SUBMITTED records a stack ID and only
 means CloudFormation accepted creation. Wait for CREATE_COMPLETE, then verify
 CURRENT belongs to the expected instance and stack, the approved artifact
 identities match, and distinct healthy heartbeats are arriving. EC2 running and
@@ -85,23 +109,15 @@ operation. The bootstrap Lambda never claims CURRENT or marks the workload healt
 
 ## Stop, failures, and inspection
 
-A normal propagation stop does not revoke a bootstrap request. Before Lambda
-claims it, cancel with a conditional operator update and retain the item:
-
-```sh
-aws dynamodb update-item --region us-west-2 \
-  --table-name cloud-glider-sandbox-state \
-  --key '{"PK":{"S":"BOOTSTRAP"},"SK":{"S":"REQUEST"}}' \
-  --update-expression 'SET #s = :cancelled' \
-  --condition-expression '#s = :requested' \
-  --expression-attribute-names '{"#s":"status"}' \
-  --expression-attribute-values '{":cancelled":{"S":"CANCELLED"},":requested":{"S":"REQUESTED"}}'
-```
-
-CloudTrail records this operator action. If the condition fails, inspect before
-retrying; it may already be CREATING or SUBMITTED. For an incident use the approved
-emergency-hold path as well as disabling propagation. Neither control reverses
-an already-submitted CloudFormation create request.
+A normal propagation stop does not revoke bootstrap. Set `bootstrap_requested`
+back to false to withdraw authorization before the final provisioning read.
+The Lambda checks it both when claiming the request and immediately before
+CreateStack. If status remains READY, a later false-to-true transition can retry.
+If status is CREATING or SUBMITTED, inspect instead of resetting status: a create
+may already be in flight. The Boolean remains true after submission as a record
+of authorization; status prevents later toggles from launching a second chain.
+For an incident use the approved emergency-hold path as well as disabling
+propagation. Neither switch nor HOLD reverses a submitted CloudFormation request.
 
 Inspect `/aws/lambda/cloud-glider-sandbox-bootstrap`, the request, CURRENT,
 generation records, live instances, and stack events on any error. Stream retries
@@ -115,10 +131,10 @@ can be reconciled on delivery retry without another CreateStack call. A failed
 create uses DO_NOTHING so surviving resources are preserved; cleanup goes through
 CloudFormation after verifying no request is still in flight.
 
-Do not delete the request, reset CURRENT, or blindly reset CREATING to REQUESTED.
+Do not delete the request, reset CURRENT, or blindly reset CREATING to READY.
 There is no automatic retry/rebootstrap procedure for the first pass. A recovery
 requires a reviewed inventory and explicit operator decision. Retain SUBMITTED
-and CANCELLED records even after cleanup to prevent replay and unintended restart.
+and any legacy CANCELLED records even after cleanup to prevent replay and unintended restart.
 
 ## Validation before enabling propagation
 

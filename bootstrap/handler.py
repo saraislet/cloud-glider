@@ -3,7 +3,6 @@ import hashlib
 import json
 import os
 import re
-import time
 from urllib.parse import quote
 
 
@@ -70,7 +69,7 @@ def guard(control, current, hold, request, event_request, env, status):
             and not any(field in current for field in ('generation', 'stack_id', 'instance_id')),
             'CURRENT is not uninitialized')
     require(fingerprint(control) == request['control_sha256']['S'], 'Approved control changed; inspect manually')
-    require(int(request['valid_until_epoch']['N']) > int(time.time()), 'Bootstrap request expired')
+    require(request.get('bootstrap_requested') == {'BOOL': True}, 'Bootstrap request is disabled')
     require(control.get('environment') == {'S': env['ENVIRONMENT']}, 'Environment mismatch')
     require(control.get('approved_region') == {'S': 'us-west-2'}, 'Region mismatch')
     require(control.get('approved_architecture') == {'S': 'arm64'}, 'Architecture mismatch')
@@ -117,7 +116,7 @@ def process(event_request, ddb, cfn, s3, ec2, env):
         verify_existing(existing, params, env, request_id)
         finish(ddb, table, request_id, existing['StackId'])
         return
-    guard(control, current, hold, request, event_request, env, 'REQUESTED')
+    guard(control, current, hold, request, event_request, env, 'READY')
     require(existing is None, 'Existing bootstrap stack requires operator inspection')
     for page in ec2.get_paginator('describe_instances').paginate(Filters=[
         {'Name': 'tag:project', 'Values': ['cloud-glider']},
@@ -132,9 +131,9 @@ def process(event_request, ddb, cfn, s3, ec2, env):
     # A durable claim prevents duplicate execution and automatic rebootstrap after deletion.
     ddb.update_item(TableName=table, Key=key('BOOTSTRAP', 'REQUEST'),
         UpdateExpression='SET #s = :creating',
-        ConditionExpression='request_id = :id AND #s = :requested AND control_sha256 = :digest',
+        ConditionExpression='request_id = :id AND #s = :requested AND control_sha256 = :digest AND bootstrap_requested = :enabled',
         ExpressionAttributeNames={'#s': 'status'}, ExpressionAttributeValues={
-            ':id': {'S': request_id}, ':requested': {'S': 'REQUESTED'}, ':creating': {'S': 'CREATING'},
+            ':id': {'S': request_id}, ':requested': {'S': 'READY'}, ':enabled': {'BOOL': True}, ':creating': {'S': 'CREATING'},
             ':digest': request['control_sha256']})
     fresh = snapshot(ddb, table)
     guard(*fresh, event_request, env, 'CREATING')
@@ -151,6 +150,16 @@ def process(event_request, ddb, cfn, s3, ec2, env):
     finish(ddb, table, request_id, result['StackId'])
 
 
+def is_bootstrap_trigger(record):
+    change = record.get('dynamodb', {})
+    old, new = change.get('OldImage', {}), change.get('NewImage', {})
+    return (record.get('eventName') == 'MODIFY'
+            and new.get('PK') == {'S': 'BOOTSTRAP'} and new.get('SK') == {'S': 'REQUEST'}
+            and old.get('bootstrap_requested') == {'BOOL': False}
+            and new.get('bootstrap_requested') == {'BOOL': True}
+            and new.get('status') == {'S': 'READY'})
+
+
 def handler(event, context):
     import boto3
     from botocore.config import Config
@@ -160,8 +169,7 @@ def handler(event, context):
                for service in ('dynamodb', 'cloudformation', 's3', 'ec2')]
     for record in event.get('Records', []):
         image = record.get('dynamodb', {}).get('NewImage', {})
-        if record.get('eventName') != 'INSERT' or image.get('PK') != {'S': 'BOOTSTRAP'} or image.get('SK') != {'S': 'REQUEST'}:
+        if not is_bootstrap_trigger(record):
             continue
         require(record.get('eventSourceARN') == env['STREAM_ARN'], 'Unexpected event source')
-        require(image.get('status') == {'S': 'REQUESTED'}, 'Unexpected request status')
         process(image, *clients, env)

@@ -1,0 +1,158 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ManageBootstrapRuntimeRole",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole",
+        "iam:DeleteRole",
+        "iam:GetRole",
+        "iam:GetRolePolicy",
+        "iam:ListRolePolicies",
+        "iam:ListAttachedRolePolicies",
+        "iam:PutRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:UpdateRole",
+        "iam:UpdateRoleDescription",
+        "iam:UpdateAssumeRolePolicy",
+        "iam:TagRole",
+        "iam:UntagRole"
+      ],
+      "Resource": "arn:aws:iam::123456789012:role/cloud-glider-sandbox-bootstrap-BootstrapRole-*"
+    },
+    {
+      "Sid": "PassBootstrapRuntimeRoleToLambdaOnly",
+      "Effect": "Allow",
+      "Action": [
+        "iam:PassRole"
+      ],
+      "Resource": "arn:aws:iam::123456789012:role/cloud-glider-sandbox-bootstrap-BootstrapRole-*",
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": "lambda.amazonaws.com"
+        }
+      }
+    },
+    {
+      "Sid": "ManageBootstrapFunction",
+      "Effect": "Allow",
+      "Action": [
+        "lambda:CreateFunction",
+        "lambda:DeleteFunction",
+        "lambda:GetFunction",
+        "lambda:GetFunctionConfiguration",
+        "lambda:GetFunctionConcurrency",
+        "lambda:GetFunctionCodeSigningConfig",
+        "lambda:GetFunctionRecursionConfig",
+        "lambda:GetRuntimeManagementConfig",
+        "lambda:GetFunctionScalingConfig",
+        "lambda:ListTags",
+        "lambda:PutFunctionConcurrency",
+        "lambda:DeleteFunctionConcurrency",
+        "lambda:UpdateFunctionCode",
+        "lambda:UpdateFunctionConfiguration",
+        "lambda:TagResource",
+        "lambda:UntagResource"
+      ],
+      "Resource": "arn:aws:lambda:us-west-2:123456789012:function:cloud-glider-sandbox-bootstrap"
+    },
+    {
+      "Sid": "CreateOnlyBootstrapEventSourceMapping",
+      "Effect": "Allow",
+      "Action": [
+        "lambda:CreateEventSourceMapping"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "ArnEquals": {
+          "lambda:FunctionArn": "arn:aws:lambda:us-west-2:123456789012:function:cloud-glider-sandbox-bootstrap"
+        },
+        "StringEquals": {
+          "aws:RequestedRegion": "us-west-2",
+          "aws:RequestTag/project": "cloud-glider",
+          "aws:RequestTag/environment": "sandbox",
+          "aws:RequestTag/purpose": "bootstrap-trigger"
+        }
+      }
+    },
+    {
+      "Sid": "ManageOnlyBootstrapEventSourceMappings",
+      "Effect": "Allow",
+      "Action": [
+        "lambda:GetEventSourceMapping",
+        "lambda:UpdateEventSourceMapping",
+        "lambda:DeleteEventSourceMapping"
+      ],
+      "Resource": "arn:aws:lambda:us-west-2:123456789012:event-source-mapping:*",
+      "Condition": {
+        "ArnEquals": {
+          "lambda:FunctionArn": "arn:aws:lambda:us-west-2:123456789012:function:cloud-glider-sandbox-bootstrap"
+        },
+        "StringEquals": {
+          "aws:ResourceTag/project": "cloud-glider",
+          "aws:ResourceTag/environment": "sandbox",
+          "aws:ResourceTag/purpose": "bootstrap-trigger"
+        }
+      }
+    },
+    {
+      "Sid": "TagBootstrapMappingAtCreation",
+      "Effect": "Allow",
+      "Action": [
+        "lambda:TagResource"
+      ],
+      "Resource": "arn:aws:lambda:us-west-2:123456789012:event-source-mapping:*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestTag/project": "cloud-glider",
+          "aws:RequestTag/environment": "sandbox",
+          "aws:RequestTag/purpose": "bootstrap-trigger"
+        }
+      }
+    },
+    {
+      "Sid": "ReadAndReconcileBootstrapMappingTags",
+      "Effect": "Allow",
+      "Action": [
+        "lambda:ListTags",
+        "lambda:TagResource",
+        "lambda:UntagResource"
+      ],
+      "Resource": "arn:aws:lambda:us-west-2:123456789012:event-source-mapping:*",
+      "Condition": {
+        "StringEquals": {
+          "aws:ResourceTag/project": "cloud-glider",
+          "aws:ResourceTag/environment": "sandbox",
+          "aws:ResourceTag/purpose": "bootstrap-trigger"
+        }
+      }
+    },
+    {
+      "Sid": "ManageBootstrapLogGroup",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:DeleteLogGroup",
+        "logs:PutRetentionPolicy",
+        "logs:DeleteRetentionPolicy",
+        "logs:ListTagsForResource",
+        "logs:TagResource",
+        "logs:UntagResource",
+        "logs:GetDataProtectionPolicy"
+      ],
+      "Resource": [
+        "arn:aws:logs:us-west-2:123456789012:log-group:/aws/lambda/cloud-glider-sandbox-bootstrap",
+        "arn:aws:logs:us-west-2:123456789012:log-group:/aws/lambda/cloud-glider-sandbox-bootstrap:*"
+      ]
+    },
+    {
+      "Sid": "ReconcileBootstrapAlarmTags",
+      "Effect": "Allow",
+      "Action": [
+        "cloudwatch:UntagResource"
+      ],
+      "Resource": "arn:aws:cloudwatch:us-west-2:123456789012:alarm:cloud-glider-sandbox-bootstrap-BootstrapErrorsAlarm-*"
+    }
+  ]
+}

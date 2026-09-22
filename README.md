@@ -120,8 +120,8 @@ It separates the reviewed import of surviving resources from normal deployment.
 5. Initialize DynamoDB with `scripts/initialize_control.py`, including both
    template and agent artifact identity tuples; inspect the dry run before
    using `--apply`.
-6. Deploy the reviewed bootstrap trigger and submit a separate one-shot bootstrap
-   request for generation `000000` using [the bootstrap runbook](docs/bootstrap.md).
+6. Deploy the reviewed bootstrap trigger and prepare the separate bootstrap
+   record, then toggle its `bootstrap_requested` Boolean to start generation `000000` using [the bootstrap runbook](docs/bootstrap.md).
    Keep propagation disabled for the initial inspection; the Lambda itself accepts
    either propagation setting.
 

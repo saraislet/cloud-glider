@@ -1,0 +1,55 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadGliderManagerPolicySources",
+      "Effect": "Allow",
+      "Action": [
+        "iam:GetUser",
+        "iam:GetUserPolicy",
+        "iam:ListUserPolicies",
+        "iam:ListAttachedUserPolicies",
+        "iam:ListGroupsForUser"
+      ],
+      "Resource": "arn:aws:iam::123456789012:user/GliderManager"
+    },
+    {
+      "Sid": "ReadGlidersGroupPolicySources",
+      "Effect": "Allow",
+      "Action": [
+        "iam:GetGroupPolicy",
+        "iam:ListGroupPolicies",
+        "iam:ListAttachedGroupPolicies"
+      ],
+      "Resource": "arn:aws:iam::123456789012:group/Gliders"
+    },
+    {
+      "Sid": "ReadFoundationServiceRolePolicySources",
+      "Effect": "Allow",
+      "Action": [
+        "iam:GetRole",
+        "iam:GetRolePolicy",
+        "iam:ListRolePolicies",
+        "iam:ListAttachedRolePolicies"
+      ],
+      "Resource": "arn:aws:iam::123456789012:role/cloud-glider-sandbox-foundation-cfn"
+    },
+    {
+      "Sid": "ReadKnownManagedPolicyDocuments",
+      "Effect": "Allow",
+      "Action": [
+        "iam:GetPolicy",
+        "iam:GetPolicyVersion"
+      ],
+      "Resource": [
+        "arn:aws:iam::123456789012:policy/cloud-glider-manager-logging",
+        "arn:aws:iam::123456789012:policy/cloud-glider-foundation-ops",
+        "arn:aws:iam::123456789012:policy/cloud-glider-operations-read-only",
+        "arn:aws:iam::123456789012:policy/PassFoundationServiceRoleOnly",
+        "arn:aws:iam::aws:policy/job-function/ViewOnlyAccess",
+        "arn:aws:iam::aws:policy/IAMUserChangePassword",
+        "arn:aws:iam::123456789012:policy/CloudGliderBootstrapResources"
+      ]
+    }
+  ]
+}

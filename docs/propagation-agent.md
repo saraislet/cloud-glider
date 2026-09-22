@@ -2,8 +2,8 @@
 
 ## Bootstrap
 
-The operator creates `BOOTSTRAP/REQUEST` to ask the bootstrap Lambda for the
-first generation. This is independent of `CONTROL/GLOBAL.propagation_enabled`;
+The operator toggles `BOOTSTRAP/REQUEST.bootstrap_requested` from false to true
+to ask the bootstrap Lambda for the first generation. This is independent of `CONTROL/GLOBAL.propagation_enabled`;
 the Lambda does not modify or gate on that flag. Keep it false for initial
 inspection. `HOLD/ACTIVE` blocks both paths. See [the bootstrap runbook](bootstrap.md).
 

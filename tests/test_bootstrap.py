@@ -41,6 +41,7 @@ class BootstrapTests(unittest.TestCase):
         self.control = initial[0]['Put']['Item']
         self.current = initial[1]['Put']['Item']
         self.request = requester.build_transaction('table', self.control, 'operator', 'test-request', 100)[3]['Put']['Item']
+        self.request['bootstrap_requested'] = {'BOOL': True}
         self.event = copy.deepcopy(self.request)
         self.hold = {}
         self.ddb, self.cfn, self.s3, self.ec2 = Mock(), Mock(), Mock(), Mock()
@@ -63,9 +64,6 @@ class BootstrapTests(unittest.TestCase):
                                                             'RootDeviceType': 'ebs', 'RootDeviceName': '/dev/xvda'}]}
         self.s3.get_object.side_effect = lambda **kw: {'VersionId': kw['VersionId'],
             'Body': io.BytesIO(b'template' if kw['VersionId'] == 'template-version' else b'agent')}
-        self.clock = patch.object(bootstrap.time, 'time', return_value=101)
-        self.clock.start()
-        self.addCleanup(self.clock.stop)
 
     def run_request(self):
         bootstrap.process(self.event, self.ddb, self.cfn, self.s3, self.ec2, self.env)
@@ -149,9 +147,9 @@ class BootstrapTests(unittest.TestCase):
         self.ddb.update_item.assert_not_called()
         self.cfn.create_stack.assert_not_called()
 
-    def test_expired_request_is_rejected(self):
-        self.request['valid_until_epoch'] = {'N': '100'}
-        with self.assertRaisesRegex(RuntimeError, 'expired'):
+    def test_false_boolean_is_rejected(self):
+        self.request['bootstrap_requested'] = {'BOOL': False}
+        with self.assertRaisesRegex(RuntimeError, 'disabled'):
             self.run_request()
         self.cfn.create_stack.assert_not_called()
 
@@ -194,7 +192,7 @@ class BootstrapTests(unittest.TestCase):
         self.request['status'] = {'S': 'CANCELLED'}
         self.run_request()
         self.cfn.create_stack.assert_not_called()
-        self.request['status'] = {'S': 'REQUESTED'}
+        self.request['status'] = {'S': 'READY'}
         self.ddb.update_item.side_effect = RuntimeError('conditional conflict')
         with self.assertRaisesRegex(RuntimeError, 'conditional conflict'):
             self.run_request()
@@ -225,6 +223,86 @@ class BootstrapTests(unittest.TestCase):
         generation = (ROOT / 'cfn/generation.yaml').read_text().split('Parameters:\n', 1)[1].split('Rules:', 1)[0]
         expected = set(re.findall(r'^  ([A-Za-z0-9]+):$', generation, flags=re.MULTILINE))
         self.assertEqual(actual, expected)
+
+    def test_preparation_only_creates_false_boolean(self):
+        transaction = requester.build_transaction('table', self.control, 'operator', 'id', 100)
+        item = transaction[3]['Put']['Item']
+        self.assertEqual(item['bootstrap_requested'], {'BOOL': False})
+        self.assertEqual(item['status'], {'S': 'READY'})
+        self.assertNotIn('valid_until_epoch', item)
+
+    def test_only_false_to_true_transition_triggers(self):
+        def event(old, new, name='MODIFY', status='READY'):
+            return {'eventName': name, 'dynamodb': {
+                'OldImage': {'bootstrap_requested': old},
+                'NewImage': {'PK': {'S': 'BOOTSTRAP'}, 'SK': {'S': 'REQUEST'},
+                             'status': {'S': status}, 'bootstrap_requested': new}}}
+        self.assertTrue(bootstrap.is_bootstrap_trigger(event({'BOOL': False}, {'BOOL': True})))
+        for record in [event({'BOOL': False}, {'BOOL': False}),
+                       event({'BOOL': True}, {'BOOL': True}),
+                       event({'BOOL': True}, {'BOOL': False}),
+                       event({'BOOL': False}, {'BOOL': True}, name='INSERT'),
+                       event({'BOOL': False}, {'BOOL': True}, status='SUBMITTED'),
+                       event({'BOOL': False}, {'BOOL': True}, status='CREATING'),
+                       event({}, {'BOOL': True}), event({'BOOL': False}, {'S': 'true'})]:
+            self.assertFalse(bootstrap.is_bootstrap_trigger(record))
+
+    def test_boolean_disabled_after_claim_blocks_create(self):
+        original = self.ddb.update_item.side_effect
+        def update(**kw):
+            original(**kw)
+            self.request['bootstrap_requested'] = {'BOOL': False}
+        self.ddb.update_item.side_effect = update
+        with self.assertRaisesRegex(RuntimeError, 'disabled'):
+            self.run_request()
+        self.cfn.create_stack.assert_not_called()
+
+    def test_claim_condition_checks_boolean(self):
+        self.run_request()
+        claim = self.ddb.update_item.call_args_list[0].kwargs
+        self.assertIn('bootstrap_requested = :enabled', claim['ConditionExpression'])
+        self.assertEqual(claim['ExpressionAttributeValues'][':enabled'], {'BOOL': True})
+
+    def test_stream_filter_matches_boolean_transition(self):
+        template = (ROOT / 'cfn/bootstrap.yaml').read_text()
+        pattern = json.loads(template.split("- Pattern: '", 1)[1].split("'", 1)[0])
+        self.assertEqual(pattern['eventName'], ['MODIFY'])
+        self.assertEqual(pattern['dynamodb']['OldImage']['bootstrap_requested'], {'BOOL': [False]})
+        self.assertEqual(pattern['dynamodb']['NewImage']['bootstrap_requested'], {'BOOL': [True]})
+
+    def test_repeated_preparation_is_a_read_only_noop(self):
+        existing = copy.deepcopy(self.request)
+        existing['bootstrap_requested'] = {'BOOL': False}
+        reads = [json.dumps({'Item': self.control}), json.dumps({'Item': existing})]
+        with patch.object(requester.subprocess, 'check_output', side_effect=reads), \
+             patch.object(requester.subprocess, 'run') as write, \
+             patch('sys.stdout', new_callable=io.StringIO) as output:
+            requester.main(['--apply'])
+        write.assert_not_called()
+        self.assertEqual(json.loads(output.getvalue())['mode'], 'ALREADY_PREPARED')
+
+    def test_existing_active_or_stale_requests_are_not_overwritten(self):
+        for field, value in [('status', {'S': 'CREATING'}), ('bootstrap_requested', {'BOOL': True}),
+                             ('control_sha256', {'S': 'changed'})]:
+            existing = copy.deepcopy(self.request)
+            existing['bootstrap_requested'] = {'BOOL': False}
+            existing[field] = value
+            reads = [json.dumps({'Item': self.control}), json.dumps({'Item': existing})]
+            with patch.object(requester.subprocess, 'check_output', side_effect=reads), \
+                 patch.object(requester.subprocess, 'run') as write:
+                with self.assertRaisesRegex(SystemExit, 'already exists'):
+                    requester.main(['--apply'])
+            write.assert_not_called()
+
+    def test_concurrent_preparation_failure_has_clear_diagnostic(self):
+        reads = [json.dumps({'Item': self.control}), '{}', json.dumps({'Arn': 'operator'})]
+        failed = subprocess.CompletedProcess([], 255, '', 'TransactionCanceledException')
+        with patch.object(requester.subprocess, 'check_output', side_effect=reads), \
+             patch.object(requester.subprocess, 'run', return_value=failed) as write, \
+             patch('sys.stderr', new_callable=io.StringIO):
+            with self.assertRaisesRegex(SystemExit, 'absent bootstrap request'):
+                requester.main(['--apply'])
+        write.assert_called_once()
 
     def test_embedded_source_is_current(self):
         subprocess.run([sys.executable, str(ROOT / 'scripts/render_bootstrap_template.py'), '--check'], check=True)
