@@ -1,0 +1,30 @@
+[
+  {
+    "ParameterKey": "Owner",
+    "UsePreviousValue": true
+  },
+  {
+    "ParameterKey": "OperationalNotificationEmail",
+    "UsePreviousValue": true
+  },
+  {
+    "ParameterKey": "AllowedImageId",
+    "UsePreviousValue": true
+  },
+  {
+    "ParameterKey": "Environment",
+    "UsePreviousValue": true
+  },
+  {
+    "ParameterKey": "AuditLogRetentionDays",
+    "UsePreviousValue": true
+  },
+  {
+    "ParameterKey": "AllowedSubnetId",
+    "UsePreviousValue": true
+  },
+  {
+    "ParameterKey": "AllowedSecurityGroupId",
+    "UsePreviousValue": true
+  }
+]

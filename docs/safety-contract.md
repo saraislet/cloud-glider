@@ -7,8 +7,12 @@ merged or deployed, even if it makes a happy-path propagation test pass.
 
 1. **Fresh operator control.** The agent must strongly read `CONTROL/GLOBAL` and
    `HOLD/ACTIVE` immediately before every `CreateStack` or `ExecuteChangeSet`
-   operation that can provision compute. `propagation_enabled=false` or the
-   existence of `HOLD/ACTIVE` stops that operation.
+   operation that can provision successor compute. `propagation_enabled=false`
+   or the existence of `HOLD/ACTIVE` stops successor provisioning.
+   The separate operator bootstrap path in [decision 0002](decisions/0002-operator-bootstrap-request.md)
+   permits only the first generation from UNINITIALIZED CURRENT and an explicit
+   one-shot request, regardless of `propagation_enabled`. It still checks HOLD
+   immediately before provisioning; HOLD also stops operator bootstrap.
 2. **Approved definitions only.** Generation stacks use the prescribed stack
    name, generation service role, allowed parameters, S3 object version, and
    SHA-256 digest. Arbitrary template URLs and parameters are forbidden.

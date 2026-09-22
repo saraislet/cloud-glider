@@ -30,6 +30,8 @@ through generation `2`.
   route, and no-ingress generation security group.
 - `cfn/foundation.yaml` creates the retained control table, audit archive,
   category-specific log groups, artifact bucket, and IAM roles.
+- `cfn/bootstrap.yaml` defines the operator bootstrap Lambda and request-only
+  stream trigger; see [the bootstrap runbook](docs/bootstrap.md).
 - `cfn/generation.yaml` defines one generation EC2 instance. It deliberately
   contains no IAM or networking resources.
 - `agent/` contains the dependency-free Python propagation state machine and
@@ -95,10 +97,18 @@ generation stack and `scripts/initialize_control.py`.
 When `cfn-lint` is installed, also run:
 
 ```sh
-cfn-lint cfn/network.yaml cfn/billing-alerts.yaml cfn/foundation.yaml cfn/generation.yaml
+cfn-lint cfn/network.yaml cfn/billing-alerts.yaml cfn/foundation.yaml cfn/generation.yaml cfn/bootstrap.yaml
 ```
 
 ## Deployment order
+
+Pass `--region us-west-2` explicitly for sandbox CloudFormation and resource
+commands, including change-set inspection, execution, waiters, and drift checks.
+Do not rely on the CLI's default Region or expect an ARN to select the endpoint.
+
+For the sandbox's interrupted foundation deployment, follow the
+[foundation recovery runbook](docs/foundation-recovery.md) before retrying.
+It separates the reviewed import of surviving resources from normal deployment.
 
 1. Review the deferred values in `docs/decisions.md`.
 2. Validate and deploy `cfn/network.yaml` from an administrative deployment
@@ -110,7 +120,10 @@ cfn-lint cfn/network.yaml cfn/billing-alerts.yaml cfn/foundation.yaml cfn/genera
 5. Initialize DynamoDB with `scripts/initialize_control.py`, including both
    template and agent artifact identity tuples; inspect the dry run before
    using `--apply`.
-6. Bootstrap generation `000000` or `000001` through the approved operator path while propagation remains disabled.
+6. Deploy the reviewed bootstrap trigger and submit a separate one-shot bootstrap
+   request for generation `000000` using [the bootstrap runbook](docs/bootstrap.md).
+   Keep propagation disabled for the initial inspection; the Lambda itself accepts
+   either propagation setting.
 
 Do not enable propagation until the negative-security and failure-path tests in
 the safety contract pass in the sandbox account.

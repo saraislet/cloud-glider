@@ -72,6 +72,8 @@ Resources:
     Properties:
       TableName: !Sub 'cloud-glider-${Environment}-state'
       BillingMode: PAY_PER_REQUEST
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
       AttributeDefinitions:
         - AttributeName: PK
           AttributeType: S
@@ -786,7 +788,9 @@ Resources:
 
   IamAccountAuditRule:
     Type: AWS::Events::Rule
+    DependsOn: EventBridgeLogResourcePolicy
     Properties:
+      EventBusName: default
       Name: !Sub 'cloud-glider-${Environment}-iam-account-audit'
       Description: Project IAM and account control-plane changes into a dedicated log.
       State: ENABLED
@@ -805,7 +809,9 @@ Resources:
 
   NetworkAuditRule:
     Type: AWS::Events::Rule
+    DependsOn: EventBridgeLogResourcePolicy
     Properties:
+      EventBusName: default
       Name: !Sub 'cloud-glider-${Environment}-network-audit'
       Description: Project enumerated EC2 networking changes into a dedicated log.
       State: ENABLED
@@ -869,7 +875,9 @@ Resources:
 
   InfrastructureServiceAuditRule:
     Type: AWS::Events::Rule
+    DependsOn: EventBridgeLogResourcePolicy
     Properties:
+      EventBusName: default
       Name: !Sub 'cloud-glider-${Environment}-infrastructure-audit'
       Description: Project non-network infrastructure management calls into a dedicated log.
       State: ENABLED
@@ -891,7 +899,9 @@ Resources:
 
   ComputeAuditRule:
     Type: AWS::Events::Rule
+    DependsOn: EventBridgeLogResourcePolicy
     Properties:
+      EventBusName: default
       Name: !Sub 'cloud-glider-${Environment}-compute-audit'
       Description: Project EC2 compute lifecycle changes into infrastructure audit.
       State: ENABLED
@@ -920,7 +930,9 @@ Resources:
 
   CloudFormationStatusAuditRule:
     Type: AWS::Events::Rule
+    DependsOn: EventBridgeLogResourcePolicy
     Properties:
+      EventBusName: default
       Name: !Sub 'cloud-glider-${Environment}-stack-status-audit'
       Description: Record CloudFormation stack lifecycle state changes.
       State: ENABLED
@@ -936,6 +948,8 @@ Resources:
   GenerationServiceRole:
     Type: AWS::IAM::Role
     Properties:
+      Path: /
+      MaxSessionDuration: 3600
       RoleName: !Sub 'cloud-glider-${Environment}-generation-cfn'
       Description: CloudFormation service role restricted to the generation template.
       AssumeRolePolicyDocument:
@@ -1252,6 +1266,8 @@ Resources:
         - !Ref AgentRole
 
 Outputs:
+  StateTableStreamArn:
+    Value: !GetAtt StateTable.StreamArn
   OperationalAlertsTopicArn:
     Value: !Ref OperationalAlertsTopic
   StateTableName:

@@ -1,0 +1,17 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadImportedGenerationRoleAttachments",
+      "Effect": "Allow",
+      "Action": "iam:ListAttachedRolePolicies",
+      "Resource": "arn:aws:iam::123456789012:role/cloud-glider-sandbox-generation-cfn"
+    },
+    {
+      "Sid": "ReadImportedOperationalTopicProtection",
+      "Effect": "Allow",
+      "Action": "sns:GetDataProtectionPolicy",
+      "Resource": "arn:aws:sns:us-west-2:123456789012:cloud-glider-sandbox-operational-alerts"
+    }
+  ]
+}

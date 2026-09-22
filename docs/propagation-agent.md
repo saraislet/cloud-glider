@@ -1,5 +1,12 @@
 # Propagation agent runbook
 
+## Bootstrap
+
+The operator creates `BOOTSTRAP/REQUEST` to ask the bootstrap Lambda for the
+first generation. This is independent of `CONTROL/GLOBAL.propagation_enabled`;
+the Lambda does not modify or gate on that flag. Keep it false for initial
+inspection. `HOLD/ACTIVE` blocks both paths. See [the bootstrap runbook](bootstrap.md).
+
 ## Lifecycle
 
 Each process verifies that IMDSv2 instance identity and its CloudFormation
@@ -27,6 +34,7 @@ the continuation change set.
 
 - `CONTROL/GLOBAL`: operator control, limits, timing, and approved immutable
   template/bootstrap/agent identities.
+- `BOOTSTRAP/REQUEST`: retained one-shot operator request and submission status.
 - `CURRENT/GLOBAL`: authoritative generation, stack, instance, status, and
   handoff token.
 - `GEN#{generation}/STATE`: identity and heartbeat evidence. Writes are
@@ -42,8 +50,9 @@ is corroborating telemetry and never a readiness gate.
 ## Stop and incident response
 
 For a normal stop, set `propagation_enabled=false`. A generation already
-running remains intact, while every fresh create/handoff gate fails closed. For
-an incident, also create `HOLD/ACTIVE` through the approved emergency path.
+running remains intact, while every fresh successor create/handoff gate fails
+closed. This does not cancel a separate bootstrap request; use its cancellation
+procedure or an emergency hold. For an incident, also create `HOLD/ACTIVE` through the approved emergency path.
 
 Do not delete stacks while a provisioning request may still be in flight.
 Inspect `CURRENT/GLOBAL`, `LOCK/PROPAGATION`, generation state records, and

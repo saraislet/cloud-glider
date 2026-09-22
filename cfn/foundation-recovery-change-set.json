@@ -1,0 +1,12 @@
+{
+  "StackId": "arn:aws:cloudformation:us-west-2:123456789012:stack/cloud-glider-sandbox/a5448100-b613-11f1-b4ba-02fc06666c89",
+  "Region": "us-west-2",
+  "ChangeSetName": "foundation-recovery-import-20260922",
+  "ChangeSetId": "arn:aws:cloudformation:us-west-2:123456789012:changeSet/foundation-recovery-import-20260922/cfd2714d-3ecc-43ae-a37a-06eb6353ad3e",
+  "SourceTemplateSha256": "c1e0feb0360864a2c347db201d60eb9982300814453fbc2f344644e1199f3e9e",
+  "FilesSha256": {
+    "cfn/import-foundation-recovery.json": "5cf7d6255b30e31b61c710ccdaa64bc7b90c5be8525d9e1b9ff1340b2445698b",
+    "cfn/foundation-recovery-resources.json": "32094a9eecc986677a1d7218e6e883ccc146e898db75112e6086f75078d70835",
+    "cfn/foundation-recovery-parameters.json": "468782ffe7de062fbbb4598caa004afb6cd0c070a4bc71a841e39345f373fbc8"
+  }
+}

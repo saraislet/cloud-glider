@@ -1,0 +1,65 @@
+[
+  {
+    "ResourceType": "AWS::IAM::Role",
+    "LogicalResourceId": "GenerationServiceRole",
+    "ResourceIdentifier": {
+      "RoleName": "cloud-glider-sandbox-generation-cfn"
+    }
+  },
+  {
+    "ResourceType": "AWS::SNS::Topic",
+    "LogicalResourceId": "OperationalAlertsTopic",
+    "ResourceIdentifier": {
+      "TopicArn": "arn:aws:sns:us-west-2:123456789012:cloud-glider-sandbox-operational-alerts"
+    }
+  },
+  {
+    "ResourceType": "AWS::Events::Rule",
+    "LogicalResourceId": "ComputeAuditRule",
+    "ResourceIdentifier": {
+      "Arn": "arn:aws:events:us-west-2:123456789012:rule/cloud-glider-sandbox-compute-audit"
+    }
+  },
+  {
+    "ResourceType": "AWS::Events::Rule",
+    "LogicalResourceId": "IamAccountAuditRule",
+    "ResourceIdentifier": {
+      "Arn": "arn:aws:events:us-west-2:123456789012:rule/cloud-glider-sandbox-iam-account-audit"
+    }
+  },
+  {
+    "ResourceType": "AWS::Events::Rule",
+    "LogicalResourceId": "InfrastructureServiceAuditRule",
+    "ResourceIdentifier": {
+      "Arn": "arn:aws:events:us-west-2:123456789012:rule/cloud-glider-sandbox-infrastructure-audit"
+    }
+  },
+  {
+    "ResourceType": "AWS::Events::Rule",
+    "LogicalResourceId": "NetworkAuditRule",
+    "ResourceIdentifier": {
+      "Arn": "arn:aws:events:us-west-2:123456789012:rule/cloud-glider-sandbox-network-audit"
+    }
+  },
+  {
+    "ResourceType": "AWS::Events::Rule",
+    "LogicalResourceId": "CloudFormationStatusAuditRule",
+    "ResourceIdentifier": {
+      "Arn": "arn:aws:events:us-west-2:123456789012:rule/cloud-glider-sandbox-stack-status-audit"
+    }
+  },
+  {
+    "ResourceType": "AWS::S3::BucketPolicy",
+    "LogicalResourceId": "ArtifactBucketPolicy",
+    "ResourceIdentifier": {
+      "Bucket": "cloud-glider-sandbox-123456789012-us-west-2-artifacts"
+    }
+  },
+  {
+    "ResourceType": "AWS::S3::BucketPolicy",
+    "LogicalResourceId": "AuditArchiveBucketPolicy",
+    "ResourceIdentifier": {
+      "Bucket": "cloud-glider-sandbox-123456789012-us-west-2-audit"
+    }
+  }
+]

@@ -1,0 +1,107 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadAndReconcileFoundationRoleTags",
+      "Effect": "Allow",
+      "Action": [
+        "iam:ListAttachedRolePolicies",
+        "iam:UntagRole"
+      ],
+      "Resource": [
+        "arn:aws:iam::123456789012:role/cloud-glider-sandbox-generation-cfn",
+        "arn:aws:iam::123456789012:role/cloud-glider-sandbox-agent",
+        "arn:aws:iam::123456789012:role/cloud-glider-sandbox-emergency-hold"
+      ]
+    },
+    {
+      "Sid": "ReconcileAgentInstanceProfile",
+      "Effect": "Allow",
+      "Action": [
+        "iam:RemoveRoleFromInstanceProfile",
+        "iam:DeleteInstanceProfile",
+        "iam:UntagInstanceProfile"
+      ],
+      "Resource": "arn:aws:iam::123456789012:instance-profile/cloud-glider/cloud-glider-sandbox-agent"
+    },
+    {
+      "Sid": "PassAgentRoleToEc2InstanceProfileOnly",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "arn:aws:iam::123456789012:role/cloud-glider-sandbox-agent",
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": "ec2.amazonaws.com"
+        }
+      }
+    },
+    {
+      "Sid": "ReconcileAuditRuleTags",
+      "Effect": "Allow",
+      "Action": "events:UntagResource",
+      "Resource": "arn:aws:events:us-west-2:123456789012:rule/cloud-glider-sandbox-*-audit"
+    },
+    {
+      "Sid": "ReadAndReconcileOperationalTopic",
+      "Effect": "Allow",
+      "Action": [
+        "sns:GetDataProtectionPolicy",
+        "sns:UntagResource",
+        "sns:SetSubscriptionAttributes",
+        "sns:Unsubscribe"
+      ],
+      "Resource": "arn:aws:sns:us-west-2:123456789012:cloud-glider-sandbox-operational-alerts"
+    },
+    {
+      "Sid": "ReadAndRollBackFoundationAlarms",
+      "Effect": "Allow",
+      "Action": [
+        "cloudwatch:ListTagsForResource",
+        "cloudwatch:UntagResource",
+        "cloudwatch:DeleteAlarms"
+      ],
+      "Resource": "arn:aws:cloudwatch:us-west-2:123456789012:alarm:cloud-glider-sandbox-*"
+    },
+    {
+      "Sid": "ReadAndRollBackEmergencyHoldFunction",
+      "Effect": "Allow",
+      "Action": [
+        "lambda:GetFunctionCodeSigningConfig",
+        "lambda:GetFunctionRecursionConfig",
+        "lambda:GetRuntimeManagementConfig",
+        "lambda:GetFunctionScalingConfig",
+        "lambda:DeleteFunction",
+        "lambda:DeleteFunctionConcurrency",
+        "lambda:UntagResource"
+      ],
+      "Resource": "arn:aws:lambda:us-west-2:123456789012:function:cloud-glider-sandbox-emergency-hold"
+    },
+    {
+      "Sid": "ReadAndRollBackAuditTrail",
+      "Effect": "Allow",
+      "Action": [
+        "cloudtrail:GetTrail",
+        "cloudtrail:GetInsightSelectors",
+        "cloudtrail:GetEventConfiguration",
+        "cloudtrail:RemoveTags",
+        "cloudtrail:DeleteTrail"
+      ],
+      "Resource": "arn:aws:cloudtrail:us-west-2:123456789012:trail/cloud-glider-sandbox-audit"
+    },
+    {
+      "Sid": "ReconcileRetainedResourceTags",
+      "Effect": "Allow",
+      "Action": "logs:UntagResource",
+      "Resource": [
+        "arn:aws:logs:us-west-2:123456789012:log-group:/cloud-glider/sandbox/*",
+        "arn:aws:logs:us-west-2:123456789012:log-group:/aws/lambda/cloud-glider-sandbox-emergency-hold"
+      ]
+    },
+    {
+      "Sid": "ReconcileStateTableTags",
+      "Effect": "Allow",
+      "Action": "dynamodb:UntagResource",
+      "Resource": "arn:aws:dynamodb:us-west-2:123456789012:table/cloud-glider-sandbox-state"
+    }
+  ]
+}

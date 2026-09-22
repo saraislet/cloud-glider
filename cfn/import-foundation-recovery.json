@@ -1,0 +1,956 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Cloud Glider retained control plane, audit foundation, artifact store, and least-privilege generation roles. Deploy only from an administrative principal.",
+  "Parameters": {
+    "Environment": {
+      "Type": "String",
+      "Default": "sandbox",
+      "AllowedPattern": "^[a-z][a-z0-9-]{1,15}$"
+    },
+    "Owner": {
+      "Type": "String",
+      "Description": "Owner tag value for cost and operational attribution.",
+      "MinLength": 1,
+      "MaxLength": 64
+    },
+    "AllowedImageId": {
+      "Type": "AWS::EC2::Image::Id",
+      "Description": "Approved AMI for generation instances in this Region.",
+      "Default": "ami-08dd4258d4d19fe06"
+    },
+    "AllowedSubnetId": {
+      "Type": "AWS::EC2::Subnet::Id",
+      "Description": "Existing public subnet with an internet-gateway route used by generation instances.",
+      "Default": "subnet-0a00b98420d660d03"
+    },
+    "AllowedSecurityGroupId": {
+      "Type": "AWS::EC2::SecurityGroup::Id",
+      "Description": "Existing no-inbound security group used by generation instances.",
+      "Default": "sg-0da9cdee2a98d8dc2"
+    },
+    "AuditLogRetentionDays": {
+      "Type": "Number",
+      "Default": 365,
+      "AllowedValues": [
+        90,
+        180,
+        365,
+        731,
+        1827,
+        3653
+      ]
+    },
+    "OperationalNotificationEmail": {
+      "Type": "String",
+      "Default": "hi@sar.ai",
+      "AllowedPattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$",
+      "Description": "Address that confirms and receives operational alarm notifications."
+    }
+  },
+  "Rules": {
+    "SandboxRegionIsUsWest2": {
+      "Assertions": [
+        {
+          "Assert": {
+            "Fn::Equals": [
+              {
+                "Ref": "AWS::Region"
+              },
+              "us-west-2"
+            ]
+          },
+          "AssertDescription": "Cloud Glider's initial sandbox is restricted to us-west-2."
+        }
+      ]
+    }
+  },
+  "Resources": {
+    "StateTable": {
+      "Type": "AWS::DynamoDB::Table",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "TableName": {
+          "Fn::Sub": "cloud-glider-${Environment}-state"
+        },
+        "BillingMode": "PAY_PER_REQUEST",
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "PK",
+            "AttributeType": "S"
+          },
+          {
+            "AttributeName": "SK",
+            "AttributeType": "S"
+          }
+        ],
+        "KeySchema": [
+          {
+            "AttributeName": "PK",
+            "KeyType": "HASH"
+          },
+          {
+            "AttributeName": "SK",
+            "KeyType": "RANGE"
+          }
+        ],
+        "DeletionProtectionEnabled": true,
+        "PointInTimeRecoverySpecification": {
+          "PointInTimeRecoveryEnabled": true,
+          "RecoveryPeriodInDays": 35
+        },
+        "SSESpecification": {
+          "SSEEnabled": true,
+          "SSEType": "KMS"
+        },
+        "TimeToLiveSpecification": {
+          "AttributeName": "expires_at",
+          "Enabled": true
+        },
+        "Tags": [
+          {
+            "Key": "project",
+            "Value": "cloud-glider"
+          },
+          {
+            "Key": "environment",
+            "Value": {
+              "Ref": "Environment"
+            }
+          },
+          {
+            "Key": "owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "purpose",
+            "Value": "control-and-coordination"
+          }
+        ]
+      }
+    },
+    "ArtifactBucket": {
+      "Type": "AWS::S3::Bucket",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "BucketName": {
+          "Fn::Sub": "cloud-glider-${Environment}-${AWS::AccountId}-${AWS::Region}-artifacts"
+        },
+        "BucketEncryption": {
+          "ServerSideEncryptionConfiguration": [
+            {
+              "ServerSideEncryptionByDefault": {
+                "SSEAlgorithm": "AES256"
+              }
+            }
+          ]
+        },
+        "OwnershipControls": {
+          "Rules": [
+            {
+              "ObjectOwnership": "BucketOwnerEnforced"
+            }
+          ]
+        },
+        "PublicAccessBlockConfiguration": {
+          "BlockPublicAcls": true,
+          "BlockPublicPolicy": true,
+          "IgnorePublicAcls": true,
+          "RestrictPublicBuckets": true
+        },
+        "VersioningConfiguration": {
+          "Status": "Enabled"
+        },
+        "LifecycleConfiguration": {
+          "Rules": [
+            {
+              "Id": "retain-noncurrent-approved-artifacts",
+              "Status": "Enabled",
+              "NoncurrentVersionTransitions": [
+                {
+                  "StorageClass": "GLACIER_IR",
+                  "TransitionInDays": 90
+                }
+              ]
+            }
+          ]
+        },
+        "Tags": [
+          {
+            "Key": "project",
+            "Value": "cloud-glider"
+          },
+          {
+            "Key": "environment",
+            "Value": {
+              "Ref": "Environment"
+            }
+          },
+          {
+            "Key": "owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "purpose",
+            "Value": "immutable-approved-artifacts"
+          }
+        ]
+      }
+    },
+    "AuditArchiveBucket": {
+      "Type": "AWS::S3::Bucket",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "BucketName": {
+          "Fn::Sub": "cloud-glider-${Environment}-${AWS::AccountId}-${AWS::Region}-audit"
+        },
+        "BucketEncryption": {
+          "ServerSideEncryptionConfiguration": [
+            {
+              "ServerSideEncryptionByDefault": {
+                "SSEAlgorithm": "AES256"
+              }
+            }
+          ]
+        },
+        "OwnershipControls": {
+          "Rules": [
+            {
+              "ObjectOwnership": "BucketOwnerPreferred"
+            }
+          ]
+        },
+        "PublicAccessBlockConfiguration": {
+          "BlockPublicAcls": true,
+          "BlockPublicPolicy": true,
+          "IgnorePublicAcls": true,
+          "RestrictPublicBuckets": true
+        },
+        "VersioningConfiguration": {
+          "Status": "Enabled"
+        },
+        "Tags": [
+          {
+            "Key": "project",
+            "Value": "cloud-glider"
+          },
+          {
+            "Key": "environment",
+            "Value": {
+              "Ref": "Environment"
+            }
+          },
+          {
+            "Key": "owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "purpose",
+            "Value": "canonical-audit-archive"
+          }
+        ]
+      }
+    },
+    "InfrastructureAuditLogGroup": {
+      "Type": "AWS::Logs::LogGroup",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "LogGroupName": {
+          "Fn::Sub": "/cloud-glider/${Environment}/audit/infrastructure"
+        },
+        "RetentionInDays": {
+          "Ref": "AuditLogRetentionDays"
+        },
+        "Tags": [
+          {
+            "Key": "project",
+            "Value": "cloud-glider"
+          },
+          {
+            "Key": "environment",
+            "Value": {
+              "Ref": "Environment"
+            }
+          },
+          {
+            "Key": "owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "purpose",
+            "Value": "infrastructure-audit"
+          }
+        ]
+      }
+    },
+    "IamAccountAuditLogGroup": {
+      "Type": "AWS::Logs::LogGroup",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "LogGroupName": {
+          "Fn::Sub": "/cloud-glider/${Environment}/audit/iam-account"
+        },
+        "RetentionInDays": {
+          "Ref": "AuditLogRetentionDays"
+        },
+        "Tags": [
+          {
+            "Key": "project",
+            "Value": "cloud-glider"
+          },
+          {
+            "Key": "environment",
+            "Value": {
+              "Ref": "Environment"
+            }
+          },
+          {
+            "Key": "owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "purpose",
+            "Value": "iam-account-audit"
+          }
+        ]
+      }
+    },
+    "NetworkAuditLogGroup": {
+      "Type": "AWS::Logs::LogGroup",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "LogGroupName": {
+          "Fn::Sub": "/cloud-glider/${Environment}/audit/network"
+        },
+        "RetentionInDays": {
+          "Ref": "AuditLogRetentionDays"
+        },
+        "Tags": [
+          {
+            "Key": "project",
+            "Value": "cloud-glider"
+          },
+          {
+            "Key": "environment",
+            "Value": {
+              "Ref": "Environment"
+            }
+          },
+          {
+            "Key": "owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "purpose",
+            "Value": "network-audit"
+          }
+        ]
+      }
+    },
+    "PropagationAuditLogGroup": {
+      "Type": "AWS::Logs::LogGroup",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "LogGroupName": {
+          "Fn::Sub": "/cloud-glider/${Environment}/audit/propagation"
+        },
+        "RetentionInDays": {
+          "Ref": "AuditLogRetentionDays"
+        },
+        "Tags": [
+          {
+            "Key": "project",
+            "Value": "cloud-glider"
+          },
+          {
+            "Key": "environment",
+            "Value": {
+              "Ref": "Environment"
+            }
+          },
+          {
+            "Key": "owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "purpose",
+            "Value": "propagation-audit"
+          }
+        ]
+      }
+    },
+    "AgentOperationsLogGroup": {
+      "Type": "AWS::Logs::LogGroup",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "LogGroupName": {
+          "Fn::Sub": "/cloud-glider/${Environment}/operations/agent"
+        },
+        "RetentionInDays": 90,
+        "Tags": [
+          {
+            "Key": "project",
+            "Value": "cloud-glider"
+          },
+          {
+            "Key": "environment",
+            "Value": {
+              "Ref": "Environment"
+            }
+          },
+          {
+            "Key": "owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "purpose",
+            "Value": "agent-diagnostics"
+          }
+        ]
+      }
+    },
+    "SecurityFindingsLogGroup": {
+      "Type": "AWS::Logs::LogGroup",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "LogGroupName": {
+          "Fn::Sub": "/cloud-glider/${Environment}/security/findings"
+        },
+        "RetentionInDays": {
+          "Ref": "AuditLogRetentionDays"
+        },
+        "Tags": [
+          {
+            "Key": "project",
+            "Value": "cloud-glider"
+          },
+          {
+            "Key": "environment",
+            "Value": {
+              "Ref": "Environment"
+            }
+          },
+          {
+            "Key": "owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "purpose",
+            "Value": "security-findings"
+          }
+        ]
+      }
+    },
+    "CostAlertsLogGroup": {
+      "Type": "AWS::Logs::LogGroup",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "LogGroupName": {
+          "Fn::Sub": "/cloud-glider/${Environment}/cost/alerts"
+        },
+        "RetentionInDays": {
+          "Ref": "AuditLogRetentionDays"
+        },
+        "Tags": [
+          {
+            "Key": "project",
+            "Value": "cloud-glider"
+          },
+          {
+            "Key": "environment",
+            "Value": {
+              "Ref": "Environment"
+            }
+          },
+          {
+            "Key": "owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "purpose",
+            "Value": "cost-alerts"
+          }
+        ]
+      }
+    },
+    "GenerationServiceRole": {
+      "Type": "AWS::IAM::Role",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "RoleName": "cloud-glider-sandbox-generation-cfn",
+        "Path": "/",
+        "Description": "CloudFormation service role restricted to the generation template.",
+        "MaxSessionDuration": 3600,
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "cloudformation.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "Tags": [
+          {
+            "Key": "owner",
+            "Value": "saraislet"
+          },
+          {
+            "Key": "project",
+            "Value": "cloud-glider"
+          },
+          {
+            "Key": "environment",
+            "Value": "sandbox"
+          },
+          {
+            "Key": "purpose",
+            "Value": "generation-cloudformation-service-role"
+          }
+        ],
+        "Policies": [
+          {
+            "PolicyName": "generation-template-resources",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Action": "ec2:RunInstances",
+                  "Resource": [
+                    "arn:aws:ec2:us-west-2::image/ami-08dd4258d4d19fe06",
+                    "arn:aws:ec2:us-west-2:123456789012:subnet/subnet-0a00b98420d660d03",
+                    "arn:aws:ec2:us-west-2:123456789012:security-group/sg-0da9cdee2a98d8dc2"
+                  ],
+                  "Effect": "Allow",
+                  "Sid": "RunApprovedGenerationInputs"
+                },
+                {
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:RequestTag/environment": "sandbox",
+                      "aws:RequestTag/project": "cloud-glider",
+                      "ec2:MetadataHttpTokens": "required",
+                      "ec2:InstanceType": "t4g.micro"
+                    }
+                  },
+                  "Action": "ec2:RunInstances",
+                  "Resource": "arn:aws:ec2:us-west-2:123456789012:instance/*",
+                  "Effect": "Allow",
+                  "Sid": "RunTaggedT4gMicroResources"
+                },
+                {
+                  "Condition": {
+                    "StringEquals": {
+                      "ec2:InstanceType": "t4g.micro"
+                    }
+                  },
+                  "Action": "ec2:RunInstances",
+                  "Resource": [
+                    "arn:aws:ec2:us-west-2:123456789012:volume/*",
+                    "arn:aws:ec2:us-west-2:123456789012:network-interface/*"
+                  ],
+                  "Effect": "Allow",
+                  "Sid": "RunGenerationStorageAndInterface"
+                },
+                {
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:RequestTag/environment": "sandbox",
+                      "aws:RequestTag/project": "cloud-glider"
+                    }
+                  },
+                  "Action": "ec2:CreateTags",
+                  "Resource": [
+                    "arn:aws:ec2:us-west-2:123456789012:instance/*",
+                    "arn:aws:ec2:us-west-2:123456789012:volume/*",
+                    "arn:aws:ec2:us-west-2:123456789012:network-interface/*"
+                  ],
+                  "Effect": "Allow",
+                  "Sid": "TagGenerationResourcesAtCreation"
+                },
+                {
+                  "Condition": {
+                    "StringEquals": {
+                      "ec2:ResourceTag/environment": "sandbox",
+                      "ec2:ResourceTag/project": "cloud-glider"
+                    }
+                  },
+                  "Action": "ec2:TerminateInstances",
+                  "Resource": "arn:aws:ec2:us-west-2:123456789012:instance/*",
+                  "Effect": "Allow",
+                  "Sid": "RetireTaggedGenerationInstances"
+                },
+                {
+                  "Action": [
+                    "ec2:DescribeImages",
+                    "ec2:DescribeInstances",
+                    "ec2:DescribeInstanceStatus",
+                    "ec2:DescribeSecurityGroups",
+                    "ec2:DescribeSubnets",
+                    "ec2:DescribeVolumes"
+                  ],
+                  "Resource": "*",
+                  "Effect": "Allow",
+                  "Sid": "InspectGenerationResources"
+                },
+                {
+                  "Action": [
+                    "cloudwatch:DeleteAlarms",
+                    "cloudwatch:PutMetricAlarm"
+                  ],
+                  "Resource": "arn:aws:cloudwatch:us-west-2:123456789012:alarm:cloud-glider-sandbox-gen-*",
+                  "Effect": "Allow",
+                  "Sid": "ManageGenerationStatusAlarms"
+                },
+                {
+                  "Action": "cloudwatch:DescribeAlarms",
+                  "Resource": "*",
+                  "Effect": "Allow",
+                  "Sid": "InspectGenerationStatusAlarms"
+                },
+                {
+                  "Condition": {
+                    "StringEquals": {
+                      "iam:PassedToService": "ec2.amazonaws.com"
+                    }
+                  },
+                  "Action": "iam:PassRole",
+                  "Resource": "arn:aws:iam::123456789012:role/cloud-glider-sandbox-agent",
+                  "Effect": "Allow",
+                  "Sid": "PassOnlyAgentRoleToEc2"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "OperationalAlertsTopic": {
+      "Type": "AWS::SNS::Topic",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "TopicName": "cloud-glider-sandbox-operational-alerts",
+        "DisplayName": "Cloud Glider operational alerts",
+        "Tags": [
+          {
+            "Key": "owner",
+            "Value": "saraislet"
+          },
+          {
+            "Key": "environment",
+            "Value": "sandbox"
+          },
+          {
+            "Key": "purpose",
+            "Value": "operational-alerts"
+          },
+          {
+            "Key": "project",
+            "Value": "cloud-glider"
+          }
+        ]
+      }
+    },
+    "ComputeAuditRule": {
+      "Type": "AWS::Events::Rule",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "Name": "cloud-glider-sandbox-compute-audit",
+        "Description": "Project EC2 compute lifecycle changes into infrastructure audit.",
+        "State": "ENABLED",
+        "EventBusName": "default",
+        "EventPattern": {
+          "detail-type": [
+            "AWS API Call via CloudTrail"
+          ],
+          "source": [
+            "aws.ec2"
+          ],
+          "detail": {
+            "eventSource": [
+              "ec2.amazonaws.com"
+            ],
+            "eventName": [
+              "RunInstances",
+              "TerminateInstances",
+              "StartInstances",
+              "StopInstances",
+              "RebootInstances",
+              "ModifyInstanceAttribute",
+              "CreateTags",
+              "DeleteTags"
+            ]
+          }
+        },
+        "Targets": []
+      }
+    },
+    "IamAccountAuditRule": {
+      "Type": "AWS::Events::Rule",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "Name": "cloud-glider-sandbox-iam-account-audit",
+        "Description": "Project IAM and account control-plane changes into a dedicated log.",
+        "State": "ENABLED",
+        "EventBusName": "default",
+        "EventPattern": {
+          "detail-type": [
+            "AWS API Call via CloudTrail"
+          ],
+          "source": [
+            "aws.iam",
+            "aws.organizations",
+            "aws.account",
+            "aws.sso",
+            "aws.sso-admin"
+          ]
+        },
+        "Targets": []
+      }
+    },
+    "InfrastructureServiceAuditRule": {
+      "Type": "AWS::Events::Rule",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "Name": "cloud-glider-sandbox-infrastructure-audit",
+        "Description": "Project non-network infrastructure management calls into a dedicated log.",
+        "State": "ENABLED",
+        "EventBusName": "default",
+        "EventPattern": {
+          "detail-type": [
+            "AWS API Call via CloudTrail"
+          ],
+          "source": [
+            "aws.cloudformation",
+            "aws.dynamodb",
+            "aws.s3",
+            "aws.logs",
+            "aws.cloudtrail",
+            "aws.events",
+            "aws.sns",
+            "aws.ssm"
+          ]
+        },
+        "Targets": []
+      }
+    },
+    "NetworkAuditRule": {
+      "Type": "AWS::Events::Rule",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "Name": "cloud-glider-sandbox-network-audit",
+        "Description": "Project enumerated EC2 networking changes into a dedicated log.",
+        "State": "ENABLED",
+        "EventBusName": "default",
+        "EventPattern": {
+          "detail-type": [
+            "AWS API Call via CloudTrail"
+          ],
+          "source": [
+            "aws.ec2"
+          ],
+          "detail": {
+            "eventSource": [
+              "ec2.amazonaws.com"
+            ],
+            "eventName": [
+              "CreateVpc",
+              "DeleteVpc",
+              "ModifyVpcAttribute",
+              "CreateSubnet",
+              "DeleteSubnet",
+              "ModifySubnetAttribute",
+              "CreateSecurityGroup",
+              "DeleteSecurityGroup",
+              "AuthorizeSecurityGroupIngress",
+              "RevokeSecurityGroupIngress",
+              "AuthorizeSecurityGroupEgress",
+              "RevokeSecurityGroupEgress",
+              "ModifySecurityGroupRules",
+              "CreateSecurityGroupRule",
+              "DeleteSecurityGroupRule",
+              "CreateRouteTable",
+              "DeleteRouteTable",
+              "AssociateRouteTable",
+              "DisassociateRouteTable",
+              "CreateRoute",
+              "ReplaceRoute",
+              "DeleteRoute",
+              "CreateInternetGateway",
+              "AttachInternetGateway",
+              "DetachInternetGateway",
+              "DeleteInternetGateway",
+              "CreateNatGateway",
+              "DeleteNatGateway",
+              "CreateNetworkAcl",
+              "DeleteNetworkAcl",
+              "CreateNetworkAclEntry",
+              "ReplaceNetworkAclEntry",
+              "DeleteNetworkAclEntry",
+              "CreateVpcEndpoint",
+              "ModifyVpcEndpoint",
+              "DeleteVpcEndpoints",
+              "CreateVpcPeeringConnection",
+              "AcceptVpcPeeringConnection",
+              "DeleteVpcPeeringConnection",
+              "AllocateAddress",
+              "AssociateAddress",
+              "DisassociateAddress",
+              "ReleaseAddress",
+              "CreateTransitGateway",
+              "DeleteTransitGateway"
+            ]
+          }
+        },
+        "Targets": []
+      }
+    },
+    "CloudFormationStatusAuditRule": {
+      "Type": "AWS::Events::Rule",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "Name": "cloud-glider-sandbox-stack-status-audit",
+        "Description": "Record CloudFormation stack lifecycle state changes.",
+        "State": "ENABLED",
+        "EventBusName": "default",
+        "EventPattern": {
+          "detail-type": [
+            "CloudFormation Stack Status Change"
+          ],
+          "source": [
+            "aws.cloudformation"
+          ]
+        },
+        "Targets": []
+      }
+    },
+    "ArtifactBucketPolicy": {
+      "Type": "AWS::S3::BucketPolicy",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "Bucket": {
+          "Ref": "ArtifactBucket"
+        },
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "DenyInsecureTransport",
+              "Effect": "Deny",
+              "Principal": "*",
+              "Action": "s3:*",
+              "Resource": [
+                "arn:aws:s3:::cloud-glider-sandbox-123456789012-us-west-2-artifacts",
+                "arn:aws:s3:::cloud-glider-sandbox-123456789012-us-west-2-artifacts/*"
+              ],
+              "Condition": {
+                "Bool": {
+                  "aws:SecureTransport": "false"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "AuditArchiveBucketPolicy": {
+      "Type": "AWS::S3::BucketPolicy",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "Bucket": {
+          "Ref": "AuditArchiveBucket"
+        },
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "CloudTrailAclCheck",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "cloudtrail.amazonaws.com"
+              },
+              "Action": "s3:GetBucketAcl",
+              "Resource": "arn:aws:s3:::cloud-glider-sandbox-123456789012-us-west-2-audit",
+              "Condition": {
+                "StringEquals": {
+                  "aws:SourceArn": "arn:aws:cloudtrail:us-west-2:123456789012:trail/cloud-glider-sandbox-audit"
+                }
+              }
+            },
+            {
+              "Sid": "CloudTrailWrite",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "cloudtrail.amazonaws.com"
+              },
+              "Action": "s3:PutObject",
+              "Resource": "arn:aws:s3:::cloud-glider-sandbox-123456789012-us-west-2-audit/AWSLogs/123456789012/*",
+              "Condition": {
+                "StringEquals": {
+                  "aws:SourceArn": "arn:aws:cloudtrail:us-west-2:123456789012:trail/cloud-glider-sandbox-audit",
+                  "s3:x-amz-acl": "bucket-owner-full-control"
+                }
+              }
+            },
+            {
+              "Sid": "DenyInsecureTransport",
+              "Effect": "Deny",
+              "Principal": "*",
+              "Action": "s3:*",
+              "Resource": [
+                "arn:aws:s3:::cloud-glider-sandbox-123456789012-us-west-2-audit",
+                "arn:aws:s3:::cloud-glider-sandbox-123456789012-us-west-2-audit/*"
+              ],
+              "Condition": {
+                "Bool": {
+                  "aws:SecureTransport": "false"
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}
