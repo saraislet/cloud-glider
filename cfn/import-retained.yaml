@@ -13,6 +13,7 @@ Parameters:
     Description: Owner tag value for cost and operational attribution.
     MinLength: 1
     MaxLength: 64
+    Default: saraislet
   AllowedImageId:
     Type: AWS::EC2::Image::Id
     Description: Approved AMI for generation instances in this Region.
