@@ -118,6 +118,29 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertNotIn("dynamodb:UpdateItem", statement)
         self.assertNotIn("dynamodb:DeleteItem", statement)
 
+    def test_runinstances_conditions_are_scoped_to_instance_resources(self):
+        foundation = (ROOT / "cfn" / "foundation.yaml").read_text()
+        instance = foundation.split("- Sid: RunTaggedT4gMicroResources", 1)[1].split("- Sid: RunGenerationStorageAndInterface", 1)[0]
+        auxiliary = foundation.split("- Sid: RunGenerationStorageAndInterface", 1)[1].split("- Sid: TagGenerationResourcesAtCreation", 1)[0]
+        for condition in ("ec2:InstanceType: t4g.micro", "ec2:MetadataHttpTokens: required",
+                          "aws:RequestTag/project: cloud-glider", "aws:RequestTag/environment: !Ref Environment"):
+            self.assertIn(condition, instance)
+        self.assertIn(":instance/*", instance)
+        self.assertIn("Action: ec2:RunInstances", auxiliary)
+        self.assertIn(":volume/*", auxiliary)
+        self.assertIn(":network-interface/*", auxiliary)
+        self.assertNotIn("Condition:", auxiliary)
+        self.assertNotIn("ec2:CreateNetworkInterface", auxiliary)
+        self.assertNotIn("ec2:CreateVolume", auxiliary)
+        self.assertNotIn(":instance/*", auxiliary)
+
+    def test_agent_can_verify_its_instance_resource(self):
+        foundation = (ROOT / "cfn" / "foundation.yaml").read_text()
+        statement = foundation.split("- Sid: InspectGenerationStacks", 1)[1].split("- Sid: PassOnlyGenerationServiceRole", 1)[0]
+        self.assertIn("- cloudformation:DescribeStackResource\n", statement)
+        self.assertIn("stack/cloud-glider-${Environment}-gen-*/*", statement)
+        self.assertNotIn("Resource: '*'", statement)
+
 
 if __name__ == "__main__":
     unittest.main()

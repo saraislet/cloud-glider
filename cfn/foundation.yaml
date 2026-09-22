@@ -984,12 +984,10 @@ Resources:
               - Sid: RunGenerationStorageAndInterface
                 Effect: Allow
                 Action: ec2:RunInstances
+                # InstanceType is enforced on the instance resource above, not ENIs/volumes.
                 Resource:
                   - !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:volume/*'
                   - !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:network-interface/*'
-                Condition:
-                  StringEquals:
-                    ec2:InstanceType: t4g.micro
               - Sid: TagGenerationResourcesAtCreation
                 Effect: Allow
                 Action: ec2:CreateTags
@@ -1125,6 +1123,7 @@ Resources:
                 Action:
                   - cloudformation:DescribeChangeSet
                   - cloudformation:DescribeStackEvents
+                  - cloudformation:DescribeStackResource
                   - cloudformation:DescribeStackResources
                   - cloudformation:DescribeStacks
                   - cloudformation:GetTemplate
