@@ -70,12 +70,20 @@ through generation `2`.
 - architecture: Linux `arm64`
 - approved instance type: `t4g.micro`
 - networking: public subnet, ephemeral public IPv4, and zero inbound rules
-- readiness: two healthy heartbeats, 30 seconds apart
-- readiness polling: 15 seconds
-- readiness timeout: 10 minutes after `CREATE_COMPLETE`
+- readiness: two healthy heartbeats, 5 seconds apart
+- readiness polling: 2 seconds
+- readiness timeout: 10 minutes for the successor wait, including stack creation
+- idle current-owner polling: at least 60 seconds when stopped or at the limit;
+  candidates retain the configured heartbeat cadence
+- monitoring: free EC2 basic metrics and one-minute status checks; the separate
+  per-generation status alarm remains enabled
+- state-table encryption: AWS-owned key (encrypted at rest without billed KMS usage)
 - configured billing thresholds (alerts deferred to V2): `$20` monthly budget,
   with `$10`, `$15`, and `$20` actual alerts, a `$20` forecast alert, and a `$2`
   anomaly threshold
+
+See [the reduced-cost decision](docs/decisions/0004-reduced-cost-operation.md)
+for the implemented scope, release procedure, and future fan-out cost targets.
 
 ## Validation
 
@@ -107,7 +115,7 @@ cfn-lint cfn/permission-boundaries.json cfn/network.yaml cfn/billing-alerts.yaml
 Runtime deployment requires independently administered role boundaries and an
 exact versioned generation template URL. Follow [the guardrail rollout](iam/permission-guardrails.md)
 before deployment. Organization policies are local review candidates and are not
-attached automatically. See [decision 0003](docs/decisions/0003-permission-guardrails.md).
+attached automatically. See [decision 0004](docs/decisions/0003-permission-guardrails.md).
 
 ## Deployment order
 

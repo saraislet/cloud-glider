@@ -104,8 +104,8 @@ Resources:
         PointInTimeRecoveryEnabled: true
         RecoveryPeriodInDays: 35
       SSESpecification:
-        SSEEnabled: true
-        SSEType: KMS
+        # DynamoDB remains encrypted at rest with the free AWS-owned key.
+        SSEEnabled: false
       TimeToLiveSpecification:
         AttributeName: expires_at
         Enabled: true

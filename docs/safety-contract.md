@@ -60,8 +60,16 @@ merged or deployed, even if it makes a happy-path propagation test pass.
 - An eligible heartbeat must match the expected generation ID, instance ID,
   stack ID, complete template identity, bootstrap version, and observed
   propagation state.
-- Readiness is polled every 15 seconds for at most 10 minutes after
-  `CREATE_COMPLETE`. These values must be revisited after the first trial run.
+- Readiness is polled every 2 seconds. The 10-minute successor wait includes
+  stack creation; heartbeat acceptance begins only after `CREATE_COMPLETE`.
+  Candidates retain their configured heartbeat cadence. Only a current owner
+  blocked by operator control, hold, or the generation boundary uses a minimum
+  60-second loop interval. Every provisioning and handoff gate still checks
+  fresh control and ownership; idle polling is not permission caching.
+- EC2 basic monitoring retains free one-minute status-check metrics. The
+  separate status alarm remains corroborating telemetry, not a readiness gate.
+- The DynamoDB state table remains encrypted with an AWS-owned key. Disabling
+  its CloudFormation `SSEEnabled` option selects this key, not plaintext storage.
 - The approved generation definition is the template bucket/key, immutable S3
   VersionId, SHA-256 digest, template version, and Git commit or build ID. The
   agent executable is independently approved by bucket/key, immutable S3

@@ -122,7 +122,8 @@ Resources:
         HttpPutResponseHopLimit: 1
         HttpTokens: required
         InstanceMetadataTags: enabled
-      Monitoring: true
+      # Basic monitoring retains free one-minute EC2 status-check metrics.
+      Monitoring: false
       NetworkInterfaces:
         - AssociatePublicIpAddress: true
           DeleteOnTermination: true

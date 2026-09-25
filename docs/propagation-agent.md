@@ -47,6 +47,30 @@ CloudTrail is authoritative for AWS API changes. The service writes structured
 JSON lifecycle events to the systemd journal; the configured EC2 status alarm
 is corroborating telemetry and never a readiness gate.
 
+## Polling and request cost
+
+An ordinary cycle reads control/hold once, reads CURRENT once, and writes one
+heartbeat. The CURRENT snapshot is shared only within that cycle's initial
+heartbeat and ownership decision. Ownership is reread after lease acquisition;
+fresh control reads before provisioning, preflight, and handoff remain intact.
+
+Candidates and active owners use the configured heartbeat interval. A current
+owner blocked by disabled propagation, emergency hold, or `max_generation`
+sleeps for at least 60 seconds between cycles. Re-enabling propagation or raising
+the boundary may therefore take one idle interval plus API latency to be noticed.
+The instance remains running and heartbeats continue; this is not shutdown.
+The scheduler reuses the cycle's interval instead of issuing another control
+read just to choose a sleep duration.
+
+Successful cycle logs are emitted when the result changes, and after recovery
+from an error. Errors and lifecycle events remain logged. Heartbeat records
+continue to carry liveness evidence even when repeated cycle logs are suppressed.
+
+Basic EC2 monitoring and AWS-owned DynamoDB encryption reduce monitoring and
+KMS charges. The separate EC2 status alarm is retained. See
+[decision 0004](decisions/0004-reduced-cost-operation.md) for deployment and
+verification requirements.
+
 ## Stop and incident response
 
 For a normal stop, set `propagation_enabled=false`. A generation already
