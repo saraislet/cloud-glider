@@ -76,3 +76,13 @@ The baseline uses 365-day CloudWatch retention and retains log-group resources
 when the stack is deleted or replaced. The canonical S3 archive is retained
 until an operator follows a separately reviewed disposal procedure. Retained
 resources continue to incur charges and must be included in cost review.
+
+## Permission guardrail administration
+
+Boundary versions, role-boundary attachments, SCP/RCP updates and policy
+attachments require independently retained administrative audit evidence. The
+workload account trail cannot prove Organizations changes made elsewhere. The
+steady-state protected-resource SCP also blocks normal foundation changes to
+retention and trail selectors. Use the reviewed maintenance and recovery path
+in [the guardrail runbook](../iam/permission-guardrails.md); preserve canonical
+audit delivery while testing RCP service-source restrictions.

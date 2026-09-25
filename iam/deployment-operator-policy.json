@@ -1,0 +1,59 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "PrepareReviewedFoundationOrBootstrapChange",
+      "Effect": "Allow",
+      "Action": [
+        "cloudformation:CreateChangeSet"
+      ],
+      "Resource": [
+        "arn:aws:cloudformation:us-west-2:123456789012:stack/cloud-glider-sandbox/*",
+        "arn:aws:cloudformation:us-west-2:123456789012:stack/cloud-glider-sandbox-foundation/*",
+        "arn:aws:cloudformation:us-west-2:123456789012:stack/cloud-glider-sandbox-bootstrap/*"
+      ],
+      "Condition": {
+        "ArnEquals": {
+          "cloudformation:RoleARN": "arn:aws:iam::123456789012:role/cloud-glider-sandbox-foundation-cfn"
+        }
+      }
+    },
+    {
+      "Sid": "ReviewOrExecuteApprovedStacks",
+      "Effect": "Allow",
+      "Action": [
+        "cloudformation:DescribeStacks",
+        "cloudformation:DescribeStackEvents",
+        "cloudformation:DescribeStackResource",
+        "cloudformation:DescribeStackResources",
+        "cloudformation:DescribeChangeSet",
+        "cloudformation:GetTemplate",
+        "cloudformation:ListStackResources",
+        "cloudformation:ExecuteChangeSet",
+        "cloudformation:DeleteChangeSet"
+      ],
+      "Resource": [
+        "arn:aws:cloudformation:us-west-2:123456789012:stack/cloud-glider-sandbox/*",
+        "arn:aws:cloudformation:us-west-2:123456789012:stack/cloud-glider-sandbox-foundation/*",
+        "arn:aws:cloudformation:us-west-2:123456789012:stack/cloud-glider-sandbox-bootstrap/*"
+      ]
+    },
+    {
+      "Sid": "ValidateTemplates",
+      "Effect": "Allow",
+      "Action": "cloudformation:ValidateTemplate",
+      "Resource": "*"
+    },
+    {
+      "Sid": "PassOnlyFoundationServiceRole",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "arn:aws:iam::123456789012:role/cloud-glider-sandbox-foundation-cfn",
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": "cloudformation.amazonaws.com"
+        }
+      }
+    }
+  ]
+}

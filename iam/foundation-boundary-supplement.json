@@ -1,0 +1,45 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "iam:PutRolePermissionsBoundary",
+      "Resource": "arn:aws:iam::123456789012:role/cloud-glider-sandbox-agent",
+      "Condition": {
+        "ArnEquals": {
+          "iam:PermissionsBoundary": "arn:aws:iam::123456789012:policy/cloud-glider-sandbox-agent-boundary"
+        }
+      }
+    },
+    {
+      "Effect": "Allow",
+      "Action": "iam:PutRolePermissionsBoundary",
+      "Resource": "arn:aws:iam::123456789012:role/cloud-glider-sandbox-generation-cfn",
+      "Condition": {
+        "ArnEquals": {
+          "iam:PermissionsBoundary": "arn:aws:iam::123456789012:policy/cloud-glider-sandbox-generation-boundary"
+        }
+      }
+    },
+    {
+      "Effect": "Allow",
+      "Action": "iam:PutRolePermissionsBoundary",
+      "Resource": "arn:aws:iam::123456789012:role/cloud-glider-sandbox-emergency-hold",
+      "Condition": {
+        "ArnEquals": {
+          "iam:PermissionsBoundary": "arn:aws:iam::123456789012:policy/cloud-glider-sandbox-hold-boundary"
+        }
+      }
+    },
+    {
+      "Effect": "Allow",
+      "Action": "iam:PutRolePermissionsBoundary",
+      "Resource": "arn:aws:iam::123456789012:role/cloud-glider-sandbox-bootstrap-BootstrapRole-*",
+      "Condition": {
+        "ArnEquals": {
+          "iam:PermissionsBoundary": "arn:aws:iam::123456789012:policy/cloud-glider-sandbox-bootstrap-boundary"
+        }
+      }
+    }
+  ]
+}

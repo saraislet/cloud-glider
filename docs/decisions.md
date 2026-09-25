@@ -38,8 +38,11 @@
 
 - Recovery process for an accidentally restrictive SCP.
 
-The SCP is intentionally not rendered yet. A placeholder SCP containing guessed
-account or administrator ARNs would be a lockout risk.
+Parameterized SCP/RCP candidates now live under `iam/organization/`. Render
+private candidates only with independently verified values using
+`scripts/render_guardrails.py`; source placeholders must not be attached. See
+[decision 0003](decisions/0003-permission-guardrails.md) and the
+[guardrail runbook](../iam/permission-guardrails.md) for required recovery tests.
 
 ## Revisit after the first trial
 

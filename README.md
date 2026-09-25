@@ -55,9 +55,8 @@ through generation `2`.
   cross-account limitations.
 - `iam/runtime-role-assumptions.md` records why public IPv4 assignment adds no
   runtime allow permission and which direct network mutations remain denied.
-- `iam/scp-requirements.md` records the future account SCP requirements that
-  cannot be safely rendered until the account and administrative principals
-  are known.
+- `iam/scp-requirements.md` records the account SCP requirements and links to
+  the private policy renderer and reviewed rollout procedure.
 
 ## Safe starting values
 
@@ -100,8 +99,15 @@ generation stack and `scripts/initialize_control.py`.
 When `cfn-lint` is installed, also run:
 
 ```sh
-cfn-lint cfn/network.yaml cfn/billing-alerts.yaml cfn/foundation.yaml cfn/generation.yaml cfn/bootstrap.yaml
+cfn-lint cfn/permission-boundaries.json cfn/network.yaml cfn/billing-alerts.yaml cfn/foundation.yaml cfn/generation.yaml cfn/bootstrap.yaml
 ```
+
+## Permission guardrails
+
+Runtime deployment requires independently administered role boundaries and an
+exact versioned generation template URL. Follow [the guardrail rollout](iam/permission-guardrails.md)
+before deployment. Organization policies are local review candidates and are not
+attached automatically. See [decision 0003](docs/decisions/0003-permission-guardrails.md).
 
 ## Deployment order
 
@@ -116,7 +122,9 @@ It separates the reviewed import of surviving resources from normal deployment.
 1. Review the deferred values in `docs/decisions.md`.
 2. Validate and deploy `cfn/network.yaml` from an administrative deployment
    principal. Record its subnet and security-group outputs.
-3. Deploy `cfn/foundation.yaml` using those outputs from an administrative deployment
+3. Deploy the separate boundary stack and migrate deployment permissions using
+   [the guardrail runbook](iam/permission-guardrails.md), then deploy
+   `cfn/foundation.yaml` using those outputs from an administrative deployment
    principal, not from a generation instance.
 4. Upload immutable generation template and agent artifacts to the versioned
    artifact bucket.

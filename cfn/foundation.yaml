@@ -4,6 +4,12 @@ Description: >-
   least-privilege generation roles. Deploy only from an administrative principal.
 
 Parameters:
+  ApprovedGenerationTemplateUrl:
+    Type: String
+    Default: ''
+    MaxLength: 512
+    AllowedPattern: '^$|^https://[a-z0-9.-]+\.s3\.us-west-2\.amazonaws\.com/generation/[^?# ]+\?versionId=(?!null$)[A-Za-z0-9%._~-]+$'
+    Description: Exact versioned generation template URL approved by security administration. Empty disables generation creation, including bootstrap.
   EmergencyHoldReservedConcurrency:
     Type: Number
     Default: 2
@@ -167,6 +173,7 @@ Resources:
             Condition:
               Bool:
                 aws:SecureTransport: false
+                aws:PrincipalIsAWSService: false
 
   AuditArchiveBucket:
     Type: AWS::S3::Bucket
@@ -234,6 +241,7 @@ Resources:
             Condition:
               Bool:
                 aws:SecureTransport: false
+                aws:PrincipalIsAWSService: false
 
   AccountAuditTrail:
     Type: AWS::CloudTrail::Trail
@@ -397,6 +405,7 @@ Resources:
   EmergencyHoldFunctionRole:
     Type: AWS::IAM::Role
     Properties:
+      PermissionsBoundary: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/cloud-glider-${Environment}-hold-boundary'
       RoleName: !Sub 'cloud-glider-${Environment}-emergency-hold'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
@@ -960,6 +969,7 @@ Resources:
   GenerationServiceRole:
     Type: AWS::IAM::Role
     Properties:
+      PermissionsBoundary: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/cloud-glider-${Environment}-generation-boundary'
       Path: /
       MaxSessionDuration: 3600
       RoleName: !Sub 'cloud-glider-${Environment}-generation-cfn'
@@ -1009,6 +1019,7 @@ Resources:
                   - !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:network-interface/*'
                 Condition:
                   StringEquals:
+                    ec2:CreateAction: RunInstances
                     aws:RequestTag/project: cloud-glider
                     aws:RequestTag/environment: !Ref Environment
               - Sid: RetireTaggedGenerationInstances
@@ -1059,6 +1070,7 @@ Resources:
   AgentRole:
     Type: AWS::IAM::Role
     Properties:
+      PermissionsBoundary: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/cloud-glider-${Environment}-agent-boundary'
       RoleName: !Sub 'cloud-glider-${Environment}-agent'
       Description: Orchestration role for a Cloud Glider generation instance.
       AssumeRolePolicyDocument:
@@ -1102,6 +1114,7 @@ Resources:
                   ForAllValues:StringEquals:
                     dynamodb:LeadingKeys:
                       - HOLD
+                      - CONTROL
               - Sid: ReleaseOnlyPropagationLease
                 Effect: Allow
                 Action: dynamodb:DeleteItem
@@ -1115,10 +1128,17 @@ Resources:
                 Action:
                   - cloudformation:CreateChangeSet
                   - cloudformation:CreateStack
-                  - cloudformation:DeleteStack
                 Resource:
                   - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/cloud-glider-${Environment}-gen-*/*'
                   - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:changeSet/cloud-glider-${Environment}-gen-*/*'
+                Condition:
+                  StringEquals:
+                    cloudformation:RoleARN: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider-${Environment}-generation-cfn'
+                    cloudformation:TemplateUrl: !Ref ApprovedGenerationTemplateUrl
+              - Sid: RetireGenerationStacksWithApprovedRole
+                Effect: Allow
+                Action: cloudformation:DeleteStack
+                Resource: !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/cloud-glider-${Environment}-gen-*/*'
                 Condition:
                   StringEquals:
                     cloudformation:RoleARN: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider-${Environment}-generation-cfn'
@@ -1161,7 +1181,10 @@ Resources:
                 Action:
                   - s3:GetBucketLocation
                   - s3:GetBucketVersioning
-                  - s3:ListBucket
+                Resource: !GetAtt ArtifactBucket.Arn
+              - Sid: ListGenerationArtifacts
+                Effect: Allow
+                Action: s3:ListBucket
                 Resource: !GetAtt ArtifactBucket.Arn
                 Condition:
                   StringLike:
@@ -1172,8 +1195,8 @@ Resources:
                   - logs:CreateLogStream
                   - logs:PutLogEvents
                 Resource:
-                  - !Sub '${AgentOperationsLogGroup.Arn}:log-stream:*'
-                  - !Sub '${PropagationAuditLogGroup.Arn}:log-stream:*'
+                  - !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/cloud-glider/${Environment}/operations/agent:log-stream:*'
+                  - !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/cloud-glider/${Environment}/audit/propagation:log-stream:*'
               - Sid: PublishCloudGliderMetrics
                 Effect: Allow
                 Action: cloudwatch:PutMetricData

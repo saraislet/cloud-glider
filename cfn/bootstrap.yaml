@@ -1,6 +1,12 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: One-shot operator bootstrap of generation 000000, independent of propagation control.
 Parameters:
+  ApprovedGenerationTemplateUrl:
+    Type: String
+    Default: ''
+    MaxLength: 512
+    AllowedPattern: '^$|^https://[a-z0-9.-]+\.s3\.us-west-2\.amazonaws\.com/generation/[^?# ]+\?versionId=(?!null$)[A-Za-z0-9%._~-]+$'
+    Description: Exact versioned generation template URL approved by security administration. Empty disables generation creation, including bootstrap.
   Environment:
     Type: String
     Default: sandbox
@@ -44,6 +50,7 @@ Resources:
   BootstrapRole:
     Type: AWS::IAM::Role
     Properties:
+      PermissionsBoundary: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/cloud-glider-${Environment}-bootstrap-boundary'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -83,6 +90,7 @@ Resources:
                 Resource: !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/cloud-glider-${Environment}-gen-000000/*'
                 Condition:
                   StringEquals:
+                    cloudformation:TemplateUrl: !Ref ApprovedGenerationTemplateUrl
                     cloudformation:RoleARN: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider-${Environment}-generation-cfn'
               - Sid: PassOnlyGenerationServiceRole
                 Effect: Allow

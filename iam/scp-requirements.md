@@ -1,7 +1,11 @@
 # Cloud Glider SCP requirements
 
-The account SCP will be generated only after the account, organization, Region,
-deployment-principal, and break-glass ARNs are supplied and verified.
+Four scoped SCP candidates and an RCP candidate are provided under
+`iam/organization/`. The private renderer requires independently verified account,
+organization, deployment, security-administration and recovery role inputs. It
+does not contact AWS or attach policies. The runtime Region is fixed to us-west-2.
+See [the guardrail runbook](permission-guardrails.md) for boundaries, migration,
+attachment sequencing, limitations and validation.
 
 It should provide defense in depth for the Cloud Glider account by:
 

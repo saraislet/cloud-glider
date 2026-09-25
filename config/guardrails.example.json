@@ -1,0 +1,8 @@
+{
+  "account_id": "REQUIRED",
+  "organization_id": "REQUIRED",
+  "environment": "sandbox",
+  "boundary_admin_role_arn": "REQUIRED",
+  "recovery_role_arn": "REQUIRED",
+  "foundation_role_arn": "REQUIRED"
+}

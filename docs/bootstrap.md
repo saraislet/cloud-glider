@@ -1,5 +1,11 @@
 # Operator bootstrap runbook
 
+The bootstrap role now requires its independently administered boundary and the
+exact `ApprovedGenerationTemplateUrl`. An empty URL blocks bootstrap even when a
+request is present. Complete the [guardrail rollout](../iam/permission-guardrails.md)
+and coordinate the URL with the foundation and boundary stacks before requesting
+bootstrap. HOLD remains the stop mechanism during migration.
+
 The bootstrap request and propagation permission are independent:
 
 | Record | Meaning |

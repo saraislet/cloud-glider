@@ -7,6 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 IGNORED_DIRECTORIES = {
     ".git",
+    ".artifacts",
     ".mypy_cache",
     ".pytest_cache",
     ".ruff_cache",
@@ -75,6 +76,12 @@ def main() -> int:
     gateway = gateway_path.read_text()
     builder = builder_path.read_text()
 
+    for marker in (
+        "PermissionsBoundary:", "ApprovedGenerationTemplateUrl",
+        "cloudformation:TemplateUrl", "ec2:CreateAction: RunInstances",
+        "RetireGenerationStacksWithApprovedRole",
+    ):
+        require(foundation, marker, str(foundation_path))
     for marker in ("DeletionPolicy: Retain", "UpdateReplacePolicy: Retain", "PointInTimeRecoveryEnabled: true"):
         require(foundation, marker, str(foundation_path))
     for log_name in ("audit/infrastructure", "audit/iam-account", "audit/network", "audit/propagation"):
