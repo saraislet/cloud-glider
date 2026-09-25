@@ -1,0 +1,145 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ProtectBoundaryPolicyVersions",
+      "Effect": "Deny",
+      "Action": [
+        "iam:CreatePolicy",
+        "iam:CreatePolicyVersion",
+        "iam:SetDefaultPolicyVersion",
+        "iam:DeletePolicyVersion",
+        "iam:DeletePolicy"
+      ],
+      "Resource": "arn:aws:iam::${AccountId}:policy/cloud-glider-${Environment}-*-boundary",
+      "Condition": {
+        "ArnNotEquals": {
+          "aws:PrincipalArn": [
+            "${BoundaryAdminRoleArn}",
+            "${RecoveryRoleArn}"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "PreventBoundaryRemoval",
+      "Effect": "Deny",
+      "Action": "iam:DeleteRolePermissionsBoundary",
+      "Resource": [
+        "arn:aws:iam::${AccountId}:role/cloud-glider-${Environment}-agent",
+        "arn:aws:iam::${AccountId}:role/cloud-glider-${Environment}-generation-cfn",
+        "arn:aws:iam::${AccountId}:role/cloud-glider-${Environment}-emergency-hold",
+        "arn:aws:iam::${AccountId}:role/cloud-glider-${Environment}-bootstrap-BootstrapRole-*",
+        "${FoundationRoleArn}"
+      ],
+      "Condition": {
+        "ArnNotEquals": {
+          "aws:PrincipalArn": [
+            "${BoundaryAdminRoleArn}",
+            "${RecoveryRoleArn}"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "RequireAgentBoundary",
+      "Effect": "Deny",
+      "Action": [
+        "iam:CreateRole",
+        "iam:PutRolePermissionsBoundary"
+      ],
+      "Resource": "arn:aws:iam::${AccountId}:role/cloud-glider-${Environment}-agent",
+      "Condition": {
+        "ArnNotEquals": {
+          "aws:PrincipalArn": [
+            "${BoundaryAdminRoleArn}",
+            "${RecoveryRoleArn}"
+          ]
+        },
+        "ArnNotEqualsIfExists": {
+          "iam:PermissionsBoundary": "arn:aws:iam::${AccountId}:policy/cloud-glider-${Environment}-agent-boundary"
+        }
+      }
+    },
+    {
+      "Sid": "RequireGenerationBoundary",
+      "Effect": "Deny",
+      "Action": [
+        "iam:CreateRole",
+        "iam:PutRolePermissionsBoundary"
+      ],
+      "Resource": "arn:aws:iam::${AccountId}:role/cloud-glider-${Environment}-generation-cfn",
+      "Condition": {
+        "ArnNotEquals": {
+          "aws:PrincipalArn": [
+            "${BoundaryAdminRoleArn}",
+            "${RecoveryRoleArn}"
+          ]
+        },
+        "ArnNotEqualsIfExists": {
+          "iam:PermissionsBoundary": "arn:aws:iam::${AccountId}:policy/cloud-glider-${Environment}-generation-boundary"
+        }
+      }
+    },
+    {
+      "Sid": "RequireHoldBoundary",
+      "Effect": "Deny",
+      "Action": [
+        "iam:CreateRole",
+        "iam:PutRolePermissionsBoundary"
+      ],
+      "Resource": "arn:aws:iam::${AccountId}:role/cloud-glider-${Environment}-emergency-hold",
+      "Condition": {
+        "ArnNotEquals": {
+          "aws:PrincipalArn": [
+            "${BoundaryAdminRoleArn}",
+            "${RecoveryRoleArn}"
+          ]
+        },
+        "ArnNotEqualsIfExists": {
+          "iam:PermissionsBoundary": "arn:aws:iam::${AccountId}:policy/cloud-glider-${Environment}-hold-boundary"
+        }
+      }
+    },
+    {
+      "Sid": "RequireBootstrapBoundary",
+      "Effect": "Deny",
+      "Action": [
+        "iam:CreateRole",
+        "iam:PutRolePermissionsBoundary"
+      ],
+      "Resource": "arn:aws:iam::${AccountId}:role/cloud-glider-${Environment}-bootstrap-BootstrapRole-*",
+      "Condition": {
+        "ArnNotEquals": {
+          "aws:PrincipalArn": [
+            "${BoundaryAdminRoleArn}",
+            "${RecoveryRoleArn}"
+          ]
+        },
+        "ArnNotEqualsIfExists": {
+          "iam:PermissionsBoundary": "arn:aws:iam::${AccountId}:policy/cloud-glider-${Environment}-bootstrap-boundary"
+        }
+      }
+    },
+    {
+      "Sid": "RequireFoundationBoundary",
+      "Effect": "Deny",
+      "Action": [
+        "iam:CreateRole",
+        "iam:PutRolePermissionsBoundary"
+      ],
+      "Resource": "${FoundationRoleArn}",
+      "Condition": {
+        "ArnNotEquals": {
+          "aws:PrincipalArn": [
+            "${BoundaryAdminRoleArn}",
+            "${RecoveryRoleArn}"
+          ]
+        },
+        "ArnNotEqualsIfExists": {
+          "iam:PermissionsBoundary": "arn:aws:iam::${AccountId}:policy/cloud-glider-${Environment}-foundation-boundary"
+        }
+      }
+    }
+  ]
+}

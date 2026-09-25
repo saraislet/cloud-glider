@@ -1,0 +1,74 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "RejectUntrustedIdentities",
+      "Effect": "Deny",
+      "Action": [
+        "s3:*",
+        "dynamodb:*",
+        "logs:*"
+      ],
+      "Resource": [
+        "arn:aws:s3:::cloud-glider-${Environment}-${AccountId}-us-west-2-artifacts",
+        "arn:aws:s3:::cloud-glider-${Environment}-${AccountId}-us-west-2-audit",
+        "arn:aws:s3:::cloud-glider-${Environment}-${AccountId}-us-west-2-artifacts/*",
+        "arn:aws:s3:::cloud-glider-${Environment}-${AccountId}-us-west-2-audit/*",
+        "arn:aws:dynamodb:us-west-2:${AccountId}:table/cloud-glider-${Environment}-state",
+        "arn:aws:dynamodb:us-west-2:${AccountId}:table/cloud-glider-${Environment}-state/stream/*",
+        "arn:aws:logs:us-west-2:${AccountId}:log-group:/cloud-glider/${Environment}/*",
+        "arn:aws:logs:us-west-2:${AccountId}:log-group:/aws/lambda/cloud-glider-${Environment}-*"
+      ],
+      "Condition": {
+        "StringNotEqualsIfExists": {
+          "aws:PrincipalOrgID": "${OrganizationId}"
+        },
+        "Bool": {
+          "aws:PrincipalIsAWSService": "false"
+        }
+      },
+      "Principal": "*"
+    },
+    {
+      "Sid": "RequireS3TLS",
+      "Effect": "Deny",
+      "Action": "s3:*",
+      "Resource": [
+        "arn:aws:s3:::cloud-glider-${Environment}-${AccountId}-us-west-2-artifacts",
+        "arn:aws:s3:::cloud-glider-${Environment}-${AccountId}-us-west-2-audit",
+        "arn:aws:s3:::cloud-glider-${Environment}-${AccountId}-us-west-2-artifacts/*",
+        "arn:aws:s3:::cloud-glider-${Environment}-${AccountId}-us-west-2-audit/*"
+      ],
+      "Condition": {
+        "Bool": {
+          "aws:SecureTransport": "false",
+          "aws:PrincipalIsAWSService": "false"
+        }
+      },
+      "Principal": "*"
+    },
+    {
+      "Sid": "RejectUntrustedS3ServiceSources",
+      "Effect": "Deny",
+      "Action": "s3:*",
+      "Resource": [
+        "arn:aws:s3:::cloud-glider-${Environment}-${AccountId}-us-west-2-artifacts",
+        "arn:aws:s3:::cloud-glider-${Environment}-${AccountId}-us-west-2-audit",
+        "arn:aws:s3:::cloud-glider-${Environment}-${AccountId}-us-west-2-artifacts/*",
+        "arn:aws:s3:::cloud-glider-${Environment}-${AccountId}-us-west-2-audit/*"
+      ],
+      "Condition": {
+        "StringNotEqualsIfExists": {
+          "aws:SourceOrgID": "${OrganizationId}"
+        },
+        "Null": {
+          "aws:SourceAccount": "false"
+        },
+        "Bool": {
+          "aws:PrincipalIsAWSService": "true"
+        }
+      },
+      "Principal": "*"
+    }
+  ]
+}

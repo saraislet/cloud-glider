@@ -132,3 +132,13 @@ audit values.
 Any change to an invariant, IAM permission, audit category, or default safety
 value requires a security-focused review and a corresponding audit entry. The
 generation template must never use `CAPABILITY_IAM` or contain `AWS::IAM::*`.
+
+## Independent permission ceilings
+
+Runtime roles require their separately administered role-specific boundaries.
+The foundation deployer cannot edit those boundary policies or replace its own
+ceiling. CreateStack/CreateChangeSet require the exact approved versioned URL;
+retirement and preflight cleanup remain separate. Empty or inconsistent release
+approvals prevent new compute. Role boundary and organization-policy changes
+follow [the guardrail runbook](../iam/permission-guardrails.md). These controls do
+not replace the control-state, ownership, health or concurrency invariants.

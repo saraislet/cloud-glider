@@ -1,0 +1,94 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ProtectFoundationRole",
+      "Effect": "Deny",
+      "Action": [
+        "iam:CreateRole",
+        "iam:DeleteRole",
+        "iam:PutRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:AttachRolePolicy",
+        "iam:DetachRolePolicy",
+        "iam:UpdateAssumeRolePolicy",
+        "iam:UpdateRole",
+        "iam:UpdateRoleDescription",
+        "iam:TagRole",
+        "iam:UntagRole"
+      ],
+      "Resource": "${FoundationRoleArn}",
+      "Condition": {
+        "ArnNotEquals": {
+          "aws:PrincipalArn": [
+            "${BoundaryAdminRoleArn}",
+            "${RecoveryRoleArn}"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "ProtectRuntimeRoleAdministration",
+      "Effect": "Deny",
+      "Action": [
+        "iam:CreateRole",
+        "iam:DeleteRole",
+        "iam:PutRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:AttachRolePolicy",
+        "iam:DetachRolePolicy",
+        "iam:UpdateAssumeRolePolicy",
+        "iam:UpdateRole",
+        "iam:UpdateRoleDescription",
+        "iam:TagRole",
+        "iam:UntagRole"
+      ],
+      "Resource": [
+        "arn:aws:iam::${AccountId}:role/cloud-glider-${Environment}-agent",
+        "arn:aws:iam::${AccountId}:role/cloud-glider-${Environment}-generation-cfn",
+        "arn:aws:iam::${AccountId}:role/cloud-glider-${Environment}-emergency-hold",
+        "arn:aws:iam::${AccountId}:role/cloud-glider-${Environment}-bootstrap-BootstrapRole-*"
+      ],
+      "Condition": {
+        "ArnNotEquals": {
+          "aws:PrincipalArn": [
+            "${BoundaryAdminRoleArn}",
+            "${RecoveryRoleArn}",
+            "${FoundationRoleArn}"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "ProtectAdministrativeRoles",
+      "Effect": "Deny",
+      "Action": [
+        "iam:CreateRole",
+        "iam:DeleteRole",
+        "iam:PutRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:AttachRolePolicy",
+        "iam:DetachRolePolicy",
+        "iam:UpdateAssumeRolePolicy",
+        "iam:UpdateRole",
+        "iam:UpdateRoleDescription",
+        "iam:TagRole",
+        "iam:UntagRole",
+        "iam:PutRolePermissionsBoundary",
+        "iam:DeleteRolePermissionsBoundary"
+      ],
+      "Resource": [
+        "${BoundaryAdminRoleArn}",
+        "${RecoveryRoleArn}"
+      ],
+      "Condition": {
+        "ArnNotEquals": {
+          "aws:PrincipalArn": [
+            "${BoundaryAdminRoleArn}",
+            "${RecoveryRoleArn}"
+          ]
+        }
+      }
+    }
+  ]
+}

@@ -13,11 +13,14 @@ The v1 public-IPv4 design does not add an IAM allow permission.
   runtime permissions for this change; they continue to publish the versioned
   template and manage only the reviewed foundation stack.
 
-Stack-name and `cloudformation:RoleARN` IAM conditions do not restrict template
-content, instance count, or public-IP settings. V1 therefore relies on the
-immutable S3 VersionId/SHA-256/build tuple, exact parameter validation, change
-review, and negative tests. Brokered semantic enforcement remains deferred to
-v2.
+Creation now also requires the exact `ApprovedGenerationTemplateUrl` in both
+the role policy and an independently administered boundary. An empty URL prevents
+creation. Stack names and RoleARN alone do not restrict template content. The URL
+gate does not enforce instance counts, arbitrary parameter semantics, execution
+of pre-existing change sets, or current stop state. The immutable S3
+VersionId/SHA-256/build tuple, parameter validation, change review and negative
+tests remain necessary. Brokered semantic enforcement remains deferred to v2.
+See [the guardrail runbook](permission-guardrails.md).
 
 ## RunInstances authorization by resource
 
@@ -49,3 +52,13 @@ singular action, startup fails before CURRENT ownership and heartbeat writes;
 systemd restarts the agent. Apply the reviewed foundation IAM update while
 propagation remains disabled, then inspect CURRENT and heartbeats. Do not reset
 DynamoDB state or replace the running instance to fix this permission failure.
+
+## Handoff and telemetry authorization
+
+The existing handoff transaction condition-checks both CONTROL/GLOBAL and
+HOLD/ACTIVE. Authorize ConditionCheckItem for both partition keys while keeping
+operator-state writes excluded. Agent log writes use canonical log-stream ARNs;
+do not append `:log-stream:*` to a CloudFormation LogGroup.Arn already ending in
+`:*`. Only ListBucket carries the s3:prefix condition; GetBucketLocation and
+GetBucketVersioning must remain separate. Generation tagging is permitted only
+with ec2:CreateAction=RunInstances, never as a standalone retagging request.

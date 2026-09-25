@@ -1,0 +1,121 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ProtectAuditTrail",
+      "Effect": "Deny",
+      "Action": [
+        "cloudtrail:StopLogging",
+        "cloudtrail:DeleteTrail",
+        "cloudtrail:UpdateTrail",
+        "cloudtrail:PutEventSelectors"
+      ],
+      "Resource": "arn:aws:cloudtrail:us-west-2:${AccountId}:trail/cloud-glider-${Environment}-audit",
+      "Condition": {
+        "ArnNotEquals": {
+          "aws:PrincipalArn": "${RecoveryRoleArn}"
+        }
+      }
+    },
+    {
+      "Sid": "ProtectStateDurability",
+      "Effect": "Deny",
+      "Action": [
+        "dynamodb:DeleteTable",
+        "dynamodb:UpdateTable",
+        "dynamodb:UpdateContinuousBackups",
+        "dynamodb:UpdateTimeToLive",
+        "dynamodb:PutResourcePolicy",
+        "dynamodb:DeleteResourcePolicy"
+      ],
+      "Resource": "arn:aws:dynamodb:us-west-2:${AccountId}:table/cloud-glider-${Environment}-state",
+      "Condition": {
+        "ArnNotEquals": {
+          "aws:PrincipalArn": "${RecoveryRoleArn}"
+        }
+      }
+    },
+    {
+      "Sid": "ProtectBucketControls",
+      "Effect": "Deny",
+      "Action": [
+        "s3:DeleteBucket",
+        "s3:PutBucketPolicy",
+        "s3:DeleteBucketPolicy",
+        "s3:PutBucketVersioning",
+        "s3:PutLifecycleConfiguration",
+        "s3:PutBucketPublicAccessBlock",
+        "s3:PutBucketOwnershipControls",
+        "s3:PutEncryptionConfiguration"
+      ],
+      "Resource": [
+        "arn:aws:s3:::cloud-glider-${Environment}-${AccountId}-us-west-2-artifacts",
+        "arn:aws:s3:::cloud-glider-${Environment}-${AccountId}-us-west-2-audit"
+      ],
+      "Condition": {
+        "ArnNotEquals": {
+          "aws:PrincipalArn": "${RecoveryRoleArn}"
+        }
+      }
+    },
+    {
+      "Sid": "ProtectStoredVersions",
+      "Effect": "Deny",
+      "Action": [
+        "s3:DeleteObject",
+        "s3:DeleteObjectVersion"
+      ],
+      "Resource": [
+        "arn:aws:s3:::cloud-glider-${Environment}-${AccountId}-us-west-2-artifacts/*",
+        "arn:aws:s3:::cloud-glider-${Environment}-${AccountId}-us-west-2-audit/*"
+      ],
+      "Condition": {
+        "ArnNotEquals": {
+          "aws:PrincipalArn": "${RecoveryRoleArn}"
+        }
+      }
+    },
+    {
+      "Sid": "ProtectAuditRetention",
+      "Effect": "Deny",
+      "Action": [
+        "logs:DeleteLogGroup",
+        "logs:DeleteLogStream",
+        "logs:PutRetentionPolicy",
+        "logs:DeleteRetentionPolicy"
+      ],
+      "Resource": [
+        "arn:aws:logs:us-west-2:${AccountId}:log-group:/cloud-glider/${Environment}/*",
+        "arn:aws:logs:us-west-2:${AccountId}:log-group:/aws/lambda/cloud-glider-${Environment}-*"
+      ],
+      "Condition": {
+        "ArnNotEquals": {
+          "aws:PrincipalArn": "${RecoveryRoleArn}"
+        }
+      }
+    },
+    {
+      "Sid": "ProtectHoldFunction",
+      "Effect": "Deny",
+      "Action": [
+        "lambda:DeleteFunction",
+        "lambda:UpdateFunctionCode",
+        "lambda:UpdateFunctionConfiguration",
+        "lambda:PutFunctionConcurrency",
+        "lambda:DeleteFunctionConcurrency",
+        "lambda:AddPermission",
+        "lambda:CreateFunctionUrlConfig",
+        "lambda:UpdateFunctionUrlConfig"
+      ],
+      "Resource": "arn:aws:lambda:us-west-2:${AccountId}:function:cloud-glider-${Environment}-emergency-hold",
+      "Condition": {
+        "ArnNotEquals": {
+          "aws:PrincipalArn": [
+            "${RecoveryRoleArn}",
+            "${FoundationRoleArn}"
+          ]
+        }
+      }
+    }
+  ]
+}
