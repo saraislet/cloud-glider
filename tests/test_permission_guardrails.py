@@ -181,6 +181,20 @@ class GuardrailTests(unittest.TestCase):
         for action, resource in [("iam:CreatePolicyVersion", policy_arn), ("iam:DeleteRolePermissionsBoundary", FOUNDATION), ("iam:PutRolePolicy", FOUNDATION), ("iam:UpdateAssumeRolePolicy", ADMIN), ("dynamodb:UpdateItem", TABLE), ("cloudformation:UpdateStack", STACK)]:
             self.assertNotEqual(self.boundary("Foundation", action, resource), "allowed")
 
+    def test_foundation_profile_precreation_lookup_and_rollback(self):
+        profile = "arn:aws:iam::" + ACCOUNT + ":instance-profile/"
+        actions = ["iam:GetInstanceProfile", "iam:RemoveRoleFromInstanceProfile", "iam:DeleteInstanceProfile"]
+        for action in actions:
+            for path in [PREFIX + "-agent", "cloud-glider/" + PREFIX + "-agent"]:
+                with self.subTest(action=action, path=path):
+                    self.assertEqual(self.boundary("Foundation", action, profile + path), "allowed")
+            for path in [PREFIX + "-unrelated", "other/" + PREFIX + "-agent", "cloud-glider/" + PREFIX + "-unrelated"]:
+                with self.subTest(action=action, path=path):
+                    self.assertNotEqual(self.boundary("Foundation", action, profile + path), "allowed")
+        for action in ["iam:CreateInstanceProfile", "iam:AddRoleToInstanceProfile", "iam:TagInstanceProfile", "iam:UntagInstanceProfile"]:
+            with self.subTest(action=action):
+                self.assertNotEqual(self.boundary("Foundation", action, profile + PREFIX + "-agent"), "allowed")
+
     def test_runtime_scp_blocks_escalation_and_preserves_expected_passrole(self):
         for principal in [AGENT, GENERATION, HOLD, BOOTSTRAP]:
             for action in ["iam:CreateRole", "iam:PutRolePolicy", "organizations:LeaveOrganization", "sts:AssumeRole", "ec2:CreateNetworkInterface"]:

@@ -970,6 +970,17 @@
                   "Fn::Sub": "arn:${AWS::Partition}:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/cloud-glider-${Environment}-audit"
                 }
               ]
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "iam:GetInstanceProfile",
+                "iam:RemoveRoleFromInstanceProfile",
+                "iam:DeleteInstanceProfile"
+              ],
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:instance-profile/cloud-glider-${Environment}-agent"
+              }
             }
           ]
         }
