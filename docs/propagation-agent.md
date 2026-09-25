@@ -99,6 +99,31 @@ Inspect `CURRENT/GLOBAL`, `LOCK/PROPAGATION`, generation state records, and
 CloudFormation events first. Clear a hold only with
 `scripts/clear_emergency_hold.py` after reconciling those resources.
 
+## SDK runtime and AMI integration
+
+The agent creates six persistent boto3 clients (DynamoDB, CloudFormation, EC2,
+Service Quotas, S3 and Lambda) in the IMDS-reported Region. Instance-profile
+credentials use the normal refreshable SDK provider chain. Network calls have
+2-second connect and 5-second read timeouts; SDK automatic retries are disabled
+(one total attempt) so retry/reconciliation returns to the lifecycle's fresh
+control gates. This setting applies to reads as well as writes. It is not a
+global wall-clock deadline. Errors remain TransientFailure or the existing
+conditional-write safety/conflict outcomes.
+
+Install `agent/requirements.txt` during AMI baking into the exact Python
+interpreter selected by the service. The artifact includes the manifest but
+not dependencies. With a virtual environment, configure the service to invoke
+its Python explicitly; the existing executable otherwise uses `env python3`.
+The separate AMI task must validate imports, IMDSv2, instance-role credentials,
+CA certificates, region, and service startup before approving the image. No AMI
+or service-template change is made by the transport migration. AWS CLI remains
+required for the current user-data S3 download and operator scripts.
+
+Run the full tests with the manifest installed and check that SDK tests are not
+skipped. Rebuild and approve the immutable artifact hash along with a compatible
+AMI before rollout. Old images containing only AWS CLI cannot run this agent.
+See [decision 0007](decisions/0007-persistent-sdk-clients.md).
+
 ## Artifact release
 
 Run:

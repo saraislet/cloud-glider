@@ -86,9 +86,9 @@ claimed by this documentation change. IAM and deployed infrastructure are unchan
   acceptance, EC2 termination and DELETE_COMPLETE. Use structured events and
   aggregated p50/p95 durations, not per-instance paid metrics. Track both
   throughput and total billable instance/volume lifetime.
-- Replace repeated AWS CLI processes with persistent SDK clients. Pin and
-  package dependencies through the separate AMI/release work; preserve retry,
-  timeout, identity and control semantics. Benchmark before claiming savings.
+- [Decision 0007](0007-persistent-sdk-clients.md) implements persistent SDK
+  clients. Install the pinned manifest through the separate AMI/release work.
+  Benchmark before claiming savings; lifecycle overlap remains pending.
 - The approved [boot/preflight overlap](0006-preflight-during-successor-boot.md)
   changes the ideal wait from boot + preflight to max(boot, preflight), plus
   final revalidation and cleanup. Runtime implementation is still pending.
@@ -105,8 +105,8 @@ claimed by this documentation change. IAM and deployed infrastructure are unchan
   implementation already captures part of that benefit.
 
 AMI dependencies, service configuration and agent baking are being handled in a
-separate task. This branch does not change AMI IDs, bootstrap, agent packaging,
-or that task's release decisions. Coordinate on pinned runtime dependencies and
+separate task. This overlap decision does not change AMI IDs, bootstrap,
+or that task's release decisions. Decision 0007 supplies SDK dependency metadata. Coordinate on pinned runtime dependencies and
 immutable agent identity when implementing SDK reuse.
 
 ## Verification and release

@@ -28,6 +28,10 @@ class BuildAgentArtifactTests(unittest.TestCase):
                 names = archive.getnames()
                 self.assertIn("bin/cloud-glider", names)
                 self.assertIn("cloud_glider/agent.py", names)
+                self.assertIn("cloud_glider/aws_sdk.py", names)
+                self.assertNotIn("cloud_glider/aws_cli.py", names)
+                self.assertEqual(archive.extractfile("requirements.txt").read(),
+                                 (ROOT / "agent/requirements.txt").read_bytes())
                 self.assertEqual(archive.getmember("bin/cloud-glider").mode, 0o755)
 
 

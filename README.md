@@ -36,8 +36,8 @@ through generation `2`.
   stream trigger; see [the bootstrap runbook](docs/bootstrap.md).
 - `cfn/generation.yaml` defines one generation EC2 instance. It deliberately
   contains no IAM or networking resources.
-- `agent/` contains the dependency-free Python propagation state machine and
-  its AWS CLI adapter.
+- `agent/` contains the Python propagation state machine and
+  its persistent boto3 SDK adapter.
 - `scripts/build_agent_artifact.py` creates the deterministic tarball consumed
   by generation user data.
 - `scripts/initialize_control.py` creates the initial DynamoDB control records
@@ -87,7 +87,16 @@ for the implemented scope, release procedure, and future fan-out cost targets.
 
 ## Validation
 
-Run the dependency-free checks locally:
+Install the pinned SDK dependencies into a virtual environment before running
+all checks (transport tests are skipped if boto3 is absent):
+
+```sh
+python3 -m venv /tmp/cloud-glider-tests
+/tmp/cloud-glider-tests/bin/python -m pip install -r agent/requirements.txt
+/tmp/cloud-glider-tests/bin/python -m unittest discover -s tests -v
+```
+
+The state-machine and repository checks can also run without SDK dependencies:
 
 ```sh
 python3 -m unittest discover -s tests -v
@@ -99,6 +108,12 @@ Build the agent artifact and record the printed SHA-256 digest:
 ```sh
 python3 scripts/build_agent_artifact.py --output dist/cloud-glider-agent.tar.gz
 ```
+
+The tarball includes `requirements.txt`, not installed third-party packages.
+The approved AMI must install these dependencies into the interpreter used by
+`bin/cloud-glider`; no package installation occurs at boot. AWS CLI is still
+needed by the existing artifact-download bootstrap and operator scripts. See
+[the SDK decision](docs/decisions/0007-persistent-sdk-clients.md).
 
 Upload that exact tarball under `generation/` in the versioned artifact bucket.
 Pass its bucket, key, immutable S3 VersionId, and digest to both the initial

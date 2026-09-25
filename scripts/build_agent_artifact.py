@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a deterministic, dependency-free Cloud Glider agent tarball."""
+"""Build a deterministic Cloud Glider agent tarball."""
 
 from __future__ import annotations
 
@@ -18,7 +18,8 @@ SOURCE_FILES = (
     Path("bin/cloud-glider"),
     Path("cloud_glider/__init__.py"),
     Path("cloud_glider/agent.py"),
-    Path("cloud_glider/aws_cli.py"),
+    Path("cloud_glider/aws_sdk.py"),
+    Path("requirements.txt"),
 )
 
 

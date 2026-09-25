@@ -25,9 +25,9 @@ control reads. No instance is stopped or deleted by this optimization.
 Log successful cycle-result transitions instead of every identical idle cycle.
 Retain error, recovery, lifecycle, and transactional audit evidence.
 
-This increment keeps decision 0001's dependency-free AWS CLI transport. A
-persistent SDK client is a subsequent optimization requiring pinned dependency
-packaging and a reviewed artifact/AMI release; it is not implemented here.
+This increment originally retained decision 0001's AWS CLI transport.
+[Decision 0007](0007-persistent-sdk-clients.md) subsequently implements persistent
+SDK clients with pinned dependencies and a required reviewed artifact/AMI release.
 
 ## Cost interpretation and later fan-out design
 

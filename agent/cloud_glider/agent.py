@@ -2,7 +2,7 @@
 
 The state machine depends on a small gateway interface so its safety behavior can
 be tested without AWS credentials.  The production gateway is implemented by
-``cloud_glider.aws_cli`` using only the Python standard library and AWS CLI v2.
+``cloud_glider.aws_sdk`` using reusable boto3 clients.
 """
 
 from __future__ import annotations

@@ -4,9 +4,10 @@ Status: accepted for the sandbox first pass
 
 ## Decision
 
-Use a dependency-free Python agent packaged as a deterministic `tar.gz`. The
-runtime calls AWS CLI v2, which is already required by generation bootstrap,
-instead of adding an SDK dependency or an on-instance build step.
+The original first pass used a dependency-free Python agent and AWS CLI v2.
+[Decision 0007](0007-persistent-sdk-clients.md) supersedes that transport with
+persistent boto3 clients and a pinned AMI-installed dependency manifest.
+The agent remains a deterministic `tar.gz`; no on-instance build is required.
 
 The approved template identity is its bucket, key, immutable S3 VersionId,
 SHA-256 digest, template version, and build ID. The approved executable identity

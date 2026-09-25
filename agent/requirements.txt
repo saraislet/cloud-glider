@@ -1,0 +1,10 @@
+# Install into the agent interpreter during AMI baking, never during boot.
+# SDK pair tested together; Python 3.9+ (3.10+ preferred for current urllib3).
+boto3==1.42.97
+botocore==1.42.97
+jmespath==1.1.0
+s3transfer==0.16.1
+python-dateutil==2.9.0.post0
+six==1.17.0
+urllib3==1.26.20; python_version < "3.10"
+urllib3==2.6.3; python_version >= "3.10"
