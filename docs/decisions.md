@@ -20,10 +20,11 @@
   template version, and Git commit or build ID are all required. Agent artifact
   identity independently requires bucket/key, immutable S3 VersionId, and
   SHA-256 digest. See `docs/decisions/0001-propagation-agent.md`.
-- Cost controls: `$20` monthly sandbox budget; actual alerts at `$10`, `$15`, and
-  `$20`; forecast alert at `$20`; anomaly threshold at `$2`; notifications only.
-  Infrastructure creation remains pending until a monitored notification
-  destination is supplied.
+- Configured billing thresholds: `$20` monthly sandbox budget; actual alerts at
+  `$10`, `$15`, and `$20`; forecast alert at `$20`; anomaly threshold at `$2`;
+  notifications only.
+  Billing alerts and notification-delivery verification are deferred to V2;
+  they do not gate first-pass infrastructure creation.
 - Propagation: initial `max_generation=2`, ceiling `3`, and
   `PREFLIGHT_THEN_RETIRE` concurrency.
 - Retention: state, audit archives, and log groups are retained by default.
@@ -57,8 +58,8 @@ variable log ingestion, API requests, alarms, and retained storage: about
 `$6.13` for `t4g.micro`, `$3.65` for one public IPv4 address, `$0.64` for an
 8-GiB gp3 root volume, and up to `$2.10` for seven detailed-monitoring metrics.
 Temporary two-generation overlap is prorated by the hours of overlap. The `$20`
-budget is a guardrail rather than a guarantee; verify current `us-west-2` prices
-in AWS Pricing Calculator before the first trial.
+budget is a planning target while billing alerts are deferred; verify current
+`us-west-2` prices in AWS Pricing Calculator before the first trial.
 
 ## Revisit in v2
 

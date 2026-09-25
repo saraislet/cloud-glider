@@ -72,8 +72,9 @@ through generation `2`.
 - readiness: two healthy heartbeats, 30 seconds apart
 - readiness polling: 15 seconds
 - readiness timeout: 10 minutes after `CREATE_COMPLETE`
-- monthly budget: `$20`, with `$10`, `$15`, and `$20` actual alerts, a `$20`
-  forecast alert, and a `$2` anomaly threshold
+- configured billing thresholds (alerts deferred to V2): `$20` monthly budget,
+  with `$10`, `$15`, and `$20` actual alerts, a `$20` forecast alert, and a `$2`
+  anomaly threshold
 
 ## Validation
 

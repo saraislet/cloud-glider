@@ -1,0 +1,10 @@
+{
+  "StackName": "cloud-glider-sandbox",
+  "Region": "us-west-2",
+  "RepairChangeSetId": "arn:aws:cloudformation:us-west-2:123456789012:changeSet/emergency-hold-role-repair-20260922/7b5e0be9-b929-4599-8621-e7df4c5cc73f",
+  "RepairStatus": "UPDATE_COMPLETE",
+  "EmergencyHoldReservedConcurrency": -1,
+  "FoundationChangeSetName": "foundation-complete-shared-concurrency-v2-20260922",
+  "FoundationChangeSetStatus": "CREATION_NOT_CONFIRMED_NETWORK_ERROR",
+  "UnsafeSupersededPreview": "foundation-complete-shared-concurrency-20260922"
+}

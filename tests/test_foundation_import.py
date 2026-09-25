@@ -13,6 +13,12 @@ SPEC.loader.exec_module(module)
 
 
 class ImportChangeSetTests(unittest.TestCase):
+    def test_template_hash_accepts_json_object_or_string(self):
+        self.assertEqual(module.template_hash({"b": 2, "a": 1}),
+                         module.template_hash('{"a":1,"b":2}'))
+        self.assertNotEqual(module.template_hash({"a": 1}),
+                            module.template_hash({"a": 2}))
+
     def setUp(self):
         self.manifest = [{"LogicalResourceId": "Role", "ResourceType": "AWS::IAM::Role"}]
         self.change_set = {

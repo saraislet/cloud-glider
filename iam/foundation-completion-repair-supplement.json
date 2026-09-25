@@ -1,0 +1,43 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "RollBackEmergencyHoldReservation",
+      "Effect": "Allow",
+      "Action": "lambda:DeleteFunctionConcurrency",
+      "Resource": "arn:aws:lambda:us-west-2:123456789012:function:cloud-glider-sandbox-emergency-hold"
+    },
+    {
+      "Sid": "ReadAgentProfileBeforeAndAfterCreation",
+      "Effect": "Allow",
+      "Action": "iam:GetInstanceProfile",
+      "Resource": [
+        "arn:aws:iam::123456789012:instance-profile/cloud-glider-sandbox-agent",
+        "arn:aws:iam::123456789012:instance-profile/cloud-glider/cloud-glider-sandbox-agent"
+      ]
+    },
+    {
+      "Sid": "RollBackAgentProfile",
+      "Effect": "Allow",
+      "Action": [
+        "iam:RemoveRoleFromInstanceProfile",
+        "iam:DeleteInstanceProfile"
+      ],
+      "Resource": [
+        "arn:aws:iam::123456789012:instance-profile/cloud-glider-sandbox-agent",
+        "arn:aws:iam::123456789012:instance-profile/cloud-glider/cloud-glider-sandbox-agent"
+      ]
+    },
+    {
+      "Sid": "PassAgentRoleToEc2Only",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "arn:aws:iam::123456789012:role/cloud-glider-sandbox-agent",
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": "ec2.amazonaws.com"
+        }
+      }
+    }
+  ]
+}

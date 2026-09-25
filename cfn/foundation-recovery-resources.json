@@ -1,65 +1,51 @@
 [
   {
-    "ResourceType": "AWS::IAM::Role",
-    "LogicalResourceId": "GenerationServiceRole",
+    "ResourceType": "AWS::Lambda::Function",
+    "LogicalResourceId": "EmergencyHoldFunction",
     "ResourceIdentifier": {
-      "RoleName": "cloud-glider-sandbox-generation-cfn"
+      "FunctionName": "cloud-glider-sandbox-emergency-hold"
     }
   },
   {
-    "ResourceType": "AWS::SNS::Topic",
-    "LogicalResourceId": "OperationalAlertsTopic",
+    "ResourceType": "AWS::Logs::LogGroup",
+    "LogicalResourceId": "EmergencyHoldFunctionLogGroup",
     "ResourceIdentifier": {
-      "TopicArn": "arn:aws:sns:us-west-2:123456789012:cloud-glider-sandbox-operational-alerts"
+      "LogGroupName": "/aws/lambda/cloud-glider-sandbox-emergency-hold"
     }
   },
   {
-    "ResourceType": "AWS::Events::Rule",
-    "LogicalResourceId": "ComputeAuditRule",
+    "ResourceType": "AWS::CloudTrail::Trail",
+    "LogicalResourceId": "AccountAuditTrail",
     "ResourceIdentifier": {
-      "Arn": "arn:aws:events:us-west-2:123456789012:rule/cloud-glider-sandbox-compute-audit"
+      "TrailName": "cloud-glider-sandbox-audit"
     }
   },
   {
-    "ResourceType": "AWS::Events::Rule",
-    "LogicalResourceId": "IamAccountAuditRule",
+    "ResourceType": "AWS::SNS::Subscription",
+    "LogicalResourceId": "OperationalEmailSubscription",
     "ResourceIdentifier": {
-      "Arn": "arn:aws:events:us-west-2:123456789012:rule/cloud-glider-sandbox-iam-account-audit"
+      "Arn": "arn:aws:sns:us-west-2:123456789012:cloud-glider-sandbox-operational-alerts:da0740e3-50e2-4009-9131-cdcb0567a5ea"
     }
   },
   {
-    "ResourceType": "AWS::Events::Rule",
-    "LogicalResourceId": "InfrastructureServiceAuditRule",
+    "ResourceType": "AWS::CloudWatch::Alarm",
+    "LogicalResourceId": "StateTableReadThrottleAlarm",
     "ResourceIdentifier": {
-      "Arn": "arn:aws:events:us-west-2:123456789012:rule/cloud-glider-sandbox-infrastructure-audit"
+      "AlarmName": "cloud-glider-sandbox-ddb-read-throttles"
     }
   },
   {
-    "ResourceType": "AWS::Events::Rule",
-    "LogicalResourceId": "NetworkAuditRule",
+    "ResourceType": "AWS::CloudWatch::Alarm",
+    "LogicalResourceId": "StateTableSystemErrorsAlarm",
     "ResourceIdentifier": {
-      "Arn": "arn:aws:events:us-west-2:123456789012:rule/cloud-glider-sandbox-network-audit"
+      "AlarmName": "cloud-glider-sandbox-ddb-system-errors"
     }
   },
   {
-    "ResourceType": "AWS::Events::Rule",
-    "LogicalResourceId": "CloudFormationStatusAuditRule",
+    "ResourceType": "AWS::CloudWatch::Alarm",
+    "LogicalResourceId": "StateTableWriteThrottleAlarm",
     "ResourceIdentifier": {
-      "Arn": "arn:aws:events:us-west-2:123456789012:rule/cloud-glider-sandbox-stack-status-audit"
-    }
-  },
-  {
-    "ResourceType": "AWS::S3::BucketPolicy",
-    "LogicalResourceId": "ArtifactBucketPolicy",
-    "ResourceIdentifier": {
-      "Bucket": "cloud-glider-sandbox-123456789012-us-west-2-artifacts"
-    }
-  },
-  {
-    "ResourceType": "AWS::S3::BucketPolicy",
-    "LogicalResourceId": "AuditArchiveBucketPolicy",
-    "ResourceIdentifier": {
-      "Bucket": "cloud-glider-sandbox-123456789012-us-west-2-audit"
+      "AlarmName": "cloud-glider-sandbox-ddb-write-throttles"
     }
   }
 ]

@@ -53,12 +53,12 @@
 
 ### Operations and cost
 
-- Before the first propagation test, confirm billing and operational notifications work, set a small `max_generation`, and keep propagation disabled.
+- Before the first propagation test, set a small `max_generation` and keep propagation disabled until ready to observe the complete handoff. Billing alerts and notification-delivery verification are deferred to V2 by operator decision.
 - Bootstrap the first generation only through the approved operator path. Enable propagation only when ready to observe the complete handoff.
 - To stop normally, set `propagation_enabled = false`. For an incident, also set `emergency_hold = true`.
 - Before cleanup, verify that no new generation is being provisioned.
 - Use a small sandbox instance type and avoid unnecessary quota increases.
-- Maintain AWS Budgets thresholds, a forecast alert, a CloudWatch `EstimatedCharges` alarm, and Cost Anomaly Detection notifications.
+- AWS Budgets thresholds, a forecast alert, a CloudWatch `EstimatedCharges` alarm, and Cost Anomaly Detection notifications are not first-pass prerequisites.
 - Tag Cloud Glider resources consistently for cost attribution.
 - Billing alerts are warnings, not the circuit breaker. When an alert fires, disable propagation first, then inspect live stacks, instances, and current spend.
 - Changes capable of increasing recurring cost require explicit review.

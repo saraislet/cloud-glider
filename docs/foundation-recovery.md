@@ -1,290 +1,283 @@
-# Sandbox foundation recovery, 2026-09-22
+# Sandbox foundation recovery: remaining resources
 
-## Prepared operation
+Target: `cloud-glider-sandbox`, account `123456789012`, Region `us-west-2`.
+Always pass `--region us-west-2`, even with a full ARN. IAM is global; its
+examples also include the Region explicitly for consistency.
 
-Stack: `cloud-glider-sandbox`, account `123456789012`, Region `us-west-2`.
-All AWS CLI examples below specify `--region us-west-2`; do not rely on a
-profile or environment default. A stack or change-set ARN does not select the
-CLI endpoint's Region. IAM is global, but its examples also pass the Region
-explicitly for consistency.
-The stack reached `UPDATE_ROLLBACK_COMPLETE` with undeleted resources.
-The prepared change set is `foundation-recovery-import-20260922`:
+## Foundation completion (2026-09-22)
 
-```text
-arn:aws:cloudformation:us-west-2:123456789012:changeSet/foundation-recovery-import-20260922/cfd2714d-3ecc-43ae-a37a-06eb6353ad3e
-```
+The missing Lambda execution role was recreated through CloudFormation in
+`emergency-hold-role-repair-20260922`. The Lambda quota increase to 1,000 then
+allowed restoring `EmergencyHoldReservedConcurrency=2` using
+`cfn/foundation-completion-parameters.json`.
 
-It was verified `CREATE_COMPLETE` / `AVAILABLE`, with exactly nine `Import`
-actions. It has not been executed. No live IAM policies were changed.
+The first completion update failed on the instance-profile pre-creation lookup.
+Rollback also required `lambda:DeleteFunctionConcurrency`. The administrator
+added the creation/read, reservation rollback, and scoped EC2 PassRole permissions.
+Rollback reached `UPDATE_ROLLBACK_COMPLETE` with a cleanup warning; an independent
+IAM lookup confirmed the failed profile did not exist. No resources were skipped.
+The fresh update `foundation-complete-reserved-concurrency-retry-20260922`
+completed with **UPDATE_COMPLETE**. Lambda is Active with reservation two, and
+the agent instance profile contains the intended agent role.
+It contains five additions and eighteen modifications, with no replacements or
+removals. The superseded subscription-replacing preview was deleted.
 
-Files:
-
-- `cfn/import-foundation-recovery.json`: the deployed template's ten existing
-  resources, unchanged, plus nine surviving resources at their observed settings.
-- `cfn/foundation-recovery-resources.json`: exact import identifiers verified
-  using CloudFormation `get-template-summary`.
-- `cfn/foundation-recovery-parameters.json`: preserves every deployed parameter.
-- `cfn/foundation-recovery-change-set.json`: change-set identity and artifact hashes.
-
-| Logical ID | Observed survivor |
-| --- | --- |
-| GenerationServiceRole | `cloud-glider-sandbox-generation-cfn`, including its existing inline policy |
-| OperationalAlertsTopic | `cloud-glider-sandbox-operational-alerts`, no subscriptions |
-| ComputeAuditRule | `cloud-glider-sandbox-compute-audit` |
-| IamAccountAuditRule | `cloud-glider-sandbox-iam-account-audit` |
-| InfrastructureServiceAuditRule | `cloud-glider-sandbox-infrastructure-audit` |
-| NetworkAuditRule | `cloud-glider-sandbox-network-audit` |
-| CloudFormationStatusAuditRule | `cloud-glider-sandbox-stack-status-audit` |
-| ArtifactBucketPolicy | Policy on `cloud-glider-sandbox-123456789012-us-west-2-artifacts` |
-| AuditArchiveBucketPolicy | Policy on `cloud-glider-sandbox-123456789012-us-west-2-audit` |
-
-All five rules have **empty target lists**. Import preserves that partial state;
-the subsequent foundation update restores the configured targets. Neither the
-emergency-hold Lambda log group nor the EventBridge log resource policy exists,
-so neither is included in the import. No SNS subscription exists to import.
-
-The snapshot is sandbox-specific. Do not use it for another account, environment,
-or a fresh deployment. Imported resources have `DeletionPolicy: Retain` and
-`UpdateReplacePolicy: Retain` during recovery. The normal foundation template
-keeps its existing lifecycle policies; review their restoration in the later
-update change set. Blanket retention on every resource is not a substitute for
-rollback permissions and would leave more unmanaged resources after failures.
-
-## Permissions before execution
-
-The latest live foundation service-role policy includes the corrected Lambda
-log-group ARN forms, account-scoped `logs:DeleteResourcePolicy`, and the reported
-EventBridge/IAM/S3/SNS cleanup actions. Two additional read permissions listed in
-the live CloudFormation resource schemas are absent:
-
-- `iam:ListAttachedRolePolicies` on the generation role.
-- `sns:GetDataProtectionPolicy` on the operational topic (even though no data
-  protection policy is configured).
-
-Review `iam/foundation-import-read-supplement.json` and have the operator who
-manages `cloud-glider-sandbox-foundation-cfn` merge those statements into its
-managed configuration, or attach this separate inline supplement:
+The full scoped recovery supplement remains in
+`iam/foundation-completion-repair-supplement.json`. The administrator applied it
+as the inline policy `cloud-glider-foundation-completion-repair` on
+`cloud-glider-sandbox-foundation-cfn`; the live policy was verified to match the
+supplement, including exact-name cleanup permission at both the root and
+`/cloud-glider/` instance-profile paths. For reference, an administrator can
+reapply the supplement using:
 
 ```sh
-cd /path/to/glider
 aws iam put-role-policy \
-  --region us-west-2 \
   --role-name cloud-glider-sandbox-foundation-cfn \
-  --policy-name cloud-glider-foundation-import-read \
-  --policy-document file://iam/foundation-import-read-supplement.json
+  --policy-name cloud-glider-foundation-completion-repair \
+  --policy-document file://iam/foundation-completion-repair-supplement.json \
+  --region us-west-2
 ```
 
-This command changes deployment-role permissions; it has **not** been run.
-It does not change the instance agent's permissions or create access keys.
-The execution principal also needs the appropriate CloudFormation execution,
-inspection, drift-detection, and service-role pass permissions.
+The configured `GliderManager` identity could not apply the policy itself because
+AWS denied `iam:PutRolePolicy`; the administrator's update resolves the scoped
+cleanup permission gap for a profile that fails before creation.
 
-Before the subsequent full deployment, review and merge
-`iam/foundation-lifecycle-supplement.json`. It covers additional scoped provider
-read operations, tag reconciliation, removal of an agent instance profile,
-passing only the agent role to EC2, SNS subscription update/removal, and rollback
-of foundation alarms, the Lambda function, and the audit trail. It includes the
-two import reads, so using it makes the smaller supplement redundant.
+Do not replay dated imports or the temporary shared-concurrency repair after
+completion. For future updates, use `cfn/foundation.yaml`, retain the explicit
+reservation of two, and review a fresh change set. Normal repeated deployments
+need no GitHub Actions workflow change. Import remains an explicit operator step.
+
+Post-deployment drift detection `62f1c940-b639-11f1-88cc-023e0f368e69` completed
+with **IN_SYNC**: all 29 supported resources matched. Both bucket policies were
+compared separately; the existing subscription remains confirmed. All five
+operational alarms are enabled and OK; all five audit rules have expected targets.
+CloudTrail and infrastructure logs show recent delivery. All 38 repository tests,
+template linting, repository validation, and five isolated Lambda handler checks
+passed. Live Lambda state-changing behavior and end-to-end email delivery remain
+untested.
+
+To recheck drift (use the new detection ID returned by the first command):
+
+```sh
+aws cloudformation detect-stack-drift \
+  --stack-name cloud-glider-sandbox --region us-west-2
+aws cloudformation describe-stack-drift-detection-status \
+  --stack-drift-detection-id <returned-detection-id> --region us-west-2
+aws cloudformation describe-stack-resource-drifts \
+  --stack-name cloud-glider-sandbox --region us-west-2
+```
+
+Require `DETECTION_COMPLETE` before interpreting the result. Unsupported resources
+still require separate inspection. See `cfn/foundation-completion-result.json`
+for execution and verification results.
+Billing alerts and notification-delivery verification are deferred to V2 by
+operator decision and are not first-pass prerequisites. `cloud-glider-billing-alerts`
+in `us-east-1` was `REVIEW_IN_PROGRESS`, with no Cloud Glider billing alarms.
+Budget and cost-anomaly subscription reads were denied to this operator. The
+operational subscription is confirmed, but end-to-end notification delivery has
+not been tested. The `CONTROL/GLOBAL` item is absent; initialize it through the
+approved operator path with propagation disabled. The remaining control,
+health, and failure-path checks still apply before propagation.
+
+## Historical import preparation (do not replay)
+
+The first nine-resource import succeeded. The subsequent foundation update failed
+when reserving two Lambda concurrent executions would leave less than the
+account's required unreserved minimum. Rollback finished in
+`UPDATE_ROLLBACK_COMPLETE`, leaving additional unmanaged resources.
+
+The current recovery files supersede the first import snapshot:
+
+- `cfn/import-foundation-recovery.json` preserves the deployed template's 19
+  managed resources and adds seven survivors using observed configuration.
+- `cfn/foundation-recovery-resources.json` imports only those seven survivors.
+- `cfn/foundation-recovery-parameters.json` preserves the deployed parameters.
+- `cfn/foundation-recovery-change-set.json` records the new source/template hashes
+  and proposed name `foundation-recovery-import-remaining-20260922`.
+
+**The second import was executed successfully and reached `IMPORT_COMPLETE`.**
+Its change-set ARN is recorded in `cfn/foundation-recovery-change-set.json`.
+All seven survivors are now managed by the stack. The creation and execution
+commands below are historical recovery instructions; do not replay them. The
+pre-execution verifier intentionally rejects the completed stack state. Do not
+reuse either previous update preview.
+
+| Import logical ID | Resource |
+| --- | --- |
+| EmergencyHoldFunction | `cloud-glider-sandbox-emergency-hold` |
+| EmergencyHoldFunctionLogGroup | `/aws/lambda/cloud-glider-sandbox-emergency-hold` |
+| AccountAuditTrail | `cloud-glider-sandbox-audit` |
+| OperationalEmailSubscription | Existing confirmed email subscription |
+| StateTableReadThrottleAlarm | `cloud-glider-sandbox-ddb-read-throttles` |
+| StateTableWriteThrottleAlarm | `cloud-glider-sandbox-ddb-write-throttles` |
+| StateTableSystemErrorsAlarm | `cloud-glider-sandbox-ddb-system-errors` |
+
+The complete template has 26 definitions. Each new import has `DeletionPolicy:
+Retain` and `UpdateReplacePolicy: Retain`. Existing definitions and top-level
+settings are unchanged. CloudFormation's template summary confirms the import
+identifiers, including `Arn` for the SNS subscription.
+
+The Lambda definition uses its downloaded deployed `index.py`, current settings,
+no reserved concurrency, and a literal execution-role ARN. The execution role
+was deleted during rollback and is **not** an import candidate. Import only
+restores ownership; it does not make this function operational. Do not invoke it
+or enable propagation until a subsequent reviewed update recreates its role and
+health checks pass. Notification-delivery verification is deferred to V2. Do not
+add a `GetAtt` referencing that absent role to this import template.
+
+## Prerequisites
+
+Later repair: the operator approved temporarily using shared Lambda concurrency
+while awaiting a quota increase. `cfn/repair-emergency-hold-role.json` is the
+narrow UPDATE template for recreating the absent execution role; its parameters
+are in `cfn/emergency-hold-repair-parameters.json`. It sets
+`EmergencyHoldReservedConcurrency=-1`, which omits the reservation. The default
+for new deployments remains 2. See [the decision](decisions/0002-temporary-lambda-shared-concurrency.md).
+The import sections below describe the already completed recovery and must not
+be replayed against a stack that has progressed to normal updates.
+
+Keep propagation disabled and do not run GitHub deployment or manual updates
+concurrently. Confirm the stack is still `UPDATE_ROLLBACK_COMPLETE` and recheck
+survivor configuration if any operator has edited it since preparation.
+
+Use an approved operator identity for import and drift detection. The foundation
+service role also needs provider read permissions for the seven imported types.
+The IAM supplements in `iam/foundation-import-read-supplement.json` and
+`iam/foundation-lifecycle-supplement.json` supplement the existing role policy;
+review the live combined policy rather than assuming a local file is attached.
+No IAM changes were made during this preparation. See the drift runbook for
+required CloudFormation and provider read permissions.
+
+If the reviewed lifecycle supplement is still needed, the operator can apply it:
 
 ```sh
 aws iam put-role-policy \
-  --region us-west-2 \
   --role-name cloud-glider-sandbox-foundation-cfn \
   --policy-name cloud-glider-foundation-lifecycle \
-  --policy-document file://iam/foundation-lifecycle-supplement.json
+  --policy-document file://iam/foundation-lifecycle-supplement.json \
+  --region us-west-2
 ```
 
-This command also has **not** been run. Both documents supplement the current
-policy; neither replaces it. Their names make repeat application update the same
-inline policy. Keep the source of the existing operator-managed role in sync.
-No permissions for optional managed-policy attachments, permissions boundaries,
-organization trails, VPC Lambda, or unrelated resources were added.
-Provider permissions were inspected, but no live deployment or IAM simulation
-has proved the combined policy: the current operator cannot call
-`iam:SimulatePrincipalPolicy`. Access Analyzer `ValidatePolicy` was also denied
-to that operator; the supplements require operator review before application.
+## Create, review, and execute the second import
 
-## Review and execute the import
-
-Keep GitHub deploys paused operationally while doing this: do not dispatch a run.
-Verify propagation remains disabled and no generation is provisioning; this
-procedure does not enable propagation or modify DynamoDB control records.
-Run the read-only guard immediately before execution:
+Run these commands from the repository root. Creating the change set does not
+execute it or create the resources:
 
 ```sh
+aws cloudformation create-change-set \
+  --stack-name cloud-glider-sandbox \
+  --change-set-name foundation-recovery-import-remaining-20260922 \
+  --change-set-type IMPORT \
+  --template-body file://cfn/import-foundation-recovery.json \
+  --resources-to-import file://cfn/foundation-recovery-resources.json \
+  --parameters file://cfn/foundation-recovery-parameters.json \
+  --capabilities CAPABILITY_NAMED_IAM \
+  --role-arn arn:aws:iam::123456789012:role/cloud-glider-sandbox-foundation-cfn \
+  --client-token foundation-recovery-import-remaining-20260922 \
+  --region us-west-2
+
+aws cloudformation wait change-set-create-complete \
+  --stack-name cloud-glider-sandbox \
+  --change-set-name foundation-recovery-import-remaining-20260922 \
+  --region us-west-2
+
 python3 scripts/verify_foundation_import.py
+
 aws cloudformation describe-change-set \
   --stack-name cloud-glider-sandbox \
-  --change-set-name foundation-recovery-import-20260922 \
+  --change-set-name foundation-recovery-import-remaining-20260922 \
   --region us-west-2 \
   --query '{Status:Status,ExecutionStatus:ExecutionStatus,Changes:Changes[].ResourceChange}'
 ```
 
-Require exactly the nine imports above. The guard rejects changed artifact
-hashes, a changed deployed template, a different stack, extra/missing actions,
-and an already executed or obsolete change set. It does not freeze AWS state or
-validate current authorization. Recheck the inventory if resources were edited
-since preparation. Never substitute the full foundation template for this import.
+Require `CREATE_COMPLETE`, `AVAILABLE`, and exactly seven `Import` actions.
+The verifier checks artifact hashes, deployed template, stack state, exact import
+manifest, and the actual change-set template. It accepts CloudFormation's object
+or string representation of JSON templates. It does not prove IAM permissions,
+resource health, or absence of external edits.
 
-When the reviewed permissions are in place, execute:
+After review:
 
 ```sh
 aws cloudformation execute-change-set \
   --stack-name cloud-glider-sandbox \
-  --change-set-name foundation-recovery-import-20260922 \
-  --client-request-token foundation-recovery-import-20260922-execute \
+  --change-set-name foundation-recovery-import-remaining-20260922 \
+  --client-request-token foundation-recovery-import-remaining-20260922-execute \
   --region us-west-2
 
 aws cloudformation wait stack-import-complete \
   --stack-name cloud-glider-sandbox --region us-west-2
-
-aws cloudformation describe-stacks \
-  --stack-name cloud-glider-sandbox --region us-west-2 \
-  --query 'Stacks[0].StackStatus'
 ```
 
-Expected status: `IMPORT_COMPLETE`. A waiter timeout is not permission to retry
-execution. Inspect stack events and the change set first. If import rolled back,
-stop and diagnose; do not delete resources or attempt the full deployment.
-If it already succeeded, skip execution and proceed to drift detection. Do not
-recreate this dated import against an updated stack.
+If a request times out or the change-set name already exists, inspect its status
+before retrying. If import succeeded, skip execution. If it rolled back, inspect
+events and stop; do not delete surviving resources or deploy the full template.
+This dated recovery must not be replayed after the stack changes.
 
-## Check drift
+## Drift and completing the foundation
+
+After `IMPORT_COMPLETE`, follow [the drift runbook](cloudformation-drift-detection.md).
+Require successful drift detection and review each difference. `NOT_CHECKED`
+is not proof of correctness. Bucket policies and SNS subscriptions require
+separate comparison where CloudFormation drift detection is unsupported.
+
+Before a normal update, inspect regional concurrency with an operator identity
+allowed to perform `lambda:GetAccountSettings` and `lambda:GetFunctionConcurrency`:
 
 ```sh
-glider_drift_id=$(aws cloudformation detect-stack-drift \
-  --stack-name cloud-glider-sandbox --region us-west-2 \
-  --query StackDriftDetectionId --output text)
-
-aws cloudformation describe-stack-drift-detection-status \
-  --stack-drift-detection-id "$glider_drift_id" --region us-west-2
+aws lambda get-account-settings --region us-west-2 \
+  --query 'AccountLimit.{Total:ConcurrentExecutions,Unreserved:UnreservedConcurrentExecutions}'
+aws lambda get-function-concurrency \
+  --function-name cloud-glider-sandbox-emergency-hold --region us-west-2
 ```
 
-Repeat the status command until `DetectionStatus` is `DETECTION_COMPLETE`.
-For `DETECTION_FAILED`, inspect `DetectionStatusReason`; do not treat partial
-results as a clean stack. Then inspect individual differences:
+The failed request reported an unreserved floor of 10 for this account. Adding a
+new reservation of two requires at least 12 unreserved slots under that floor.
+Do not assume the quota or alter unrelated reservations. Removing the reservation
+also removes the function's dedicated capacity and concurrency cap; changing that
+behavior or increasing quotas requires explicit review. Zero disables execution.
+The import template omits the reservation to reflect reality. The subsequent
+operator-approved repair uses the new -1 parameter option temporarily; this
+shares account capacity and removes the function's individual concurrency cap.
+After quota approval, explicitly override `EmergencyHoldReservedConcurrency=2`
+in a reviewed update; ordinary repeat deployments preserve -1, even though the
+template default is 2.
 
-```sh
-aws cloudformation describe-stack-resource-drifts \
-  --stack-name cloud-glider-sandbox --region us-west-2 \
-  --query 'StackResourceDrifts[].{Resource:LogicalResourceId,Status:StackResourceDriftStatus,Differences:PropertyDifferences}'
-```
+The following describes the historical post-import sequence, now superseded by
+the completion above. Only after resolving concurrency, prepare a normal UPDATE change set using
+`cfn/foundation.yaml`. That update must recreate `EmergencyHoldFunctionRole`,
+restore the function's role relationship, and complete remaining resources.
+Preserve explicit `Path: /` on the imported generation role and
+`EventBusName: default` on imported rules to avoid unwanted replacements.
+Review the update for replacements, deletions, and recurring cost before execution.
+Do not use earlier update previews based on the 19-resource stack.
 
-Review every `MODIFIED` or `DELETED` entry. `NOT_CHECKED` does not mean healthy.
-In particular, `AWS::S3::BucketPolicy` supports import but not CloudFormation
-drift detection. Check both policies explicitly against their imported
-`PolicyDocument` values, normalizing JSON before comparing:
+No GitHub workflow change is needed for normal repeated deployments. The workflow
+uses a fixed stack name, concurrency protection, and empty-change-set handling.
+Import remains an explicit operator action; normal deployments must not silently
+adopt or delete unmanaged resources.
 
-```sh
-aws s3api get-bucket-policy \
-  --region us-west-2 \
-  --bucket cloud-glider-sandbox-123456789012-us-west-2-artifacts \
-  --query Policy --output text
-aws s3api get-bucket-policy \
-  --region us-west-2 \
-  --bucket cloud-glider-sandbox-123456789012-us-west-2-audit \
-  --query Policy --output text
-```
+## Validation and limits
 
-An `IN_SYNC` recovery stack is still an incomplete foundation: the imported rules
-intentionally have no targets and the remaining foundation resources are absent.
+The preparation compares all 19 managed definitions and top-level settings
+against the current deployed template and checks the seven-resource manifest.
+The template is linted and validated with CloudFormation. Unit tests exercise
+repeated verification, wrong-stack and stale/executed change sets, unexpected
+actions, and JSON template hashing. Intentionally unused existing parameters
+remain in the import template (lint W2001 is suppressed only for this template).
 
-## Complete the foundation and repeat deployments
+The seven-resource import completed successfully. No role was recreated,
+concurrency changed, or propagation enabled. Runtime health remains untested;
+import completion does not repair the missing execution role.
 
-Follow-up: the import completed successfully. The first normal deployment
-preview, `awscli-cloudformation-package-deploy-1790039877`, proposed replacing
-`GenerationServiceRole` because removing the imported explicit `Path: /` counts
-as a replacement. It also proposed conditional rule replacement when removing
-`EventBusName: default`. Do not execute that old preview. The foundation template
-now preserves those explicit defaults and `MaxSessionDuration: 3600`.
-The corrected unexecuted preview is
-`foundation-recovery-update-preserve-identities-20260922`.
+References: [manual import requirements](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/import-resources-manually.html),
+[resource import and drift support](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/resource-import-supported-resources.html).
 
-Always pass `--region us-west-2`, including when using a full change-set ARN.
-The local CLI default was `us-east-1`; a request sent there cannot find the
-change set in `us-west-2`.
+## Historical post-import drift result
 
-After import and drift review, apply the lifecycle permission corrections and
-prepare a normal **UPDATE** change set using `cfn/foundation.yaml`. For a local
-preview, the following uses existing parameter values and does not execute:
-
-```sh
-aws cloudformation deploy \
-  --stack-name cloud-glider-sandbox --region us-west-2 \
-  --template-file cfn/foundation.yaml \
-  --role-arn arn:aws:iam::123456789012:role/cloud-glider-sandbox-foundation-cfn \
-  --capabilities CAPABILITY_NAMED_IAM \
-  --no-fail-on-empty-changeset --no-execute-changeset
-```
-
-Review the returned change-set ID. Expect the remaining resources to be added,
-the five rules to receive their targets, and concrete recovery values to return
-to normal parameterized definitions. Stop for unexpected replacements/deletions
-or changes to approved AMI/network inputs. Creating the remaining foundation can
-increase recurring charges, so review it separately from this import.
-Once approved, execute that update change set and wait for `UPDATE_COMPLETE`.
-Use the name or ARN of the reviewed update preview in the same shell:
-
-```sh
-glider_update_change_set="foundation-recovery-update-preserve-identities-20260922"
-
-aws cloudformation describe-change-set \
-  --stack-name cloud-glider-sandbox \
-  --change-set-name "$glider_update_change_set" \
-  --region us-west-2
-```
-
-After reviewing that exact change set, execute and wait:
-
-```sh
-aws cloudformation execute-change-set \
-  --stack-name cloud-glider-sandbox \
-  --change-set-name "$glider_update_change_set" \
-  --region us-west-2
-
-aws cloudformation wait stack-update-complete \
-  --stack-name cloud-glider-sandbox \
-  --region us-west-2
-```
-
-Recheck drift, rule targets, log delivery, SNS email confirmation, operational
-notifications, and cost notifications before any propagation test.
-
-No GitHub Actions workflow change is required for normal idempotence. It already
-uses the same stack name, deterministic logical/physical resource names,
-`aws cloudformation deploy`, `--no-fail-on-empty-changeset`, and a concurrency
-group with cancellation disabled. Once ownership is repaired, repeated identical
-deployments update that stack or do nothing. Select the reviewed code revision
-when dispatching; do not run an old revision that predates the rule dependencies.
-
-The full template now makes each audit rule depend on
-`EventBridgeLogResourcePolicy`, so its delivery authorization is created before
-targets are configured and removed after the rules during rollback. Runtime
-roles, propagation gates, resource names, and capacity limits are unchanged.
-
-Routine deploys must not silently import unknown resources, delete collisions,
-or automatically clean up failed stacks. If rollback again leaves unmanaged
-resources, use an explicit reviewed import. GitHub concurrency does not serialize
-manual CLI operations, so avoid running the two paths together.
-
-## References
-
-- [CloudFormation manual import requirements](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/import-resources-manually.html)
-- [Import and drift support by resource type](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/resource-import-supported-resources.html)
-- [SNS authorization scopes](https://docs.aws.amazon.com/service-authorization/latest/reference/list_sns.html)
-- [Instance-profile role passing](https://docs.aws.amazon.com/IAM/latest/APIReference/API_AddRoleToInstanceProfile.html)
-
-## Preparation checks
-
-All 37 repository unit tests and the repository safety validator passed.
-`cfn-lint` passed for the full foundation and the import template; only W2001
-(intentionally unused existing parameters) was suppressed for the import.
-AWS `validate-template` passed for both templates. A structural comparison
-verified that all ten existing resource definitions and top-level template
-settings were preserved. The live read-only guard confirmed exactly nine
-imports and an available, unexecuted change set.
-
-Import execution, post-import drift detection, full deployment, live rollback,
-and notifications remain untested because this task prepared an unexecuted
-recovery. Existing agent tests cover the unchanged lifecycle failure gates;
-no propagation or generation stack operation was performed.
+Detection `05bc7ff0-b629-11f1-90ce-023fa17c6517` failed because the foundation
+service role lacks `cloudwatch:ListTagsForResource` on the three imported
+DynamoDB alarms. Grant that read action scoped to those alarm ARNs and rerun
+drift detection. No differences were returned by the partial check, but the
+stack drift status is `UNKNOWN`, not a verified clean result. This permission
+is included in the prepared lifecycle supplement; verify it is in the live role.

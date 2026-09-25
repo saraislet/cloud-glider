@@ -10,6 +10,15 @@ import subprocess
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def template_hash(template):
+    """CloudFormation may return JSON templates as objects or JSON strings."""
+    if isinstance(template, str):
+        template = json.loads(template)
+    return hashlib.sha256(
+        json.dumps(template, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+
+
 def validate_change_set(change_set, manifest, stack_id):
     if change_set.get("StackId") != stack_id:
         raise ValueError("Change set belongs to a different stack")
@@ -38,18 +47,24 @@ def main():
     metadata = json.loads((ROOT / "cfn/foundation-recovery-change-set.json").read_text())
     for relative, expected_hash in metadata["FilesSha256"].items():
         if hashlib.sha256((ROOT / relative).read_bytes()).hexdigest() != expected_hash:
-            raise ValueError(f"Recovery artifact changed after change-set creation: {relative}")
+            raise ValueError(f"Recovery artifact changed after preparation: {relative}")
     region, stack_id = metadata["Region"], metadata["StackId"]
     stack = aws(region, "describe-stacks", "--stack-name", stack_id)["Stacks"][0]
     if stack["StackStatus"] != "UPDATE_ROLLBACK_COMPLETE":
         raise ValueError("Stack has changed since recovery preparation; inspect before proceeding")
     source = aws(region, "get-template", "--stack-name", stack_id)["TemplateBody"]
-    if not isinstance(source, str) or hashlib.sha256(source.encode()).hexdigest() != metadata["SourceTemplateSha256"]:
+    if template_hash(source) != metadata["SourceTemplateSha256"]:
         raise ValueError("Deployed template changed since recovery preparation")
     manifest = json.loads((ROOT / "cfn/foundation-recovery-resources.json").read_text())
+    change_set_name = metadata.get("ChangeSetId") or metadata["ChangeSetName"]
     change_set = aws(region, "describe-change-set", "--stack-name", stack_id,
-                     "--change-set-name", metadata["ChangeSetId"])
+                     "--change-set-name", change_set_name)
     validate_change_set(change_set, manifest, stack_id)
+    proposed = aws(region, "get-template", "--stack-name", stack_id,
+                   "--change-set-name", change_set_name)["TemplateBody"]
+    local_template = json.loads((ROOT / "cfn/import-foundation-recovery.json").read_text())
+    if template_hash(proposed) != template_hash(local_template):
+        raise ValueError("Change-set template does not match the reviewed recovery artifact")
     print(f"Verified {len(manifest)} imports; no create, update, or delete actions.")
     print("This check does not validate live IAM authorization or resource drift.")
     print("Change set remains unexecuted. Follow docs/foundation-recovery.md.")

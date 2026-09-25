@@ -1,12 +1,17 @@
 {
   "StackId": "arn:aws:cloudformation:us-west-2:123456789012:stack/cloud-glider-sandbox/a5448100-b613-11f1-b4ba-02fc06666c89",
   "Region": "us-west-2",
-  "ChangeSetName": "foundation-recovery-import-20260922",
-  "ChangeSetId": "arn:aws:cloudformation:us-west-2:123456789012:changeSet/foundation-recovery-import-20260922/cfd2714d-3ecc-43ae-a37a-06eb6353ad3e",
-  "SourceTemplateSha256": "c1e0feb0360864a2c347db201d60eb9982300814453fbc2f344644e1199f3e9e",
+  "ChangeSetName": "foundation-recovery-import-remaining-20260922",
+  "ChangeSetId": "arn:aws:cloudformation:us-west-2:123456789012:changeSet/foundation-recovery-import-remaining-20260922/a79274d1-c3d9-403e-bf1d-9e83ca4b2911",
+  "SourceTemplateSha256": "9aa3e67542f58436b2ec94a31e71df611271f1dace5439a5a8b65c202d4a2ffd",
   "FilesSha256": {
-    "cfn/import-foundation-recovery.json": "5cf7d6255b30e31b61c710ccdaa64bc7b90c5be8525d9e1b9ff1340b2445698b",
-    "cfn/foundation-recovery-resources.json": "32094a9eecc986677a1d7218e6e883ccc146e898db75112e6086f75078d70835",
+    "cfn/import-foundation-recovery.json": "59d0f5b594ff41f9d8a1831571690f6bd156efb4b18f7168815b48d92cc36d67",
+    "cfn/foundation-recovery-resources.json": "31d4cd7cc509817a8c7f6eb358934cccf6d3bff8f2b33fbefea1e903942ca816",
     "cfn/foundation-recovery-parameters.json": "468782ffe7de062fbbb4598caa004afb6cd0c070a4bc71a841e39345f373fbc8"
-  }
+  },
+  "PreparationStatus": "IMPORT_COMPLETE",
+  "SourceTemplateHashFormat": "canonical-json",
+  "DriftDetectionId": "05bc7ff0-b629-11f1-90ce-023fa17c6517",
+  "DriftDetectionStatus": "DETECTION_FAILED",
+  "DriftFailure": "Foundation service role lacks cloudwatch:ListTagsForResource on the three imported DynamoDB alarms."
 }

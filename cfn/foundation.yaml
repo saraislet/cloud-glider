@@ -4,6 +4,11 @@ Description: >-
   least-privilege generation roles. Deploy only from an administrative principal.
 
 Parameters:
+  EmergencyHoldReservedConcurrency:
+    Type: Number
+    Default: 2
+    AllowedValues: [-1, 1, 2]
+    Description: Use -1 for the shared account pool while awaiting quota; 1 or 2 reserves and caps executions. Zero is prohibited.
   Environment:
     Type: String
     Default: sandbox
@@ -42,6 +47,9 @@ Rules:
       - Assert: !Equals [!Ref 'AWS::Region', us-west-2]
         AssertDescription: Cloud Glider's initial sandbox is restricted to us-west-2.
 
+Conditions:
+  ReserveEmergencyHoldConcurrency: !Not [!Equals [!Ref EmergencyHoldReservedConcurrency, -1]]
+
 Resources:
   OperationalAlertsTopic:
     Type: AWS::SNS::Topic
@@ -60,10 +68,11 @@ Resources:
 
   OperationalEmailSubscription:
     Type: AWS::SNS::Subscription
+    DependsOn: OperationalAlertsTopic
     Properties:
       Protocol: email
       Endpoint: !Ref OperationalNotificationEmail
-      TopicArn: !Ref OperationalAlertsTopic
+      TopicArn: !Sub 'arn:${AWS::Partition}:sns:${AWS::Region}:${AWS::AccountId}:cloud-glider-${Environment}-operational-alerts'
 
   StateTable:
     Type: AWS::DynamoDB::Table
@@ -433,7 +442,7 @@ Resources:
                 Action:
                   - logs:CreateLogStream
                   - logs:PutLogEvents
-                Resource: !Sub '${EmergencyHoldFunctionLogGroup.Arn}:log-stream:*'
+                Resource: !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/cloud-glider-${Environment}-emergency-hold:log-stream:*'
       Tags:
         - Key: project
           Value: cloud-glider
@@ -453,7 +462,10 @@ Resources:
       Runtime: python3.12
       Handler: index.handler
       Role: !GetAtt EmergencyHoldFunctionRole.Arn
-      ReservedConcurrentExecutions: 2
+      ReservedConcurrentExecutions: !If
+        - ReserveEmergencyHoldConcurrency
+        - !Ref EmergencyHoldReservedConcurrency
+        - !Ref AWS::NoValue
       Timeout: 10
       Environment:
         Variables:

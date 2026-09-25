@@ -45,6 +45,16 @@
       "Default": "hi@sar.ai",
       "AllowedPattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$",
       "Description": "Address that confirms and receives operational alarm notifications."
+    },
+    "EmergencyHoldReservedConcurrency": {
+      "Type": "Number",
+      "Default": 2,
+      "AllowedValues": [
+        -1,
+        1,
+        2
+      ],
+      "Description": "Use -1 for the shared account pool while awaiting quota; 1 or 2 reserves and caps executions. Zero is prohibited."
     }
   },
   "Rules": {
@@ -961,7 +971,12 @@
         "Description": "Atomically create the append-only HOLD/ACTIVE item and record a terminal error.",
         "Runtime": "python3.12",
         "Handler": "index.handler",
-        "Role": "arn:aws:iam::123456789012:role/cloud-glider-sandbox-emergency-hold",
+        "Role": {
+          "Fn::GetAtt": [
+            "EmergencyHoldFunctionRole",
+            "Arn"
+          ]
+        },
         "Timeout": 10,
         "MemorySize": 128,
         "Environment": {
@@ -982,7 +997,18 @@
         "Code": {
           "ZipFile": "import datetime\nimport os\nimport re\nimport uuid\n\nimport boto3\n\ndynamodb = boto3.client(\"dynamodb\")\ngeneration_pattern = re.compile(r\"^[0-9]{6}$\")\nerror_pattern = re.compile(r\"^[A-Z][A-Z0-9_]{2,63}$\")\n\ndef handler(event, context):\n    generation = str(event.get(\"generation\", \"\"))\n    error_code = str(event.get(\"error_code\", \"\"))\n    correlation_id = str(event.get(\"correlation_id\", \"\"))\n    if not generation_pattern.fullmatch(generation):\n        raise ValueError(\"generation must be six digits\")\n    if not error_pattern.fullmatch(error_code):\n        raise ValueError(\"invalid terminal error code\")\n    if not correlation_id or len(correlation_id) > 128:\n        raise ValueError(\"invalid correlation ID\")\n\n    now = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec=\"milliseconds\").replace(\"+00:00\", \"Z\")\n    event_id = str(uuid.uuid4())\n    actor = context.invoked_function_arn\n    table = os.environ[\"TABLE_NAME\"]\n    environment = os.environ[\"ENVIRONMENT\"]\n    generation_values = {\n        \":error\": {\"S\": \"ERROR\"},\n        \":code\": {\"S\": error_code},\n        \":correlation\": {\"S\": correlation_id},\n        \":now\": {\"S\": now},\n        \":generation\": {\"S\": generation},\n    }\n    hold = {\n        \"PK\": {\"S\": \"HOLD\"},\n        \"SK\": {\"S\": \"ACTIVE\"},\n        \"active\": {\"BOOL\": True},\n        \"created_at\": {\"S\": now},\n        \"created_by\": {\"S\": actor},\n        \"generation\": {\"S\": generation},\n        \"error_code\": {\"S\": error_code},\n        \"correlation_id\": {\"S\": correlation_id},\n        \"event_id\": {\"S\": event_id},\n        \"environment\": {\"S\": environment},\n    }\n    audit = {\n        \"PK\": {\"S\": \"AUDIT#PROPAGATION\"},\n        \"SK\": {\"S\": f\"EVENT#{now}#{event_id}\"},\n        \"schema_version\": {\"S\": \"1.0\"},\n        \"event_id\": {\"S\": event_id},\n        \"occurred_at\": {\"S\": now},\n        \"category\": {\"S\": \"PROPAGATION\"},\n        \"actor\": {\"S\": actor},\n        \"action\": {\"S\": \"CREATE_EMERGENCY_HOLD\"},\n        \"resource_type\": {\"S\": \"HOLD_RECORD\"},\n        \"resource_id\": {\"S\": \"HOLD/ACTIVE\"},\n        \"result\": {\"S\": \"APPLIED\"},\n        \"reason\": {\"S\": error_code},\n        \"correlation_id\": {\"S\": correlation_id},\n        \"environment\": {\"S\": environment},\n        \"generation\": {\"S\": generation},\n    }\n\n    for attempt in range(2):\n        existing = dynamodb.get_item(\n            TableName=table,\n            Key={\"PK\": {\"S\": \"HOLD\"}, \"SK\": {\"S\": \"ACTIVE\"}},\n            ConsistentRead=True,\n        ).get(\"Item\")\n        hold_operation = (\n            {\n                \"ConditionCheck\": {\n                    \"TableName\": table,\n                    \"Key\": {\"PK\": {\"S\": \"HOLD\"}, \"SK\": {\"S\": \"ACTIVE\"}},\n                    \"ConditionExpression\": \"attribute_exists(PK) AND attribute_exists(SK)\",\n                }\n            }\n            if existing\n            else {\n                \"Put\": {\n                    \"TableName\": table,\n                    \"Item\": hold,\n                    \"ConditionExpression\": \"attribute_not_exists(PK) AND attribute_not_exists(SK)\",\n                }\n            }\n        )\n        try:\n            dynamodb.transact_write_items(\n                TransactItems=[\n                    hold_operation,\n                    {\n                        \"Update\": {\n                            \"TableName\": table,\n                            \"Key\": {\"PK\": {\"S\": f\"GEN#{generation}\"}, \"SK\": {\"S\": \"STATE\"}},\n                            \"UpdateExpression\": \"SET #status = :error, generation = :generation, error_code = :code, error_correlation_id = :correlation, updated_at = :now\",\n                            \"ExpressionAttributeNames\": {\"#status\": \"status\"},\n                            \"ExpressionAttributeValues\": generation_values,\n                        }\n                    },\n                    {\n                        \"Put\": {\n                            \"TableName\": table,\n                            \"Item\": audit,\n                            \"ConditionExpression\": \"attribute_not_exists(PK) AND attribute_not_exists(SK)\",\n                        }\n                    },\n                ]\n            )\n            return {\"hold_active\": True, \"hold_created\": not bool(existing), \"event_id\": event_id, \"occurred_at\": now}\n        except dynamodb.exceptions.TransactionCanceledException:\n            if attempt == 1:\n                raise\n"
         },
-        "Tags": []
+        "Tags": [],
+        "ReservedConcurrentExecutions": {
+          "Fn::If": [
+            "ReserveEmergencyHoldConcurrency",
+            {
+              "Ref": "EmergencyHoldReservedConcurrency"
+            },
+            {
+              "Ref": "AWS::NoValue"
+            }
+          ]
+        }
       }
     },
     "EmergencyHoldFunctionLogGroup": {
@@ -1306,6 +1332,141 @@
         "TreatMissingData": "notBreaching",
         "Tags": []
       }
+    },
+    "EmergencyHoldFunctionRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "RoleName": {
+          "Fn::Sub": "cloud-glider-${Environment}-emergency-hold"
+        },
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "set-hold-and-record-terminal-error",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "ReadActiveHold",
+                  "Effect": "Allow",
+                  "Action": "dynamodb:GetItem",
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "StateTable",
+                      "Arn"
+                    ]
+                  },
+                  "Condition": {
+                    "ForAllValues:StringEquals": {
+                      "dynamodb:LeadingKeys": [
+                        "HOLD"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "Sid": "CreateHoldAndAuditRecord",
+                  "Effect": "Allow",
+                  "Action": [
+                    "dynamodb:ConditionCheckItem",
+                    "dynamodb:PutItem"
+                  ],
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "StateTable",
+                      "Arn"
+                    ]
+                  },
+                  "Condition": {
+                    "ForAllValues:StringLike": {
+                      "dynamodb:LeadingKeys": [
+                        "HOLD",
+                        "AUDIT#PROPAGATION"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "Sid": "RecordGenerationError",
+                  "Effect": "Allow",
+                  "Action": "dynamodb:UpdateItem",
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "StateTable",
+                      "Arn"
+                    ]
+                  },
+                  "Condition": {
+                    "ForAllValues:StringLike": {
+                      "dynamodb:LeadingKeys": [
+                        "GEN#*"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "Sid": "WriteFunctionLogs",
+                  "Effect": "Allow",
+                  "Action": [
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/cloud-glider-${Environment}-emergency-hold:log-stream:*"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "project",
+            "Value": "cloud-glider"
+          },
+          {
+            "Key": "environment",
+            "Value": {
+              "Ref": "Environment"
+            }
+          },
+          {
+            "Key": "owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "purpose",
+            "Value": "terminal-error-handler"
+          }
+        ]
+      }
+    }
+  },
+  "Conditions": {
+    "ReserveEmergencyHoldConcurrency": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "EmergencyHoldReservedConcurrency"
+            },
+            -1
+          ]
+        }
+      ]
     }
   }
 }

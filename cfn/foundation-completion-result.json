@@ -1,0 +1,67 @@
+{
+  "StackName": "cloud-glider-sandbox",
+  "Region": "us-west-2",
+  "ChangeSetName": "foundation-complete-reserved-concurrency-retry-20260922",
+  "ChangeSetId": "arn:aws:cloudformation:us-west-2:123456789012:changeSet/foundation-complete-reserved-concurrency-retry-20260922/97875f3a-c468-41f6-9e91-056f70a46335",
+  "ReviewedChanges": {
+    "Adds": 5,
+    "Modifies": 18,
+    "Removes": 0,
+    "Replacements": 0
+  },
+  "SupersededPreviewDeleted": true,
+  "StackStatus": "UPDATE_COMPLETE",
+  "OriginalFailure": "iam:GetInstanceProfile denied during AgentInstanceProfile creation before profile exists. Existing policy only covers configured /cloud-glider/ path.",
+  "RollbackFailure": "lambda:DeleteFunctionConcurrency denied on emergency-hold function.",
+  "PermissionCorrection": "iam/foundation-completion-repair-supplement.json",
+  "PermissionCorrectionApplied": true,
+  "Verification": {
+    "RepositoryTestsPassed": 38,
+    "OfflineLambdaBehaviorChecksPassed": 5,
+    "CloudTrailLogging": true,
+    "CloudTrailLatestDeliveryError": null,
+    "InfrastructureAuditLogEventsObserved": true,
+    "OperationalEmailSubscriptionConfirmed": true,
+    "BillingCloudFormationStackStatus": "REVIEW_IN_PROGRESS",
+    "CloudGliderBillingAlarmsFound": 0,
+    "BudgetRead": "Denied: budgets:ViewBudget",
+    "AnomalySubscriptionRead": "Denied: ce:GetAnomalySubscriptions",
+    "PostDeploymentDrift": {
+      "DetectionId": "62f1c940-b639-11f1-88cc-023e0f368e69",
+      "Status": "DETECTION_COMPLETE",
+      "StackDriftStatus": "IN_SYNC",
+      "InSyncResources": 29,
+      "DriftedResources": 0
+    },
+    "LiveLambdaBehavior": "Not invoked to avoid changing emergency-hold records",
+    "EmailDelivery": "Not tested; no test messages sent",
+    "ReservedConcurrency": 2,
+    "AccountConcurrencyQuota": 1000,
+    "UnreservedConcurrency": 998,
+    "LambdaState": "Active",
+    "LambdaLastUpdateStatus": "Successful",
+    "LambdaRoleTrust": "lambda.amazonaws.com only",
+    "LambdaInlinePolicyVerified": true,
+    "AgentInstanceProfileRoleVerified": true,
+    "OperationalAlarmsEnabledAndOK": 5,
+    "AuditRulesEnabled": 5,
+    "AuditRuleTargetsVerified": true,
+    "BucketPoliciesManuallyCompared": true,
+    "ControlGlobalItem": "Absent; propagation not initialized",
+    "CloudTrailLatestDeliveryTime": "2026-09-22T03:53:02.698Z"
+  },
+  "PermissionCorrectionAuthorized": true,
+  "PermissionCorrectionBlocker": null,
+  "RollbackRetryResult": "UPDATE_ROLLBACK_COMPLETE with cleanup warning; failed profile independently confirmed absent before fresh update.",
+  "RemainingPermissionGap": null,
+  "PermissionCorrectionVerification": {
+    "PolicyName": "cloud-glider-foundation-completion-repair",
+    "Attachment": "Inline policy on cloud-glider-sandbox-foundation-cfn",
+    "ExactPreparedPolicyMatch": true,
+    "CleanupResources": [
+      "arn:aws:iam::123456789012:instance-profile/cloud-glider-sandbox-agent",
+      "arn:aws:iam::123456789012:instance-profile/cloud-glider/cloud-glider-sandbox-agent"
+    ],
+    "Method": "Read back live role policy; no destructive cleanup test performed"
+  }
+}
