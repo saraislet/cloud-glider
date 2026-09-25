@@ -1,5 +1,7 @@
 # Cloud Glider
 
+This is a sanitized source copy. Read [public repository preparation](docs/public-repository.md) before deployment; historical recovery artifacts are examples only.
+
 Cloud Glider is a deliberately self-propagating EC2 compute pattern. Each
 generation may create its successor only through an approved, immutable
 CloudFormation template and only after configuration, security, health,

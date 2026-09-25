@@ -45,6 +45,8 @@ def aws(region, *args):
 
 def main():
     metadata = json.loads((ROOT / "cfn/foundation-recovery-change-set.json").read_text())
+    if ":123456789012:" in metadata["StackId"]:
+        raise ValueError("Sanitized historical snapshot: use privately prepared recovery artifacts")
     for relative, expected_hash in metadata["FilesSha256"].items():
         if hashlib.sha256((ROOT / relative).read_bytes()).hexdigest() != expected_hash:
             raise ValueError(f"Recovery artifact changed after preparation: {relative}")

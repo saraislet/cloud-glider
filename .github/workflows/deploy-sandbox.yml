@@ -16,6 +16,8 @@ jobs:
     name: Validate and deploy foundation
     runs-on: ubuntu-latest
     environment: sandbox
+    env:
+      EXPECTED_AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
 
     steps:
       - name: Check out repository
@@ -26,17 +28,26 @@ jobs:
           python3 -m unittest discover -s tests -v
           python3 scripts/validate_repository.py
 
+      - name: Validate expected account configuration
+        shell: bash
+        run: |
+          if ! [[ "$EXPECTED_AWS_ACCOUNT_ID" =~ ^[0-9]{12}$ ]]; then
+            exit 1
+          fi
+          test "$EXPECTED_AWS_ACCOUNT_ID" != "123456789012"
+
       - name: Authenticate to AWS using OIDC
         uses: aws-actions/configure-aws-credentials@v6.3.0
         with:
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           role-session-name: glider-${{ github.run_id }}
           aws-region: ${{ vars.AWS_REGION }}
-          allowed-account-ids: 123456789012
+          allowed-account-ids: ${{ secrets.AWS_ACCOUNT_ID }}
+          mask-aws-account-id: true
 
       - name: Verify AWS identity
         run: |
-          test "$(aws sts get-caller-identity --query Account --output text)" = "123456789012"
+          test "$(aws sts get-caller-identity --query Account --output text)" = "$EXPECTED_AWS_ACCOUNT_ID"
 
       - name: Validate CloudFormation
         run: |
@@ -49,7 +60,7 @@ jobs:
             --template-file cfn/foundation.yaml \
             --stack-name cloud-glider-sandbox \
             --region "${{ vars.AWS_REGION }}" \
-            --role-arn "${{ vars.CFN_SERVICE_ROLE_ARN }}" \
+            --role-arn "${{ secrets.CFN_SERVICE_ROLE_ARN }}" \
             --capabilities CAPABILITY_NAMED_IAM \
             --no-fail-on-empty-changeset \
             --parameter-overrides \
