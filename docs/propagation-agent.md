@@ -30,6 +30,15 @@ generation is below `max_generation`. It then:
 The predecessor is never deleted before step 7 succeeds. No code path executes
 the continuation change set.
 
+## Approved overlapping handoff design
+
+[Decision 0005](decisions/0005-overlapping-handoff.md) allows N deletion and
+N+2 creation to overlap after healthy N+1 passes continuation and owns CURRENT.
+The existing DeleteStack call is asynchronous, so some overlap is already
+possible; the required health refresh, durable retirement reconciliation, and
+conservative capacity accounting are not all implemented. Do not interpret
+this design approval as a completed runtime release. AMI baking is separate.
+
 ## DynamoDB records
 
 - `CONTROL/GLOBAL`: operator control, limits, timing, and approved immutable
@@ -78,7 +87,11 @@ running remains intact, while every fresh successor create/handoff gate fails
 closed. This does not cancel a separate bootstrap request; use its cancellation
 procedure or an emergency hold. For an incident, also create `HOLD/ACTIVE` through the approved emergency path.
 
-Do not delete stacks while a provisioning request may still be in flight.
+For manual cleanup, do not delete stacks while a provisioning request may
+still be in flight. The approved automated overlap is limited to the exact
+retired ancestor recorded by a successful handoff; it does not authorize
+arbitrary cleanup during provisioning. Already accepted CloudFormation
+operations may complete after stop/hold; do not assume they were cancelled.
 Inspect `CURRENT/GLOBAL`, `LOCK/PROPAGATION`, generation state records, and
 CloudFormation events first. Clear a hold only with
 `scripts/clear_emergency_hold.py` after reconciling those resources.

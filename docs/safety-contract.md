@@ -32,8 +32,24 @@ merged or deployed, even if it makes a happy-path propagation test pass.
 7. **Operator precedence.** Operator stop state takes precedence over retries,
    automated recovery, handoff, and propagation.
 8. **Bounded concurrency.** Three live generation instances is the absolute
-   ceiling. Preferred operation has two or fewer by preflighting N+2, retiring
-   N, and only then provisioning N+2. A fourth instance is an invariant breach.
+   ceiling, further limited by CONTROL. After fresh N+1 health validation,
+   successful continuation preflight, and conditional ownership transfer,
+   CloudFormation deletion of N may overlap creation of N+2. Completion of N
+   deletion is not a prerequisite when a slot remains. Retiring instances and
+   unresolved create requests consume slots until authoritative reconciliation
+   proves them absent; a deletion request alone does not release capacity.
+   Never admit N+3 while N, N+1, and N+2 occupy the three slots. A fourth
+   instance is an invariant breach. See [decision 0005](decisions/0005-overlapping-handoff.md).
+
+## Overlap release requirements
+
+This is an approved design change, not a claim that the existing runtime
+implements every guard. Before an overlap release, revalidate successor health
+after preflight and immediately before handoff, durably record retirement
+intent with handoff, reconcile deletion failures, and account for in-flight
+creates and terminating instances under the propagation lease. A fresh stop or
+hold blocks new create, handoff, and retirement submissions; accepted AWS
+operations can finish. Missing or ambiguous evidence blocks additional work.
 
 ## Accepted starting decisions
 
@@ -132,8 +148,15 @@ audit values.
   one ephemeral public IPv4 address and the no-inbound security group.
 - Change the template version, digest, or parameters; the agent rejects it.
 - Keep propagation enabled at `max_generation`; the chain stops.
-- Exercise preferred concurrency across multiple cycles; never observe four
-  live generations.
+- Delay N deletion while N+2 launches; permit overlap only after all handoff
+  gates and never admit a fourth instance. Test a configured ceiling of two.
+- Fail or time out deletion after handoff; retain durable retirement intent,
+  reconcile the exact stack, and prevent duplicate or unrelated deletion.
+- Expire N+1 health during preflight; do not hand off or retire N.
+- Stop or hold between handoff and either parallel submission; submit no new
+  operation after observing stop, and reconcile already accepted operations.
+- Delay preview-stack cleanup, API visibility, or lease release; preserve
+  capacity accounting and prevent duplicate creation across multiple cycles.
 
 ## Review rule
 

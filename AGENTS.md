@@ -22,7 +22,7 @@
 - Do not retire `N` until `N+1` is healthy and the continuation check for `N+2` passes.
 - For the first pass, the continuation check is an unexecuted CloudFormation **CREATE change set** for `N+2`, a fresh DynamoDB control check, and basic quota and capacity checks.
 - Provision a live `N+2` during the continuation check only when stronger proof is explicitly required.
-- Prefer two or fewer live generations. Three may exist temporarily to prove the next hop; four are never allowed.
+- Prefer two or fewer live generations. After healthy `N+1` passes continuation and conditionally takes ownership, CloudFormation deletion of `N` may overlap creation of `N+2`. Three may exist temporarily during this overlap or next-hop proof; four are never allowed. Count retiring generations until termination is confirmed and reconcile in-flight creation before admitting more work. See `docs/decisions/0005-overlapping-handoff.md`.
 - Lifecycle operations must be idempotent, deterministic, and safe to retry after partial failure.
 
 ### Health and readiness

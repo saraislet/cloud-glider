@@ -32,6 +32,12 @@ checks. The change set and its empty `REVIEW_IN_PROGRESS` stack are discarded.
 At `max_generation`, reaching the approved boundary satisfies the continuation
 gate without constructing an out-of-policy generation.
 
+## Later clarification
+
+[Decision 0005](0005-overlapping-handoff.md) permits predecessor deletion to
+overlap the next creation after healthy ownership transfer. It defines the
+capacity, retirement, and failure handling required before releasing that path.
+
 ## Consequences
 
 - No compiler, package index, long-lived key, direct EC2 mutation, or IAM

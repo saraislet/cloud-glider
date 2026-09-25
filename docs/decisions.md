@@ -29,7 +29,9 @@
   Billing alerts and notification-delivery verification are deferred to V2;
   they do not gate first-pass infrastructure creation.
 - Propagation: initial `max_generation=2`, ceiling `3`, and
-  `PREFLIGHT_THEN_RETIRE` concurrency.
+  `PREFLIGHT_THEN_RETIRE` concurrency. [Decision 0005](decisions/0005-overlapping-handoff.md)
+  permits retirement/next-create overlap after handoff; the mode still requires
+  preflight before retirement, but not completed deletion before next creation.
 - Retention: state, audit archives, and log groups are retained by default.
 
 ## Required before the first deployment
@@ -44,7 +46,7 @@
 Parameterized SCP/RCP candidates now live under `iam/organization/`. Render
 private candidates only with independently verified values using
 `scripts/render_guardrails.py`; source placeholders must not be attached. See
-[decision 0004](decisions/0003-permission-guardrails.md) and the
+[decision 0003](decisions/0003-permission-guardrails.md) and the
 [guardrail runbook](../iam/permission-guardrails.md) for required recovery tests.
 
 ## Revisit after the first trial
