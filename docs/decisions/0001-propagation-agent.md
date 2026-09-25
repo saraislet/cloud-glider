@@ -4,9 +4,10 @@ Status: accepted for the sandbox first pass
 
 ## Decision
 
-Use a dependency-free Python agent packaged as a deterministic `tar.gz`. The
-runtime calls AWS CLI v2, which is already required by generation bootstrap,
-instead of adding an SDK dependency or an on-instance build step.
+The original first pass used a dependency-free Python agent and AWS CLI v2.
+[Decision 0007](0007-persistent-sdk-clients.md) supersedes that transport with
+persistent boto3 clients and a pinned AMI-installed dependency manifest.
+The agent remains a deterministic `tar.gz`; no on-instance build is required.
 
 The approved template identity is its bucket, key, immutable S3 VersionId,
 SHA-256 digest, template version, and build ID. The approved executable identity
@@ -31,6 +32,12 @@ basic live-instance, regional offering, and standard-instance vCPU quota
 checks. The change set and its empty `REVIEW_IN_PROGRESS` stack are discarded.
 At `max_generation`, reaching the approved boundary satisfies the continuation
 gate without constructing an out-of-policy generation.
+
+## Later clarification
+
+[Decision 0005](0005-overlapping-handoff.md) permits predecessor deletion to
+overlap the next creation after healthy ownership transfer. It defines the
+capacity, retirement, and failure handling required before releasing that path.
 
 ## Consequences
 

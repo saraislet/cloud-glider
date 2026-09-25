@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from cloud_glider.agent import Agent, AgentConfig  # noqa: E402
-from cloud_glider.aws_cli import AwsCliGateway  # noqa: E402
+from cloud_glider.aws_sdk import AwsSdkGateway  # noqa: E402
 
 
 def main() -> int:
@@ -20,8 +20,11 @@ def main() -> int:
     parser.add_argument("--config", required=True)
     args = parser.parse_args()
     config = AgentConfig.load(args.config)
-    gateway = AwsCliGateway(config)
-    return Agent(config, gateway).run()
+    gateway = AwsSdkGateway(config)
+    try:
+        return Agent(config, gateway).run()
+    finally:
+        gateway.close()
 
 
 if __name__ == "__main__":

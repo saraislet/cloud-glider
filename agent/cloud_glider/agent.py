@@ -2,7 +2,7 @@
 
 The state machine depends on a small gateway interface so its safety behavior can
 be tested without AWS credentials.  The production gateway is implemented by
-``cloud_glider.aws_cli`` using only the Python standard library and AWS CLI v2.
+``cloud_glider.aws_sdk`` using reusable boto3 clients.
 """
 
 from __future__ import annotations
@@ -172,6 +172,7 @@ class Agent:
         self.lease_owner = f"{config.generation}:{gateway.instance_id}:{uuid.uuid4()}"
         self.heartbeat_sequence = 0
         self._own_stack: dict[str, Any] | None = None
+        self._poll_seconds = 5
 
     @property
     def generation_number(self) -> int:
@@ -266,14 +267,8 @@ class Agent:
             raise SafetyViolation("SELF_INSTANCE_IDENTITY_MISMATCH", "stack instance does not match IMDS")
         self._own_stack = stack
 
-    def heartbeat(self, control: dict[str, Any], hold_active: bool) -> None:
-        current = self.gateway.read_current()
-        is_current = (
-            current.get("generation") == self.config.generation
-            and current.get("stack_id") == self.config.stack_id
-            and current.get("instance_id") == self.gateway.instance_id
-            and current.get("status") == "CURRENT"
-        )
+    def heartbeat(self, control: dict[str, Any], hold_active: bool, current: dict[str, Any]) -> None:
+        is_current = self.is_current_owner(current)
         self.heartbeat_sequence += 1
         state = {
             **self._identity(),
@@ -299,8 +294,9 @@ class Agent:
             if current.get("generation") != self.config.generation:
                 raise SafetyViolation("BOOTSTRAP_OWNERSHIP_CONFLICT", "another generation claimed CURRENT")
 
-    def is_current_owner(self) -> bool:
-        current = self.gateway.read_current()
+    def is_current_owner(self, current: dict[str, Any] | None = None) -> bool:
+        if current is None:
+            current = self.gateway.read_current()
         return (
             current.get("status") == "CURRENT"
             and current.get("generation") == self.config.generation
@@ -515,14 +511,19 @@ class Agent:
             raise SafetyViolation("HANDOFF_CONDITION_FAILED", "CURRENT or lease ownership changed")
 
     def cycle(self) -> str:
+        self._poll_seconds = 5  # Retry incomplete reads without retaining an idle delay.
         control, hold = self.gateway.read_control_and_hold()
         control = self._validated_control(control)
-        self.heartbeat(control, hold)
-        if not self.is_current_owner():
+        self._poll_seconds = int(control["heartbeat_interval_seconds"])
+        current = self.gateway.read_current()
+        self.heartbeat(control, hold, current)
+        if not self.is_current_owner(current):
             return "CANDIDATE"
         if hold or not control["propagation_enabled"]:
+            self._poll_seconds = max(60, self._poll_seconds)
             return "STOPPED_BY_OPERATOR"
         if self.generation_number >= int(control["max_generation"]):
+            self._poll_seconds = max(60, self._poll_seconds)
             return "MAX_GENERATION_REACHED"
         lease_seconds = max(60, int(control["readiness_poll_seconds"]) * 4)
         now = int(self.clock())
@@ -549,14 +550,17 @@ class Agent:
         try:
             self.verify_self()
             self.ensure_bootstrap_ownership()
+            previous_result = None
             while True:
                 try:
                     result = self.cycle()
-                    self.log("cycle_complete", result=result)
+                    if result != previous_result:
+                        self.log("cycle_complete", result=result)
+                    previous_result = result
                 except TransientFailure as exc:
                     self.log("cycle_deferred", reason=str(exc))
-                control, _ = self.gateway.read_control_and_hold()
-                self.sleep(max(1, int(control.get("heartbeat_interval_seconds", 5))))
+                    previous_result = None  # Report recovery even if the result is unchanged.
+                self.sleep(self._poll_seconds)
         except SafetyViolation as exc:
             self.log("terminal_safety_violation", error_code=exc.code, reason=str(exc))
             self.gateway.invoke_hold(self.config.generation, exc.code, self.correlation_id)

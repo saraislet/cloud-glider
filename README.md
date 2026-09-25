@@ -36,8 +36,8 @@ through generation `2`.
   stream trigger; see [the bootstrap runbook](docs/bootstrap.md).
 - `cfn/generation.yaml` defines one generation EC2 instance. It deliberately
   contains no IAM or networking resources.
-- `agent/` contains the dependency-free Python propagation state machine and
-  its AWS CLI adapter.
+- `agent/` contains the Python propagation state machine and
+  its persistent boto3 SDK adapter.
 - `scripts/build_agent_artifact.py` creates the deterministic tarball consumed
   by generation user data.
 - `scripts/initialize_control.py` creates the initial DynamoDB control records
@@ -70,16 +70,33 @@ through generation `2`.
 - architecture: Linux `arm64`
 - approved instance type: `t4g.micro`
 - networking: public subnet, ephemeral public IPv4, and zero inbound rules
-- readiness: two healthy heartbeats, 30 seconds apart
-- readiness polling: 15 seconds
-- readiness timeout: 10 minutes after `CREATE_COMPLETE`
+- readiness: two healthy heartbeats, 5 seconds apart
+- readiness polling: 2 seconds
+- readiness timeout: 10 minutes for the successor wait, including stack creation
+- idle current-owner polling: at least 60 seconds when stopped or at the limit;
+  candidates retain the configured heartbeat cadence
+- monitoring: free EC2 basic metrics and one-minute status checks; the separate
+  per-generation status alarm remains enabled
+- state-table encryption: AWS-owned key (encrypted at rest without billed KMS usage)
 - configured billing thresholds (alerts deferred to V2): `$20` monthly budget,
   with `$10`, `$15`, and `$20` actual alerts, a `$20` forecast alert, and a `$2`
   anomaly threshold
 
+See [the reduced-cost decision](docs/decisions/0004-reduced-cost-operation.md)
+for the implemented scope, release procedure, and future fan-out cost targets.
+
 ## Validation
 
-Run the dependency-free checks locally:
+Install the pinned SDK dependencies into a virtual environment before running
+all checks (transport tests are skipped if boto3 is absent):
+
+```sh
+python3 -m venv /tmp/cloud-glider-tests
+/tmp/cloud-glider-tests/bin/python -m pip install -r agent/requirements.txt
+/tmp/cloud-glider-tests/bin/python -m unittest discover -s tests -v
+```
+
+The state-machine and repository checks can also run without SDK dependencies:
 
 ```sh
 python3 -m unittest discover -s tests -v
@@ -91,6 +108,12 @@ Build the agent artifact and record the printed SHA-256 digest:
 ```sh
 python3 scripts/build_agent_artifact.py --output dist/cloud-glider-agent.tar.gz
 ```
+
+The tarball includes `requirements.txt`, not installed third-party packages.
+The approved AMI must install these dependencies into the interpreter used by
+`bin/cloud-glider`; no package installation occurs at boot. AWS CLI is still
+needed by the existing artifact-download bootstrap and operator scripts. See
+[the SDK decision](docs/decisions/0007-persistent-sdk-clients.md).
 
 Upload that exact tarball under `generation/` in the versioned artifact bucket.
 Pass its bucket, key, immutable S3 VersionId, and digest to both the initial
@@ -107,7 +130,7 @@ cfn-lint cfn/permission-boundaries.json cfn/network.yaml cfn/billing-alerts.yaml
 Runtime deployment requires independently administered role boundaries and an
 exact versioned generation template URL. Follow [the guardrail rollout](iam/permission-guardrails.md)
 before deployment. Organization policies are local review candidates and are not
-attached automatically. See [decision 0003](docs/decisions/0003-permission-guardrails.md).
+attached automatically. See [decision 0004](docs/decisions/0003-permission-guardrails.md).
 
 ## Deployment order
 

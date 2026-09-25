@@ -32,8 +32,35 @@ merged or deployed, even if it makes a happy-path propagation test pass.
 7. **Operator precedence.** Operator stop state takes precedence over retries,
    automated recovery, handoff, and propagation.
 8. **Bounded concurrency.** Three live generation instances is the absolute
-   ceiling. Preferred operation has two or fewer by preflighting N+2, retiring
-   N, and only then provisioning N+2. A fourth instance is an invariant breach.
+   ceiling, further limited by CONTROL. After fresh N+1 health validation,
+   successful continuation preflight, and conditional ownership transfer,
+   CloudFormation deletion of N may overlap creation of N+2. Completion of N
+   deletion is not a prerequisite when a slot remains. Retiring instances and
+   unresolved create requests consume slots until authoritative reconciliation
+   proves them absent; a deletion request alone does not release capacity.
+   Never admit N+3 while N, N+1, and N+2 occupy the three slots. A fourth
+   instance is an invariant breach. See [decision 0005](decisions/0005-overlapping-handoff.md).
+
+## Concurrent readiness and continuation preflight
+
+Once the approved N+1 stack identity and parameters are known, its boot/readiness
+wait may overlap an unexecuted N+2 CREATE change-set preflight. No N+2 compute
+is created by preflight. Both activities must succeed before handoff or N
+retirement, with fresh health, control, identity, ownership and capacity checks
+at the join. Failure, timeout, lease loss or ambiguous evidence blocks handoff
+and preserves N. Track and reconcile preview cleanup without weakening stop/hold
+precedence. At max_generation use the existing boundary exception. See
+[decision 0006](decisions/0006-preflight-during-successor-boot.md).
+
+## Overlap release requirements
+
+This is an approved design change, not a claim that the existing runtime
+implements every guard. Before an overlap release, revalidate successor health
+after preflight and immediately before handoff, durably record retirement
+intent with handoff, reconcile deletion failures, and account for in-flight
+creates and terminating instances under the propagation lease. A fresh stop or
+hold blocks new create, handoff, and retirement submissions; accepted AWS
+operations can finish. Missing or ambiguous evidence blocks additional work.
 
 ## Accepted starting decisions
 
@@ -60,8 +87,16 @@ merged or deployed, even if it makes a happy-path propagation test pass.
 - An eligible heartbeat must match the expected generation ID, instance ID,
   stack ID, complete template identity, bootstrap version, and observed
   propagation state.
-- Readiness is polled every 15 seconds for at most 10 minutes after
-  `CREATE_COMPLETE`. These values must be revisited after the first trial run.
+- Readiness is polled every 2 seconds. The 10-minute successor wait includes
+  stack creation; heartbeat acceptance begins only after `CREATE_COMPLETE`.
+  Candidates retain their configured heartbeat cadence. Only a current owner
+  blocked by operator control, hold, or the generation boundary uses a minimum
+  60-second loop interval. Every provisioning and handoff gate still checks
+  fresh control and ownership; idle polling is not permission caching.
+- EC2 basic monitoring retains free one-minute status-check metrics. The
+  separate status alarm remains corroborating telemetry, not a readiness gate.
+- The DynamoDB state table remains encrypted with an AWS-owned key. Disabling
+  its CloudFormation `SSEEnabled` option selects this key, not plaintext storage.
 - The approved generation definition is the template bucket/key, immutable S3
   VersionId, SHA-256 digest, template version, and Git commit or build ID. The
   agent executable is independently approved by bucket/key, immutable S3
@@ -124,8 +159,20 @@ audit values.
   one ephemeral public IPv4 address and the no-inbound security group.
 - Change the template version, digest, or parameters; the agent rejects it.
 - Keep propagation enabled at `max_generation`; the chain stops.
-- Exercise preferred concurrency across multiple cycles; never observe four
-  live generations.
+- Delay N deletion while N+2 launches; permit overlap only after all handoff
+  gates and never admit a fourth instance. Test a configured ceiling of two.
+- Fail or time out deletion after handoff; retain durable retirement intent,
+  reconcile the exact stack, and prevent duplicate or unrelated deletion.
+- Expire N+1 health during preflight; do not hand off or retire N.
+- Complete readiness and preflight in either order; require both before handoff.
+  Fail or time out either activity, change control or identity during the join,
+  or lose the lease; preserve N and reconcile the exact preview without execution.
+- Restart while both activities are in flight; reconcile deterministic requests
+  and rebuild fresh readiness evidence without duplicate preview stacks.
+- Stop or hold between handoff and either parallel submission; submit no new
+  operation after observing stop, and reconcile already accepted operations.
+- Delay preview-stack cleanup, API visibility, or lease release; preserve
+  capacity accounting and prevent duplicate creation across multiple cycles.
 
 ## Review rule
 

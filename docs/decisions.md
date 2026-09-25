@@ -12,10 +12,13 @@
   networking directly and no SSH path is created.
 - Region and compute: `us-west-2`, Linux `arm64`, and `t4g.micro` only.
 - Readiness: two consecutive healthy heartbeats at a 5-second cadence,
-  2-second predecessor polling, and a 10-minute timeout after `CREATE_COMPLETE`.
+  2-second predecessor polling, and a 10-minute successor wait including stack
+  creation. An idle current owner polls no faster than once per 60 seconds.
 - Runtime defaults: `config/runtime-defaults.json` is authoritative for values
   written into initial control state. Agents read those values from DynamoDB.
-- Control store: DynamoDB, not S3.
+- Control store: DynamoDB, not S3; encrypted at rest with an AWS-owned key.
+- Monitoring: basic EC2 monitoring, with the separate one-minute status-check
+  alarm retained. See [decision 0004](decisions/0004-reduced-cost-operation.md).
 - Template identity: bucket/key, immutable S3 VersionId, SHA-256 digest,
   template version, and Git commit or build ID are all required. Agent artifact
   identity independently requires bucket/key, immutable S3 VersionId, and
@@ -26,7 +29,12 @@
   Billing alerts and notification-delivery verification are deferred to V2;
   they do not gate first-pass infrastructure creation.
 - Propagation: initial `max_generation=2`, ceiling `3`, and
-  `PREFLIGHT_THEN_RETIRE` concurrency.
+  `PREFLIGHT_THEN_RETIRE` concurrency. [Decision 0005](decisions/0005-overlapping-handoff.md)
+  permits retirement/next-create overlap after handoff; the mode still requires
+  preflight before retirement, but not completed deletion before next creation.
+- [Decision 0006](decisions/0006-preflight-during-successor-boot.md) permits
+  unexecuted next-hop preflight during successor boot, with a fresh joined
+  validation gate before handoff. Runtime implementation remains pending.
 - Retention: state, audit archives, and log groups are retained by default.
 
 ## Required before the first deployment
@@ -56,10 +64,11 @@ private candidates only with independently verified values using
 
 ## Sandbox cost estimate
 
-At 730 hours per month, one steady generation is approximately `$12.52` before
+At 730 hours per month, one steady generation is approximately `$10.42` before
 variable log ingestion, API requests, alarms, and retained storage: about
 `$6.13` for `t4g.micro`, `$3.65` for one public IPv4 address, `$0.64` for an
-8-GiB gp3 root volume, and up to `$2.10` for seven detailed-monitoring metrics.
+8-GiB gp3 root volume, and no charge for basic EC2 monitoring. Detailed
+monitoring is disabled; the previous seven-metric model added about `$2.10`.
 Temporary two-generation overlap is prorated by the hours of overlap. The `$20`
 budget is a planning target while billing alerts are deferred; verify current
 `us-west-2` prices in AWS Pricing Calculator before the first trial.

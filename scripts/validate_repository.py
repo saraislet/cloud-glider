@@ -63,7 +63,7 @@ def main() -> int:
     initializer_path = ROOT / "scripts" / "initialize_control.py"
     clear_hold_path = ROOT / "scripts" / "clear_emergency_hold.py"
     agent_path = ROOT / "agent" / "cloud_glider" / "agent.py"
-    gateway_path = ROOT / "agent" / "cloud_glider" / "aws_cli.py"
+    gateway_path = ROOT / "agent" / "cloud_glider" / "aws_sdk.py"
     builder_path = ROOT / "scripts" / "build_agent_artifact.py"
     foundation = foundation_path.read_text()
     billing = billing_path.read_text()
@@ -175,8 +175,8 @@ def main() -> int:
     ):
         require(agent, marker, str(agent_path))
     for marker in (
-        '"--change-set-type", "CREATE"',
-        "transact-write-items",
+        'ChangeSetType="CREATE"',
+        "transact_write_items",
         "attribute_not_exists(PK) AND attribute_not_exists(SK)",
         "service-quotas",
     ):
