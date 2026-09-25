@@ -20,11 +20,15 @@ created and terminal leaf retirement is not introduced.
 
 ## Required ordering
 
-1. Under the propagation lease, create or reconcile approved N+1 and collect
-   the required consecutive healthy heartbeats after CREATE_COMPLETE.
-2. Pass the unexecuted N+2 CREATE change-set preflight, including fresh control
-   and quota checks. Reconcile removal of its empty preview stack before real
-   N+2 creation; a DELETE_IN_PROGRESS preview is not a usable successor.
+1. Under the propagation lease, create or reconcile approved N+1. Once its
+   exact stack identity and approved parameters are known, begin two bounded
+   activities: wait for CREATE_COMPLETE and the required consecutive eligible
+   heartbeats, and prepare the unexecuted N+2 CREATE change-set preflight.
+2. Join both successful results. The preflight requires fresh control, identity,
+   quota and capacity checks before submission; it never executes or launches
+   N+2. Reconcile removal of its empty preview stack before real N+2 creation;
+   a DELETE_IN_PROGRESS preview is not a usable successor. At max_generation,
+   the existing boundary exception replaces the preflight activity.
 3. Re-read N+1 health after preflight. Check freshness, identity, ownership,
    current control and hold; never transfer using stale preflight-era evidence.
 4. Atomically transfer CURRENT to N+1 and persist retirement intent identifying
@@ -85,10 +89,9 @@ claimed by this documentation change. IAM and deployed infrastructure are unchan
 - Replace repeated AWS CLI processes with persistent SDK clients. Pin and
   package dependencies through the separate AMI/release work; preserve retry,
   timeout, identity and control semantics. Benchmark before claiming savings.
-- Investigate overlapping unexecuted continuation preflight with N+1 boot once
-  its stack identity is known. This is a subsequent design decision, not enabled
-  here; revalidate health/control after both finish and resolve preview cleanup.
-  Its ideal wait changes from boot + preflight to max(boot, preflight).
+- The approved [boot/preflight overlap](0006-preflight-during-successor-boot.md)
+  changes the ideal wait from boot + preflight to max(boot, preflight), plus
+  final revalidation and cleanup. Runtime implementation is still pending.
 - Avoid unnecessary delay after ownership acquisition, while retaining the
   candidate heartbeat cadence and fresh gates. Current active polling is already
   two seconds for readiness and five seconds for heartbeats; do not weaken the

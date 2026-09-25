@@ -41,6 +41,17 @@ merged or deployed, even if it makes a happy-path propagation test pass.
    Never admit N+3 while N, N+1, and N+2 occupy the three slots. A fourth
    instance is an invariant breach. See [decision 0005](decisions/0005-overlapping-handoff.md).
 
+## Concurrent readiness and continuation preflight
+
+Once the approved N+1 stack identity and parameters are known, its boot/readiness
+wait may overlap an unexecuted N+2 CREATE change-set preflight. No N+2 compute
+is created by preflight. Both activities must succeed before handoff or N
+retirement, with fresh health, control, identity, ownership and capacity checks
+at the join. Failure, timeout, lease loss or ambiguous evidence blocks handoff
+and preserves N. Track and reconcile preview cleanup without weakening stop/hold
+precedence. At max_generation use the existing boundary exception. See
+[decision 0006](decisions/0006-preflight-during-successor-boot.md).
+
 ## Overlap release requirements
 
 This is an approved design change, not a claim that the existing runtime
@@ -153,6 +164,11 @@ audit values.
 - Fail or time out deletion after handoff; retain durable retirement intent,
   reconcile the exact stack, and prevent duplicate or unrelated deletion.
 - Expire N+1 health during preflight; do not hand off or retire N.
+- Complete readiness and preflight in either order; require both before handoff.
+  Fail or time out either activity, change control or identity during the join,
+  or lose the lease; preserve N and reconcile the exact preview without execution.
+- Restart while both activities are in flight; reconcile deterministic requests
+  and rebuild fresh readiness evidence without duplicate preview stacks.
 - Stop or hold between handoff and either parallel submission; submit no new
   operation after observing stop, and reconcile already accepted operations.
 - Delay preview-stack cleanup, API visibility, or lease release; preserve

@@ -32,6 +32,9 @@
   `PREFLIGHT_THEN_RETIRE` concurrency. [Decision 0005](decisions/0005-overlapping-handoff.md)
   permits retirement/next-create overlap after handoff; the mode still requires
   preflight before retirement, but not completed deletion before next creation.
+- [Decision 0006](decisions/0006-preflight-during-successor-boot.md) permits
+  unexecuted next-hop preflight during successor boot, with a fresh joined
+  validation gate before handoff. Runtime implementation remains pending.
 - Retention: state, audit archives, and log groups are retained by default.
 
 ## Required before the first deployment

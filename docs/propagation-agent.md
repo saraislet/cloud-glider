@@ -35,7 +35,10 @@ the continuation change set.
 [Decision 0005](decisions/0005-overlapping-handoff.md) allows N deletion and
 N+2 creation to overlap after healthy N+1 passes continuation and owns CURRENT.
 The existing DeleteStack call is asynchronous, so some overlap is already
-possible; the required health refresh, durable retirement reconciliation, and
+possible. [Decision 0006](decisions/0006-preflight-during-successor-boot.md) also
+permits unexecuted N+2 preflight during N+1 boot, joining both successful results
+before handoff. The runtime still performs those waits sequentially; the
+required health refresh, durable retirement reconciliation, and
 conservative capacity accounting are not all implemented. Do not interpret
 this design approval as a completed runtime release. AMI baking is separate.
 
