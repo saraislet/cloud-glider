@@ -76,9 +76,10 @@ archive/AMI, reviewed pins and an observed bounded test before claiming improvem
 ## Polling configuration review
 
 See the [source-only polling evaluation](ec2-polling-evaluation.md) for the
-one-second EC2 ownership loop, separately spaced heartbeats, optional one-second
-readiness configuration, batched capacity identities and unchanged image
+one-second EC2 ownership loop, separately spaced heartbeats, operator-selected one-second
+readiness default, batched capacity identities and unchanged image
 verification. Review increased DynamoDB reads and lease-renewal writes before
-deployment. The shared readiness default remains two seconds; selecting one
-second for an EC2 cycle requires reviewed CONTROL configuration with heartbeat
-interval five seconds and two required healthy heartbeats preserved.
+deployment. New EC2 CONTROL initialization selects one second; CloudFormation initialization
+retains two seconds. Existing CONTROL records require an approved configuration
+update during deployment; initialization cannot overwrite them. Heartbeat interval
+five seconds and two required healthy heartbeats remain unchanged.

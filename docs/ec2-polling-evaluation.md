@@ -19,8 +19,10 @@ predecessor termination retain their gates. Stopped owners retain their existing
 can increase requests under persistent failure and must be monitored.
 
 Readiness already supports a CONTROL `readiness_poll_seconds` value of 1.
-The shared runtime default remains 2 to avoid changing legacy CloudFormation
-cycles. This is a tested configuration option, not an activated runtime change.
+The operator subsequently requested activation of one-second readiness. New EC2
+CONTROL initialization now selects `ec2_readiness_poll_seconds=1`; the legacy
+CloudFormation default remains 2. Existing DynamoDB CONTROL records are not
+overwritten by initialization, and no live AWS setting was changed.
 The EC2 failure-path suite now uses one-second readiness polling. A deterministic
 healthy fixture becomes eligible after 5 seconds with one-second polling versus
 6 seconds with two-second polling, and requires fresh controls and lease renewal
@@ -84,14 +86,14 @@ October 3, 2026: [AWS pricing](https://aws.amazon.com/dynamodb/pricing/),
 
 Before deployment, explicitly review this request-cost increase, bake the changed
 agent into a matching verified image, review immutable artifact/template pins,
-and approve whether to set EC2 readiness polling to 1. Keep heartbeat interval 5,
+and apply the operator-approved EC2 readiness polling value of 1. Keep heartbeat interval 5,
 required heartbeats 2 and all readiness/continuation/retirement gates. Any future
 bounded benchmark needs separate operator authorization and comparable trials
 with request counts and all safety gates recorded. This work authorizes none.
 
 ## Validation receipt
 
-All 268 local unittest cases passed with the pinned SDK dependencies available,
+All 269 local unittest cases passed with the pinned SDK dependencies available,
 including stop/HOLD, duplicate execution, failed handoff, ambiguous health,
 retirement/restart recovery and SDK request validation. Repository safety checks,
 Black checks on changed Python files and `git diff --check` passed.
