@@ -285,7 +285,7 @@ class AgentTests(unittest.TestCase):
         self.assertNotIn("heartbeat", gateway.calls)
         self.assertNotIn("create", gateway.calls)
 
-    def test_baked_image_parameters_survive_successor_and_continuation(self):
+    def test_baked_image_parameters_survive_successor(self):
         clock = FakeClock()
         gateway = FakeGateway(config(), clock)
         parameters = gateway.own_parameters()
@@ -473,15 +473,61 @@ class AgentTests(unittest.TestCase):
             agent.cycle()
         self.assertNotIn("delete-predecessor", gateway.calls)
 
-    def test_continuation_is_unexecuted_preflight_and_is_discarded(self):
+    def test_handoff_creates_only_real_successor_without_preview(self):
         clock = FakeClock()
         gateway = FakeGateway(config(), clock, [control(max_generation=3)])
         agent = self.make_agent(gateway, clock)
         self.assertEqual(agent.cycle(), "HANDOFF_COMPLETE")
         self.assertIn("capacity", gateway.calls)
-        self.assertIn("preflight", gateway.calls)
-        self.assertIn("discard-preflight", gateway.calls)
-        self.assertLess(gateway.calls.index("discard-preflight"), gateway.calls.index("handoff"))
+        self.assertEqual(gateway.calls.count("create"), 1)
+        self.assertNotIn("preflight", gateway.calls)
+        self.assertNotIn("discard-preflight", gateway.calls)
+
+    def test_real_successor_changes_before_handoff_preserve_predecessor(self):
+        for mutation in ("parameters", "role", "instance", "health", "stale"):
+            with self.subTest(mutation=mutation):
+                clock = FakeClock()
+                gateway = FakeGateway(config(), clock)
+                agent = self.make_agent(gateway, clock)
+                wait = agent.wait_for_healthy_successor
+
+                def wait_then_change(*args):
+                    state = wait(*args)
+                    if mutation in ("parameters", "role"):
+                        describe = gateway.describe_stack
+
+                        def changed_stack(identifier):
+                            stack = describe(identifier)
+                            if identifier == "successor-stack-id":
+                                stack = dict(stack)
+                                if mutation == "parameters":
+                                    stack["Parameters"] = {**stack["Parameters"], "ApprovedImageId": "ami-wrong"}
+                                else:
+                                    stack["RoleARN"] = "wrong-role"
+                            return stack
+
+                        gateway.describe_stack = changed_stack
+                    elif mutation == "instance":
+                        gateway.stack_instance_id = lambda identifier: "i-wrong"
+                    else:
+                        read = gateway.read_generation_state
+
+                        def changed_health(generation):
+                            state = read(generation)
+                            if mutation == "health":
+                                state["workload_healthy"] = False
+                            else:
+                                state["heartbeat_at_epoch"] -= 1000
+                            return state
+
+                        gateway.read_generation_state = changed_health
+                    return state
+
+                agent.wait_for_healthy_successor = wait_then_change
+                with self.assertRaises((SafetyViolation, TransientFailure)):
+                    agent.cycle()
+                self.assertNotIn("handoff", gateway.calls)
+                self.assertNotIn("delete-predecessor", gateway.calls)
 
     def test_ambiguous_health_times_out_without_retirement(self):
         clock = FakeClock()

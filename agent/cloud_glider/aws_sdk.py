@@ -601,53 +601,6 @@ class AwsSdkGateway:
                 "standard-instance vCPU quota has insufficient headroom"
             )
 
-    def create_preflight(self, specification: dict[str, Any]) -> str:
-        token = self._begin_provisioning(specification)
-        result = self._call(
-            "cloudformation",
-            "create_change_set",
-            StackName=specification["stack_name"],
-            ChangeSetName=specification["change_set_name"],
-            ChangeSetType="CREATE",
-            TemplateURL=self._template_url(specification),
-            Parameters=self._parameters(specification),
-            RoleARN=specification["role_arn"],
-            ClientToken=specification["client_token"],
-            Description="Cloud Glider unexecuted continuation preflight",
-            Tags=self._tags(specification),
-        )
-        self._record_submission(specification, result["StackId"])
-        self._end_provisioning(token)
-        return result["Id"]
-
-    def describe_change_set(self, change_set_id: str) -> dict[str, Any]:
-        return self._call(
-            "cloudformation", "describe_change_set", ChangeSetName=change_set_id
-        )
-
-    def discard_preflight(
-        self, change_set_id: str, stack_name: str, role_arn: str
-    ) -> None:
-        self._call(
-            "cloudformation",
-            "delete_change_set",
-            ChangeSetName=change_set_id,
-            allow_failure=True,
-        )
-        stack = self.describe_stack(stack_name)
-        if (
-            stack
-            and stack.get("Parameters", {}).get("RequestId") == self.config.request_id
-            and stack.get("StackStatus") == "REVIEW_IN_PROGRESS"
-        ):
-            self._call(
-                "cloudformation",
-                "delete_stack",
-                StackName=stack["StackId"],
-                RoleARN=role_arn,
-                allow_failure=True,
-            )
-
     def handoff(
         self, expected: dict[str, Any], successor: dict[str, Any], audit: dict[str, Any]
     ) -> bool:

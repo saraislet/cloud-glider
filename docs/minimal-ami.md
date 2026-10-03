@@ -9,7 +9,7 @@ integrity verification prevents startup. S3 mode rejects a baked image.
 Both templates require baked mode for roots below 8 GiB.
 
 The agent carries the AMI, delivery mode, root device and size through successor
-creation and the unexecuted continuation change set. RequestId,
+creation. RequestId,
 GenerationTableName, lifecycle fencing, cross-table handoff and operator
 controls remain part of the current contract. No IAM or security-policy
 expansion is included in this source reconciliation.

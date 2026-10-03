@@ -1,5 +1,7 @@
 # Decision 0006: continuation preflight during successor boot
 
+> Continuation/preflight requirements are superseded by [decision 0018](0018-remove-continuation-preflight.md). Other safety requirements remain.
+
 Status: accepted design; runtime implementation and validation pending.
 
 ## Decision
