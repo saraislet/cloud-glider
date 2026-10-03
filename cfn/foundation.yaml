@@ -1260,7 +1260,7 @@ Resources:
                   StringEquals:
                     ec2:InstanceType: t4g.micro
                     ec2:MetadataHttpTokens: required
-                    ec2:InstanceProfile: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:instance-profile/cloud-glider-${Environment}-agent'
+                    ec2:InstanceProfile: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:instance-profile/cloud-glider/cloud-glider-${Environment}-agent'
                     aws:RequestTag/project: cloud-glider
                     aws:RequestTag/environment: !Ref Environment
                     aws:RequestTag/purpose: generation-compute

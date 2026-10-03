@@ -1,0 +1,582 @@
+{
+  "repository": "saraislet/cloud-glider",
+  "region": "us-west-2",
+  "account_id": "482268323955",
+  "image_id": "ami-01072534d8819af9f",
+  "snapshot_id": "snap-02226e5e1058469fb",
+  "source_commit": "e0273176d6ba2090bfa91a6cdf4a62a06d0ad5e3",
+  "merged_source_commit": "24212a52916ecc1f5a15f02f2fc45c1549c4ccd0",
+  "source_tree_matches_merged_main": true,
+  "source_pull_request": "https://github.com/saraislet/cloud-glider/pull/11",
+  "agent_sha256": "8015a49ed4a6bd96c2b770d6a2cb9c14c52433c67fa5725caefa3bb2bd66ff94",
+  "agent_delivery_mode": "baked",
+  "root_volume_gib": 2,
+  "architecture": "arm64",
+  "root_encrypted": true,
+  "source_ami": "ami-0476747aeb146ea00",
+  "build_duration_seconds": 686,
+  "packer_run_uuid": "c2089f96-a19e-593b-8beb-bd7392dfca6b",
+  "metadata_checks_passed": true,
+  "release_approved": true,
+  "deployment_status": "DEPLOYED_TEN_GENERATION_TEST_PASSED_CLEANED",
+  "smoke": {
+    "result": "CLOUD_GLIDER_AMI_SMOKE_PASS",
+    "free_bytes": 632487936,
+    "agent_sha256": "8015a49ed4a6bd96c2b770d6a2cb9c14c52433c67fa5725caefa3bb2bd66ff94",
+    "python": "3.12.3",
+    "ec2_contract": "EC2_BAKED_CONTRACT_PASS",
+    "instance_id": "i-0d27cd79e08df0605",
+    "instance_type": "t4g.micro",
+    "instance_profile": null,
+    "stack_deleted": true,
+    "verification": "Explicit CloudFormation WaitCondition success payload; console API returned no output.",
+    "runtime_agent_started": false
+  },
+  "cleanup": {
+    "builder_instance_id": "i-03c7301d6cb46c808",
+    "builder_terminated": true,
+    "smoke_terminated": true,
+    "target_and_smoke_volumes_deleted": [
+      "vol-06b5cdabfa3305aea",
+      "vol-04ce354249d026deb"
+    ],
+    "attached_volumes": 0,
+    "temporary_keypair_deleted": true,
+    "active_builder_sessions": 0
+  },
+  "validation": {
+    "tests_passed": 257,
+    "cfn_lint": "PASS",
+    "repository_checks": "PASS",
+    "rendered_bootstrap": "PASS",
+    "failure_paths": "Includes disabled propagation, HOLD, duplicate/ambiguous submission, ambiguous readiness, failed handoff and failed baked image verification.",
+    "ci": "validate / safety-contract: PASS",
+    "live_test": "Exact LT/image/profile, fresh readiness, eight expected DryRunOperation continuation responses, nine handoffs and verified predecessor retirement passed."
+  },
+  "performance": {
+    "propagation_benchmark": "PASS_TEN_GENERATIONS_NINE_HANDOFFS",
+    "measured_speedup": null,
+    "baseline_mean_handoff_interval_seconds": 39.481,
+    "baseline_ten_generation_duration_seconds": 405.991,
+    "phase_timings_available": false,
+    "phase_timing_limitation": "Internal phase JSON remains in instance journals; no remote export in this release.",
+    "first_attempt": {
+      "request_id": "3",
+      "seed_creation_to_ownership_seconds": 44.093,
+      "launches": 1,
+      "handoffs": 0,
+      "sampled_live_peak": 1,
+      "failure": "Client.UnauthorizedOperation: ec2:InstanceProfile condition omitted existing /cloud-glider/ path.",
+      "duplicate_launches": 0,
+      "durable_intent_preserved_until_operator_inspection": true,
+      "reconciliation": "Exact CloudTrail rejection and absent client-token instance verified; closed-gate conditional transaction released only the cleanup marker and retained GEN intent until supported cleanup."
+    },
+    "comparison": {
+      "baseline_seed_startup_seconds": 50.662,
+      "ec2_seed_startup_seconds": 37.239,
+      "baseline_mean_ownership_interval_seconds": 39.481,
+      "ec2_mean_ownership_interval_seconds": 56.391,
+      "baseline_ten_generation_duration_seconds": 405.991,
+      "ec2_ten_generation_duration_seconds": 544.756,
+      "total_duration_increase_percent": 34.179,
+      "mean_interval_increase_percent": 42.831,
+      "baseline_sampled_live_peak": 3,
+      "ec2_sampled_live_peak": 2,
+      "interpretation": "Correct bounded propagation passed, but this single serialized-retirement run was slower. Different source/image, continuation proof and concurrency behavior prevent isolating CloudFormation overhead."
+    }
+  },
+  "remaining_work": [
+    "Separate user-requested implementation of overlapping launch and predecessor retirement; no deployment or additional benchmark is authorized by this receipt."
+  ],
+  "evidence_manifest": [
+    {
+      "file": "ami-build-manifest.json",
+      "sha256": "e83740f5f793d8bf9283484f4f2dcfe6d67ab735ba325ce3bb02e7bf32efe6b9"
+    },
+    {
+      "file": "ec2-image-metadata.json",
+      "sha256": "0699b5ea61039375522655be121e56dce4111923c3954f56b332ddcf78ab17fa"
+    },
+    {
+      "file": "packer-build.log",
+      "sha256": "189f5834973ddb244cf187b0d8f019520127d118c77518da02831616a77ae85c"
+    },
+    {
+      "file": "smoke-status.json",
+      "sha256": "807c67953ca71f419a167c60ab66fe0276848d0b40031723f626808b62fd1626"
+    },
+    {
+      "file": "smoke-result.json",
+      "sha256": "665458263c9b40409ec2cc9113ab37a8c496ad012283739b37dab2b97539b480"
+    },
+    {
+      "file": "smoke-instance-before-cleanup.json",
+      "sha256": "236098bb4fa2a4be713ccfd3d37db77b575bf9db6019950758e1758a4fbc2f38"
+    },
+    {
+      "file": "smoke-cleanup-status.json",
+      "sha256": "9b6d4b05a51237c8cb8ccdf7cfbc72f8b00f010008c03c0af7732e28a6e5e723"
+    },
+    {
+      "file": "instances-final.json",
+      "sha256": "1438615aa15218c3b25a07c716353b44b1fb561ba4c90a0fb136cdffad427ab8"
+    },
+    {
+      "file": "attached-volumes-final.json",
+      "sha256": "5bb1ef67ec6cda7a24020d0c0ddfa919d96f348d36e16bd083f5960efd321a3e"
+    },
+    {
+      "file": "exact-volume-cleanup.json",
+      "sha256": "cb705ac63382180871632a923de3c8370c30b8a7da267ec9b8cb71a4944b378a"
+    },
+    {
+      "file": "builder-keypair-final.json",
+      "sha256": "42d563d9baca66af85867987a27fc575e964a63059d9d1cb8c12ca75558fbc80"
+    },
+    {
+      "file": "builder-sessions-final.json",
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+    },
+    {
+      "file": "state-after.json",
+      "sha256": "ad332ec07e29324f0484623ec56ab46a6800b5ee604f6f5c514ff1a2d9a067ea"
+    },
+    {
+      "file": "ec2-rollout/runinstances-events.json",
+      "sha256": "09b28aaa4af1bad5ec3eea0af0e5a637c4d416c744cc1e8e79c1f5bdb91e7577"
+    },
+    {
+      "file": "ec2-rollout/denied-submission-inspection.json",
+      "sha256": "7d02cf5e83f53aac5db522156b2d2a9d80e2f0fa2ba7dba9105750bf8d2eadc3"
+    },
+    {
+      "file": "ec2-rollout/denied-submission-reconciliation-transaction.json",
+      "sha256": "88babf21393f77317651a00fd7cab2b9b1a5f15e78630cbf9e4895aaf5e026b6"
+    },
+    {
+      "file": "ec2-rollout/attempt-1/benchmark-monitor-result.json",
+      "sha256": "18c47b7ecc9986a2fce744e692993bc6fc9167cd6b3bfd22393dc71948c79187"
+    },
+    {
+      "file": "ec2-rollout/attempt-1/benchmark-current-000000.json",
+      "sha256": "fb64ed108675fa75c5d1afbf82322bac2b59cbf20e4fd69b5fe016c2917df708"
+    },
+    {
+      "file": "ec2-rollout/attempt-1/benchmark-seed-stack.json",
+      "sha256": "dfa439b4f2901f74e3bac169bf4e3009e6ae0665a246b801cc974cbe5b0b0df7"
+    },
+    {
+      "file": "ec2-rollout/profile-fix-artifacts.json",
+      "sha256": "eb91208b2b0cddb3fedf4130e19d3d1d7e6db0d4983f0924f128704952ff3060"
+    },
+    {
+      "file": "ec2-rollout/agent-profile-fix-policy.json",
+      "sha256": "ac53a240fe28c764a1b65e0be81df138311932f19f2ae4884be7ee270968dadc"
+    },
+    {
+      "file": "ec2-rollout/agent-profile-fix-boundary.json",
+      "sha256": "ac24c38559661a809493750edd3850a539352dc84dfa71edcc81cee11386c1b1"
+    },
+    {
+      "file": "ec2-rollout/benchmark-generation-inventory.json",
+      "sha256": "9b1765aef1b87feb8a7a7536b4ed4cda05f2d79b9660bd0063be4207dd7b7ac0"
+    },
+    {
+      "file": "ec2-rollout/benchmark-terminal-state.json",
+      "sha256": "0b2135a8b7d7293cbd3185573037dc1b4234c9bfa5a95b9fde2cc814da14633f"
+    },
+    {
+      "file": "ec2-rollout/benchmark-analysis.json",
+      "sha256": "3669447a038651ef253eff0a1e8c1f2c480b3d476eb7383a7173a79433d279c2"
+    },
+    {
+      "file": "ec2-rollout/benchmark-samples.jsonl",
+      "sha256": "63aa6c298889300a7b1a1916c422db76c616cd2347bb69b687a20b3779781ede"
+    },
+    {
+      "file": "ec2-rollout/benchmark-monitor-result.json",
+      "sha256": "e1e2a944b3aab4ebc681593f053640f5bf60a2fde0f9e34bd6bab8f496a5900a"
+    },
+    {
+      "file": "ec2-rollout/benchmark-seed-stack.json",
+      "sha256": "62b6ac7f191ed5043851764e8612b39e2119bf8733c60e089d7c87fd842bd328"
+    },
+    {
+      "file": "ec2-rollout/benchmark-ec2-cloudtrail-events.json",
+      "sha256": "b95b57f784afbc3893b56f56fa7611222a0e944bc39596020e3120a63c833cbe"
+    },
+    {
+      "file": "ec2-rollout/benchmark-instances-after-cleanup.json",
+      "sha256": "228273308eb5935354314788336acd5ff4faf75c687157784b0fd7ddb72ba6ac"
+    },
+    {
+      "file": "ec2-rollout/benchmark-volumes-after-cleanup.json",
+      "sha256": "3efc403660e54ac20f255dfe08a705c97a8c5d28e11e260c61630fc47106f46e"
+    },
+    {
+      "file": "ec2-rollout/benchmark-alarms-after-cleanup.json",
+      "sha256": "4d001b6d620d1ff00d86731efced9671ada6aab40587480af8e049c1ae95a958"
+    },
+    {
+      "file": "ec2-rollout/benchmark-seed-after-cleanup.json",
+      "sha256": "b0e16507809d2abc1d5ef92561fac2835da4f12b490bc7ca68c6b42f6310a790"
+    },
+    {
+      "file": "ec2-rollout/benchmark-final-verification.json",
+      "sha256": "0a770bcfc6d7b5450baf4c3c813e37ba058b19f6f6dac0f3f3f2bb6ed7930277"
+    },
+    {
+      "file": "ec2-rollout/idle-state-5-2.json",
+      "sha256": "8be8aa0b6f3564da2e7babd388918611991b24b05be0cd63d5d82269a0221f84"
+    }
+  ],
+  "local_evidence_directory": "/Users/saraislet/Documents/src/glider-project/cloud-glider-ec2-reconcile/.artifacts/ami",
+  "isolated_test_final_state": {
+    "unchanged_from_before_build": true,
+    "request_id": "3",
+    "propagation_enabled": false,
+    "max_generation": 2,
+    "current_status": "UNINITIALIZED",
+    "hold_present": false,
+    "provisioning_lock_present": false,
+    "propagation_lock_present": false
+  },
+  "deployment_authorized": true,
+  "runtime_deployment": {
+    "stacks": {
+      "cloud-glider-sandbox-boundaries": "UPDATE_COMPLETE",
+      "cloud-glider-sandbox": "UPDATE_COMPLETE",
+      "cloud-glider-sandbox-bootstrap": "UPDATE_COMPLETE"
+    },
+    "launch_template": {
+      "launch_template_id": "lt-09e12d4ca882601db",
+      "launch_template_version": "1",
+      "launch_template_sha256": "48d9a44f4105bf1a047a0c323639c9be83b2dfb27a06b27e5d2e54f06148834c"
+    },
+    "immutable_artifacts": {
+      "agent": {
+        "bucket": "cloud-glider-sandbox-482268323955-us-west-2-artifacts",
+        "key": "generation/ec2-8015a49ed4a6bd96c2b770d6a2cb9c14c52433c67fa5725caefa3bb2bd66ff94-cloud-glider-agent.tar.gz",
+        "version_id": "hRXMUkcZAVBjYH3FuX4xmT6Gjz.QnZIF",
+        "sha256": "8015a49ed4a6bd96c2b770d6a2cb9c14c52433c67fa5725caefa3bb2bd66ff94",
+        "url": "https://cloud-glider-sandbox-482268323955-us-west-2-artifacts.s3.us-west-2.amazonaws.com/generation/ec2-8015a49ed4a6bd96c2b770d6a2cb9c14c52433c67fa5725caefa3bb2bd66ff94-cloud-glider-agent.tar.gz?versionId=hRXMUkcZAVBjYH3FuX4xmT6Gjz.QnZIF"
+      },
+      "seed": {
+        "bucket": "cloud-glider-sandbox-482268323955-us-west-2-artifacts",
+        "key": "generation/ec2-0dcc981c435ed23cfbe880e17362e07f6c7cdcd5ea177bb76d5037d9f8ddfe8e-ec2-seed.yaml",
+        "version_id": "tCEuoLN9JjccyhA9_YoecwlwFnd.h8JO",
+        "sha256": "0dcc981c435ed23cfbe880e17362e07f6c7cdcd5ea177bb76d5037d9f8ddfe8e",
+        "url": "https://cloud-glider-sandbox-482268323955-us-west-2-artifacts.s3.us-west-2.amazonaws.com/generation/ec2-0dcc981c435ed23cfbe880e17362e07f6c7cdcd5ea177bb76d5037d9f8ddfe8e-ec2-seed.yaml?versionId=tCEuoLN9JjccyhA9_YoecwlwFnd.h8JO"
+      },
+      "bootstrap": {
+        "bucket": "cloud-glider-sandbox-482268323955-us-west-2-artifacts",
+        "key": "bootstrap/ec2-41ba772ce58e6fd3f44cb308383685fd4eb94072fa591def8f5cdef9a7ed830f-bootstrap.yaml",
+        "version_id": "_T5bZ4y4UH05BcPUa_IdqI4Wq4TotLE8",
+        "sha256": "41ba772ce58e6fd3f44cb308383685fd4eb94072fa591def8f5cdef9a7ed830f",
+        "url": "https://cloud-glider-sandbox-482268323955-us-west-2-artifacts.s3.us-west-2.amazonaws.com/bootstrap/ec2-41ba772ce58e6fd3f44cb308383685fd4eb94072fa591def8f5cdef9a7ed830f-bootstrap.yaml?versionId=_T5bZ4y4UH05BcPUa_IdqI4Wq4TotLE8"
+      },
+      "foundation": {
+        "bucket": "cloud-glider-sandbox-482268323955-us-west-2-artifacts",
+        "key": "foundation/ec2-9567b469111d0e17e8f5693ffe891f087072f52dbdbbe2a56d33e631a879cf83-foundation.yaml",
+        "version_id": "QVJYJLlpbXpoPzSOixIoLCug7L5l8syx",
+        "sha256": "9567b469111d0e17e8f5693ffe891f087072f52dbdbbe2a56d33e631a879cf83",
+        "url": "https://cloud-glider-sandbox-482268323955-us-west-2-artifacts.s3.us-west-2.amazonaws.com/foundation/ec2-9567b469111d0e17e8f5693ffe891f087072f52dbdbbe2a56d33e631a879cf83-foundation.yaml?versionId=QVJYJLlpbXpoPzSOixIoLCug7L5l8syx"
+      },
+      "boundaries": {
+        "bucket": "cloud-glider-sandbox-482268323955-us-west-2-artifacts",
+        "key": "foundation/ec2-51fc5d795271be36a4324a122f84f9f3ee1bdaf01ffaa18ce423fd5dd7fbd89c-permission-boundaries.json",
+        "version_id": "h5uRkDudIW8FifCRj2MWz6GsxLko5xYA",
+        "sha256": "51fc5d795271be36a4324a122f84f9f3ee1bdaf01ffaa18ce423fd5dd7fbd89c",
+        "url": "https://cloud-glider-sandbox-482268323955-us-west-2-artifacts.s3.us-west-2.amazonaws.com/foundation/ec2-51fc5d795271be36a4324a122f84f9f3ee1bdaf01ffaa18ce423fd5dd7fbd89c-permission-boundaries.json?versionId=h5uRkDudIW8FifCRj2MWz6GsxLko5xYA"
+      },
+      "launch_template": {
+        "bucket": "cloud-glider-sandbox-482268323955-us-west-2-artifacts",
+        "key": "foundation/ec2-bd91b782acd305495c741a45e0c68d99ead9ecaa4b30660357b4c6422fa59340-launch-template.yaml",
+        "version_id": "uJD750fxqhkNLDBPTsapsToZq5BtoPCx",
+        "sha256": "bd91b782acd305495c741a45e0c68d99ead9ecaa4b30660357b4c6422fa59340",
+        "url": "https://cloud-glider-sandbox-482268323955-us-west-2-artifacts.s3.us-west-2.amazonaws.com/foundation/ec2-bd91b782acd305495c741a45e0c68d99ead9ecaa4b30660357b4c6422fa59340-launch-template.yaml?versionId=uJD750fxqhkNLDBPTsapsToZq5BtoPCx"
+      }
+    },
+    "effective_policy_templates": {
+      "cloud-glider-sandbox-boundaries": {
+        "sha256": "43f914fcfa315af8b87db11af14dfb93a9fd823cfc2651d17236c782ec97537b",
+        "version_id": "jdSXHRruxcASefLMJtAMF3mzcDTrCgOd",
+        "url": "https://cloud-glider-sandbox-482268323955-us-west-2-artifacts.s3.us-west-2.amazonaws.com/foundation/ec2-43f914fcfa315af8b87db11af14dfb93a9fd823cfc2651d17236c782ec97537b-permission-boundaries.json?versionId=jdSXHRruxcASefLMJtAMF3mzcDTrCgOd",
+        "change_set_id": "arn:aws:cloudformation:us-west-2:482268323955:changeSet/ec2-profile-path-fix-20261003/9a77464c-7aca-4fec-ba0c-799af010f322"
+      },
+      "cloud-glider-sandbox": {
+        "sha256": "e1ab44afe0f2af745a0225af74ee533e9b823940362548b45dc7484f1fc61eb5",
+        "version_id": "cQdPlnhHPIQ6tsRbbtDSTjBhyho0E5ah",
+        "url": "https://cloud-glider-sandbox-482268323955-us-west-2-artifacts.s3.us-west-2.amazonaws.com/foundation/ec2-e1ab44afe0f2af745a0225af74ee533e9b823940362548b45dc7484f1fc61eb5-foundation.yaml?versionId=cQdPlnhHPIQ6tsRbbtDSTjBhyho0E5ah",
+        "change_set_id": "arn:aws:cloudformation:us-west-2:482268323955:changeSet/ec2-profile-path-fix-20261003/510ed25e-923f-416f-9bef-1ee38be38f4c"
+      }
+    }
+  },
+  "corrective_change": {
+    "status": "DEPLOYED_VERIFIED",
+    "scope": "AgentRole and AgentBoundary exact existing instance-profile path only; no replacement, no AMI/runtime-agent changes.",
+    "tests_passed": 257,
+    "cfn_lint": "PASS",
+    "change_sets": {
+      "cloud-glider-sandbox-boundaries": {
+        "sha256": "43f914fcfa315af8b87db11af14dfb93a9fd823cfc2651d17236c782ec97537b",
+        "version_id": "jdSXHRruxcASefLMJtAMF3mzcDTrCgOd",
+        "url": "https://cloud-glider-sandbox-482268323955-us-west-2-artifacts.s3.us-west-2.amazonaws.com/foundation/ec2-43f914fcfa315af8b87db11af14dfb93a9fd823cfc2651d17236c782ec97537b-permission-boundaries.json?versionId=jdSXHRruxcASefLMJtAMF3mzcDTrCgOd",
+        "change_set_id": "arn:aws:cloudformation:us-west-2:482268323955:changeSet/ec2-profile-path-fix-20261003/9a77464c-7aca-4fec-ba0c-799af010f322"
+      },
+      "cloud-glider-sandbox": {
+        "sha256": "e1ab44afe0f2af745a0225af74ee533e9b823940362548b45dc7484f1fc61eb5",
+        "version_id": "cQdPlnhHPIQ6tsRbbtDSTjBhyho0E5ah",
+        "url": "https://cloud-glider-sandbox-482268323955-us-west-2-artifacts.s3.us-west-2.amazonaws.com/foundation/ec2-e1ab44afe0f2af745a0225af74ee533e9b823940362548b45dc7484f1fc61eb5-foundation.yaml?versionId=cQdPlnhHPIQ6tsRbbtDSTjBhyho0E5ah",
+        "change_set_id": "arn:aws:cloudformation:us-west-2:482268323955:changeSet/ec2-profile-path-fix-20261003/510ed25e-923f-416f-9bef-1ee38be38f4c"
+      }
+    },
+    "source_commit": "e28b760ae974c7882a9ecd3ac6423d731b5c1d58",
+    "ami_rebuild_required": false,
+    "stack_statuses": {
+      "cloud-glider-sandbox-boundaries": "UPDATE_COMPLETE",
+      "cloud-glider-sandbox": "UPDATE_COMPLETE"
+    },
+    "effective_instance_profile_condition": "arn:aws:iam::482268323955:instance-profile/cloud-glider/cloud-glider-sandbox-agent",
+    "ci": "validate / safety-contract: PASS"
+  },
+  "final_state": {
+    "verified": true,
+    "request_id": "5",
+    "propagation_enabled": false,
+    "bootstrap_requested": false,
+    "cleanup_status": "COMPLETE",
+    "current_status": "UNINITIALIZED",
+    "max_generation": 2,
+    "hold_present": false,
+    "provisioning_lock_present": false,
+    "propagation_lock_present": false,
+    "live_instances": 0,
+    "benchmark_instances_terminated": 10,
+    "root_volumes_deleted": 10,
+    "attached_volumes": 0,
+    "generation_alarms": 0,
+    "active_generation_stacks": 0,
+    "generation_records_remaining": 0,
+    "approved_ami_retained": true,
+    "approved_snapshot_retained": true,
+    "approved_launch_template_retained": true,
+    "control_sha256": "910b8947280c33e36412e3e08483bd345ffdeb3ea72322317177484a841b3ce4"
+  },
+  "benchmark": {
+    "request_id": "4",
+    "seed_stack_creation_at": "2026-10-03 09:14:18.228000+00:00",
+    "seed_creation_to_initial_ownership_seconds": 37.239,
+    "observed_generations": 10,
+    "observed_handoffs": 9,
+    "mean_ownership_interval_seconds": 56.391,
+    "min_ownership_interval_seconds": 35.323,
+    "max_ownership_interval_seconds": 71.586,
+    "seed_creation_to_last_ownership_seconds": 544.756,
+    "hold_samples": 0,
+    "generations": [
+      {
+        "generation": 0,
+        "instance_id": "i-09902af6bd6eeefa3",
+        "ownership_at": "2026-10-03T09:14:55.467Z",
+        "first_observed_healthy_heartbeat": {
+          "updated_at": "2026-10-03T09:14:55.501Z",
+          "sequence": 1,
+          "status": "CURRENT"
+        },
+        "launch_time": "2026-10-03 09:14:22+00:00",
+        "final_observed_instance_state": "terminated",
+        "launch_to_first_observed_healthy_heartbeat_seconds": 33.501
+      },
+      {
+        "generation": 1,
+        "instance_id": "i-03be0260b82762b5d",
+        "ownership_at": "2026-10-03T09:15:30.790Z",
+        "first_observed_healthy_heartbeat": {
+          "updated_at": "2026-10-03T09:15:24.111Z",
+          "sequence": 1,
+          "status": "CANDIDATE"
+        },
+        "retirement_completed_first_observed_at": "2026-10-03T09:16:00.169820+00:00",
+        "ownership_interval_seconds": 35.323,
+        "launch_time": "2026-10-03 09:14:57+00:00",
+        "final_observed_instance_state": "terminated",
+        "launch_to_first_observed_healthy_heartbeat_seconds": 27.111,
+        "ownership_to_first_observed_retirement_completed_seconds": 29.38
+      },
+      {
+        "generation": 2,
+        "instance_id": "i-06893b4d93d4615ad",
+        "ownership_at": "2026-10-03T09:16:31.385Z",
+        "first_observed_healthy_heartbeat": {
+          "updated_at": "2026-10-03T09:16:24.132Z",
+          "sequence": 1,
+          "status": "CANDIDATE"
+        },
+        "retirement_completed_first_observed_at": "2026-10-03T09:16:59.956897+00:00",
+        "ownership_interval_seconds": 60.595,
+        "launch_time": "2026-10-03 09:15:58+00:00",
+        "final_observed_instance_state": "terminated",
+        "launch_to_first_observed_healthy_heartbeat_seconds": 26.132,
+        "ownership_to_first_observed_retirement_completed_seconds": 28.572
+      },
+      {
+        "generation": 3,
+        "instance_id": "i-0064f4fb7e8acfda8",
+        "ownership_at": "2026-10-03T09:17:31.700Z",
+        "first_observed_healthy_heartbeat": {
+          "updated_at": "2026-10-03T09:17:23.759Z",
+          "sequence": 1,
+          "status": "CANDIDATE"
+        },
+        "retirement_completed_first_observed_at": "2026-10-03T09:17:52.857147+00:00",
+        "ownership_interval_seconds": 60.315,
+        "launch_time": "2026-10-03 09:16:58+00:00",
+        "final_observed_instance_state": "terminated",
+        "launch_to_first_observed_healthy_heartbeat_seconds": 25.759,
+        "ownership_to_first_observed_retirement_completed_seconds": 21.157
+      },
+      {
+        "generation": 4,
+        "instance_id": "i-0cbdd1c45e7344fca",
+        "ownership_at": "2026-10-03T09:18:21.630Z",
+        "first_observed_healthy_heartbeat": {
+          "updated_at": "2026-10-03T09:18:14.478Z",
+          "sequence": 1,
+          "status": "CANDIDATE"
+        },
+        "retirement_completed_first_observed_at": "2026-10-03T09:18:52.509336+00:00",
+        "ownership_interval_seconds": 49.93,
+        "launch_time": "2026-10-03 09:17:52+00:00",
+        "final_observed_instance_state": "terminated",
+        "launch_to_first_observed_healthy_heartbeat_seconds": 22.478,
+        "ownership_to_first_observed_retirement_completed_seconds": 30.879
+      },
+      {
+        "generation": 5,
+        "instance_id": "i-086ac7808ce428307",
+        "ownership_at": "2026-10-03T09:19:32.727Z",
+        "first_observed_healthy_heartbeat": {
+          "updated_at": "2026-10-03T09:19:24.427Z",
+          "sequence": 1,
+          "status": "CANDIDATE"
+        },
+        "retirement_completed_first_observed_at": "2026-10-03T09:19:52.563110+00:00",
+        "ownership_interval_seconds": 71.097,
+        "launch_time": "2026-10-03 09:18:53+00:00",
+        "final_observed_instance_state": "terminated",
+        "launch_to_first_observed_healthy_heartbeat_seconds": 31.427,
+        "ownership_to_first_observed_retirement_completed_seconds": 19.836
+      },
+      {
+        "generation": 6,
+        "instance_id": "i-094d439ac87fb5911",
+        "ownership_at": "2026-10-03T09:20:25.587Z",
+        "first_observed_healthy_heartbeat": {
+          "updated_at": "2026-10-03T09:20:18.029Z",
+          "sequence": 1,
+          "status": "CANDIDATE"
+        },
+        "retirement_completed_first_observed_at": "2026-10-03T09:20:52.998431+00:00",
+        "ownership_interval_seconds": 52.86,
+        "launch_time": "2026-10-03 09:19:53+00:00",
+        "final_observed_instance_state": "terminated",
+        "launch_to_first_observed_healthy_heartbeat_seconds": 25.029,
+        "ownership_to_first_observed_retirement_completed_seconds": 27.411
+      },
+      {
+        "generation": 7,
+        "instance_id": "i-0e626efcc367c3d5d",
+        "ownership_at": "2026-10-03T09:21:22.383Z",
+        "first_observed_healthy_heartbeat": {
+          "updated_at": "2026-10-03T09:21:14.094Z",
+          "sequence": 1,
+          "status": "CANDIDATE"
+        },
+        "retirement_completed_first_observed_at": "2026-10-03T09:22:00.280658+00:00",
+        "ownership_interval_seconds": 56.796,
+        "launch_time": "2026-10-03 09:20:52+00:00",
+        "final_observed_instance_state": "terminated",
+        "launch_to_first_observed_healthy_heartbeat_seconds": 22.094,
+        "ownership_to_first_observed_retirement_completed_seconds": 37.898
+      },
+      {
+        "generation": 8,
+        "instance_id": "i-0e9321adba4e3559c",
+        "ownership_at": "2026-10-03T09:22:33.969Z",
+        "first_observed_healthy_heartbeat": {
+          "updated_at": "2026-10-03T09:22:26.290Z",
+          "sequence": 1,
+          "status": "CANDIDATE"
+        },
+        "retirement_completed_first_observed_at": "2026-10-03T09:22:56.927675+00:00",
+        "ownership_interval_seconds": 71.586,
+        "launch_time": "2026-10-03 09:21:58+00:00",
+        "final_observed_instance_state": "terminated",
+        "launch_to_first_observed_healthy_heartbeat_seconds": 28.29,
+        "ownership_to_first_observed_retirement_completed_seconds": 22.959
+      },
+      {
+        "generation": 9,
+        "instance_id": "i-0332dd603555e0c24",
+        "ownership_at": "2026-10-03T09:23:22.984Z",
+        "first_observed_healthy_heartbeat": {
+          "updated_at": "2026-10-03T09:23:16.900Z",
+          "sequence": 1,
+          "status": "CANDIDATE"
+        },
+        "retirement_completed_first_observed_at": "2026-10-03T09:23:53.140784+00:00",
+        "ownership_interval_seconds": 49.015,
+        "launch_time": "2026-10-03 09:22:55+00:00",
+        "final_observed_instance_state": "running",
+        "launch_to_first_observed_healthy_heartbeat_seconds": 21.9,
+        "ownership_to_first_observed_retirement_completed_seconds": 30.157
+      }
+    ],
+    "measurement_limits": [
+      "API LaunchTime is rounded to seconds. First observed workload-healthy heartbeat is a startup proxy, not the authoritative readiness decision.",
+      "Retirement completion is first observed by a roughly 3.5-second sampler, not an exact phase duration.",
+      "Internal phase durations are not remotely exported; DryRun and handoff phase timings are unmeasured.",
+      "Single trials with different source/image and serialized retirement cannot isolate an EC2-versus-CloudFormation causal speedup."
+    ],
+    "monitor": {
+      "outcome": "TERMINAL_GENERATION_RETIRED_PREDECESSOR",
+      "peak_live": 2,
+      "observed_instances": 10,
+      "elapsed_seconds": 584.169408082962
+    },
+    "interval_decomposition": {
+      "ownership_to_next_launch_mean_seconds": 23.374,
+      "next_launch_to_first_healthy_heartbeat_mean_seconds": 25.58,
+      "first_healthy_heartbeat_to_handoff_mean_seconds": 7.437,
+      "later_eight_ownership_to_next_launch_mean_seconds": 26.104,
+      "later_eight_ownership_to_next_launch_range_seconds": [
+        20.273,
+        35.617
+      ],
+      "later_eight_prelaunch_total_seconds": 208.829,
+      "first_heartbeat_sequence_all_one": true,
+      "notes": "Endpoint durations from CURRENT timestamps, EC2 LaunchTime (second precision) and sequence-1 heartbeat updated_at. Prelaunch includes retirement, polling and validation; not an isolated termination duration. Post-heartbeat includes required readiness, continuation checks and handoff; not an isolated DryRun duration."
+    },
+    "result": "PASS",
+    "max_generation": 9,
+    "max_live_generations": 3,
+    "sampling_interval_median_seconds": 3.505,
+    "sampling_interval_max_seconds": 3.706,
+    "heartbeat_interval_seconds": 5,
+    "readiness_poll_seconds": 2,
+    "readiness_required_heartbeats": 2,
+    "terminal_predecessor_retirement_confirmed": true,
+    "retained_pre_cleanup_api_events": {
+      "RunInstances:SUCCESS": 10,
+      "RunInstances:Client.DryRunOperation": 8,
+      "TerminateInstances:SUCCESS": 9
+    }
+  },
+  "limitations": [
+    "Organizations inheritance could not be inspected with the available operator identity; live effective permissions were exercised successfully.",
+    "Internal phase durations were not remotely exported. Component endpoints are measured, but isolated SDK, polling, DryRun and termination durations are not.",
+    "Stop/HOLD, ambiguous readiness and handoff failures were covered by tests; no extra live fault injection was performed during the successful benchmark.",
+    "One run per backend with different image/source and retirement ordering is not a controlled or repeated benchmark."
+  ]
+}
