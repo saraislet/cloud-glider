@@ -62,3 +62,13 @@ do not append `:log-stream:*` to a CloudFormation LogGroup.Arn already ending in
 `:*`. Only ListBucket carries the s3:prefix condition; GetBucketLocation and
 GetBucketVersioning must remain separate. Generation tagging is permitted only
 with ec2:CreateAction=RunInstances, never as a standalone retagging request.
+
+## Lifecycle controller permissions
+
+The bootstrap Lambda now reads generation inventory, condition-checks lifecycle records, resets approved cycle state, and deletes verified generation stacks through the designated CloudFormation role. CONTROL UpdateItem is limited by the controller to request and feedback attributes. Agent transactions may condition-check BOOTSTRAP and CONTROL but cannot mutate operator records; existing explicit denies remain. The hold Lambda only condition-checks cycle identity.
+
+The independently administered `cfn/permission-boundaries.json` carries corresponding narrow ceilings. Its reviewed update must be applied separately by security administration before rollout; deployment roles remain unable to modify boundaries. Exact template URL enforcement, sanitized configuration, and direct compute/network/IAM mutation denies are unchanged.
+
+## Separate generation table
+
+Generation state/inventory permissions now target the designated generations-table ARN. CONTROL/CURRENT/BOOTSTRAP/locks/audits stay in the existing state table. Agent and hold roles cannot write generation records into the control table; generation-table grants reject operator partition keys. Cleanup has generation-table reads, inventory writes, and verified-state deletion. Independent boundaries are updated accordingly and remain independently administered. Deployment-role policies and table-specific organization policy candidates require separate rollout review; they are not broadened here.

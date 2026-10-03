@@ -10,6 +10,9 @@ Parameters:
     Type: String
     MinLength: 1
     MaxLength: 64
+  RequestId:
+    Type: String
+    AllowedPattern: '^[1-9][0-9]{0,17}$'
   Generation:
     Type: String
     AllowedPattern: '^[0-9]{6}$'
@@ -43,6 +46,9 @@ Parameters:
     Type: String
   StateTableName:
     Type: String
+  GenerationTableName:
+    Type: String
+    AllowedPattern: '^cloud-glider-[a-z][a-z0-9-]{1,15}-generations$'
   AgentArtifactBucket:
     Type: String
   AgentArtifactKey:
@@ -157,6 +163,8 @@ Resources:
           Value: !Ref TemplateSha256
         - Key: template-build-id
           Value: !Ref TemplateBuildId
+        - Key: bootstrap-request-id
+          Value: !Ref RequestId
         - Key: bootstrap-version
           Value: !Ref BootstrapVersion
       UserData:
@@ -167,12 +175,14 @@ Resources:
           install -d -m 0750 /etc/cloud-glider /opt/cloud-glider
           cat >/etc/cloud-glider/bootstrap.json <<'JSON'
           {
+            "request_id": "${RequestId}",
             "environment": "${Environment}",
             "generation": "${Generation}",
             "stack_id": "${AWS::StackId}",
             "predecessor_stack_id": "${PredecessorStackId}",
             "handoff_token": "${HandoffToken}",
             "state_table_name": "${StateTableName}",
+            "generation_table_name": "${GenerationTableName}",
             "bootstrap_version": "${BootstrapVersion}",
             "template_version": "${TemplateVersion}",
             "template_bucket": "${TemplateBucket}",

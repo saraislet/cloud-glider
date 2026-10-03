@@ -3,6 +3,9 @@
 Status: accepted for implementation; infrastructure deployment and the first
 bootstrap request require separate operational and cost review.
 
+Shared lifecycle placement, rearming, and cleanup behavior are superseded by
+[decision 0012](0012-shared-chain-lifecycle.md). This document records the earlier design.
+
 ## Decision
 
 Keep `CONTROL/GLOBAL.propagation_enabled` as the permission for EC2 agents to

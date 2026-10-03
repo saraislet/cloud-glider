@@ -40,14 +40,15 @@ class BootstrapTests(unittest.TestCase):
         initial = initializer.build_transaction(args, now='now', event_id='id')
         self.control = initial[0]['Put']['Item']
         self.current = initial[1]['Put']['Item']
-        self.request = requester.build_transaction('table', self.control, 'operator', 'test-request', 100)[3]['Put']['Item']
+        self.request = requester.build_transaction('table', self.control, 'operator', '1', 100)[3]['Put']['Item']
         self.request['bootstrap_requested'] = {'BOOL': True}
         self.event = copy.deepcopy(self.request)
         self.hold = {}
         self.ddb, self.cfn, self.s3, self.ec2 = Mock(), Mock(), Mock(), Mock()
-        self.env = {'STATE_TABLE': 'table', 'ENVIRONMENT': 'sandbox', 'ARTIFACT_BUCKET': 'bucket',
+        self.env = {'STATE_TABLE': 'table', 'GENERATION_TABLE': 'cloud-glider-sandbox-generations', 'ENVIRONMENT': 'sandbox', 'ARTIFACT_BUCKET': 'bucket',
                     'SERVICE_ROLE_ARN': 'role', 'GENERATION_PARAMETERS': json.dumps({
                         'ApprovedImageId': 'ami-approved', 'RootDeviceName': '/dev/xvda', 'Owner': 'owner'})}
+        self.ddb.get_item.return_value = {}
         self.cfn.describe_stacks.side_effect = MissingStack()
         self.cfn.create_stack.return_value = {'StackId': 'stack-id'}
         self.ddb.transact_get_items.side_effect = lambda **kw: {'Responses': [
@@ -70,11 +71,11 @@ class BootstrapTests(unittest.TestCase):
 
     def existing(self):
         return {'StackId': 'stack-id', 'StackStatus': 'CREATE_COMPLETE', 'RoleARN': 'role',
-                'Parameters': [{'ParameterKey': k, 'ParameterValue': v} for k, v in bootstrap.parameters(self.control, self.env).items()],
-                'Tags': [{'Key': 'bootstrap-request-id', 'Value': 'test-request'}]}
+                'Parameters': [{'ParameterKey': k, 'ParameterValue': v} for k, v in bootstrap.parameters(self.control, self.env, '1').items()],
+                'Tags': [{'Key': 'bootstrap-request-id', 'Value': '1'}]}
 
     def check_first_generation(self, enabled):
-        self.control['propagation_enabled'] = {'BOOL': enabled}
+        self.request['propagation_enabled'] = {'BOOL': enabled}
         original = copy.deepcopy(self.control)
         self.run_request()
         self.assertEqual(self.control, original)
@@ -123,7 +124,7 @@ class BootstrapTests(unittest.TestCase):
         original = self.ddb.update_item.side_effect
         def update(**kw):
             original(**kw)
-            self.control['propagation_enabled'] = {'BOOL': True}
+            self.request['propagation_enabled'] = {'BOOL': True}
             self.control['updated_at'] = {'S': 'later'}
         self.ddb.update_item.side_effect = update
         self.run_request()
@@ -199,7 +200,7 @@ class BootstrapTests(unittest.TestCase):
         self.cfn.create_stack.assert_not_called()
 
     def test_request_transaction_preserves_control_and_requires_uninitialized_no_hold(self):
-        transaction = requester.build_transaction('table', self.control, 'operator', 'id', 100)
+        transaction = requester.build_transaction('table', self.control, 'operator', '1', 100)
         self.assertEqual(len(transaction), 5)
         self.assertTrue(all('ConditionCheck' in entry for entry in transaction[:3]))
         self.assertEqual(transaction[3]['Put']['ConditionExpression'], 'attribute_not_exists(PK)')
@@ -219,13 +220,13 @@ class BootstrapTests(unittest.TestCase):
         template = (ROOT / 'cfn/bootstrap.yaml').read_text()
         static = template.split('GENERATION_PARAMETERS: !Sub >-\n', 1)[1].split('      Tags:', 1)[0]
         env = {**self.env, 'GENERATION_PARAMETERS': static}
-        actual = set(bootstrap.parameters(self.control, env))
+        actual = set(bootstrap.parameters(self.control, env, '1'))
         generation = (ROOT / 'cfn/generation.yaml').read_text().split('Parameters:\n', 1)[1].split('Rules:', 1)[0]
         expected = set(re.findall(r'^  ([A-Za-z0-9]+):$', generation, flags=re.MULTILINE))
         self.assertEqual(actual, expected)
 
     def test_preparation_only_creates_false_boolean(self):
-        transaction = requester.build_transaction('table', self.control, 'operator', 'id', 100)
+        transaction = requester.build_transaction('table', self.control, 'operator', '1', 100)
         item = transaction[3]['Put']['Item']
         self.assertEqual(item['bootstrap_requested'], {'BOOL': False})
         self.assertEqual(item['status'], {'S': 'READY'})

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Clear HOLD/ACTIVE as an operator and append an audit record atomically."""
+"""Clear HOLD/ACTIVE as an operator and update the latest recovery record atomically."""
 
 from __future__ import annotations
 
@@ -22,8 +22,8 @@ def utc_now() -> str:
 
 def build_transaction(args: argparse.Namespace, *, now: str, event_id: str) -> list[dict[str, Any]]:
     audit = {
-        "PK": av_string("AUDIT#PROPAGATION"),
-        "SK": av_string(f"EVENT#{now}#{event_id}"),
+        "PK": av_string("AUDIT#RECOVERY"),
+        "SK": av_string("LATEST"),
         "schema_version": av_string("1.0"),
         "event_id": av_string(event_id),
         "occurred_at": av_string(now),
@@ -49,7 +49,8 @@ def build_transaction(args: argparse.Namespace, *, now: str, event_id: str) -> l
             "Put": {
                 "TableName": args.table_name,
                 "Item": audit,
-                "ConditionExpression": "attribute_not_exists(PK) AND attribute_not_exists(SK)",
+                "ConditionExpression": "attribute_not_exists(PK) OR occurred_at <= :now",
+                "ExpressionAttributeValues": {":now": av_string(now)},
             }
         },
     ]

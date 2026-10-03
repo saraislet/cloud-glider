@@ -81,12 +81,9 @@ budget is a planning target while billing alerts are deferred; verify current
   uses the `HOLD/ACTIVE` record plus `propagation_enabled=false`; the deny
   procedure is documented for manual operator use and is not automated.
 
-## Potential v3 task
+## Shared lifecycle and single-item controls
 
-- Update the bootstrap Lambda to reset `BOOTSTRAP/REQUEST.bootstrap_requested`
-  to `false` after attempting to start generation `000000`, regardless of
-  whether the attempt succeeds or fails. The reset must not depend on the
-  generation ultimately becoming healthy. Preserve the durable request status
-  and one-shot protection; clearing the Boolean must not automatically rearm
-  bootstrap or change `propagation_enabled`. This is a deferred design note
-  only; current Lambda behavior remains unchanged.
+[Decision 0012](decisions/0012-shared-chain-lifecycle.md) adds explicit operator cleanup and cycle fencing.
+[Decision 0013](decisions/0013-control-operator-switches.md) puts start, stop, cleanup requests and result messages in CONTROL/GLOBAL. These retain decisions 0003–0007 and the V2 billing deferral.
+
+[Decision 0014](decisions/0014-separated-generation-state.md) separates generation details into their own table and reuses latest-event audit records.

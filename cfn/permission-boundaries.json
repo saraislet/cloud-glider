@@ -59,11 +59,7 @@
           "Statement": [
             {
               "Effect": "Allow",
-              "Action": [
-                "dynamodb:BatchGetItem",
-                "dynamodb:GetItem",
-                "dynamodb:Query"
-              ],
+              "Action": "dynamodb:GetItem",
               "Resource": {
                 "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-state"
               }
@@ -82,7 +78,6 @@
                 "ForAllValues:StringLike": {
                   "dynamodb:LeadingKeys": [
                     "CURRENT",
-                    "GEN#*",
                     "LOCK",
                     "AUDIT#PROPAGATION"
                   ]
@@ -99,7 +94,8 @@
                 "ForAllValues:StringEquals": {
                   "dynamodb:LeadingKeys": [
                     "HOLD",
-                    "CONTROL"
+                    "CONTROL",
+                    "BOOTSTRAP"
                   ]
                 }
               }
@@ -330,6 +326,24 @@
                 "sts:AssumeRole*"
               ],
               "Resource": "*"
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "dynamodb:GetItem",
+                "dynamodb:PutItem",
+                "dynamodb:UpdateItem"
+              ],
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-generations"
+              },
+              "Condition": {
+                "ForAllValues:StringLike": {
+                  "dynamodb:LeadingKeys": [
+                    "GEN#*"
+                  ]
+                }
+              }
             }
           ]
         }
@@ -521,7 +535,7 @@
               "Effect": "Allow",
               "Action": "dynamodb:UpdateItem",
               "Resource": {
-                "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-state"
+                "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-generations"
               },
               "Condition": {
                 "ForAllValues:StringLike": {
@@ -550,6 +564,21 @@
                 "dynamodb:PartiQLDelete"
               ],
               "Resource": "*"
+            },
+            {
+              "Sid": "AssertLifecycleIdentity",
+              "Effect": "Allow",
+              "Action": "dynamodb:ConditionCheckItem",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-state"
+              },
+              "Condition": {
+                "ForAllValues:StringEquals": {
+                  "dynamodb:LeadingKeys": [
+                    "BOOTSTRAP"
+                  ]
+                }
+              }
             }
           ]
         }
@@ -591,7 +620,8 @@
                     "CONTROL",
                     "CURRENT",
                     "HOLD",
-                    "BOOTSTRAP"
+                    "BOOTSTRAP",
+                    "LOCK"
                   ]
                 }
               }
@@ -657,7 +687,10 @@
               "Effect": "Allow",
               "Action": [
                 "ec2:DescribeInstances",
-                "ec2:DescribeImages"
+                "ec2:DescribeImages",
+                "ec2:DescribeVolumes",
+                "ec2:DescribeAddresses",
+                "ec2:DescribeSnapshots"
               ],
               "Resource": "*"
             },
@@ -691,6 +724,136 @@
                   "cloudformation:TemplateUrl": {
                     "Ref": "ApprovedGenerationTemplateUrl"
                   }
+                }
+              }
+            },
+            {
+              "Sid": "UpdateOperatorRequestsAndFeedback",
+              "Effect": "Allow",
+              "Action": "dynamodb:UpdateItem",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-state"
+              },
+              "Condition": {
+                "ForAllValues:StringEquals": {
+                  "dynamodb:LeadingKeys": [
+                    "CONTROL"
+                  ]
+                }
+              }
+            },
+            {
+              "Sid": "CleanupStateRead",
+              "Effect": "Allow",
+              "Action": "dynamodb:Scan",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-generations"
+              }
+            },
+            {
+              "Sid": "LifecycleConditions",
+              "Effect": "Allow",
+              "Action": "dynamodb:ConditionCheckItem",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-state"
+              },
+              "Condition": {
+                "ForAllValues:StringEquals": {
+                  "dynamodb:LeadingKeys": [
+                    "CONTROL",
+                    "CURRENT",
+                    "HOLD",
+                    "BOOTSTRAP",
+                    "LOCK"
+                  ]
+                }
+              }
+            },
+            {
+              "Sid": "ResetOnlyLifecycleState",
+              "Effect": "Allow",
+              "Action": "dynamodb:PutItem",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-state"
+              },
+              "Condition": {
+                "ForAllValues:StringLike": {
+                  "dynamodb:LeadingKeys": [
+                    "BOOTSTRAP",
+                    "CURRENT",
+                    "LOCK"
+                  ]
+                }
+              }
+            },
+            {
+              "Sid": "DeleteOnlyObsoleteGenerationStateAndLocks",
+              "Effect": "Allow",
+              "Action": "dynamodb:DeleteItem",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-state"
+              },
+              "Condition": {
+                "ForAllValues:StringLike": {
+                  "dynamodb:LeadingKeys": [
+                    "LOCK"
+                  ]
+                }
+              }
+            },
+            {
+              "Sid": "ListGenerationInventory",
+              "Effect": "Allow",
+              "Action": "cloudformation:ListStacks",
+              "Resource": "*"
+            },
+            {
+              "Sid": "DeleteOnlyGenerationStacks",
+              "Effect": "Allow",
+              "Action": "cloudformation:DeleteStack",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/cloud-glider-${Environment}-gen-*/*"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "cloudformation:RoleARN": {
+                    "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider-${Environment}-generation-cfn"
+                  },
+                  "aws:ResourceTag/project": "cloud-glider",
+                  "aws:ResourceTag/environment": {
+                    "Ref": "Environment"
+                  },
+                  "aws:ResourceTag/purpose": "generation-stack"
+                }
+              }
+            },
+            {
+              "Sid": "InspectGenerationStacks",
+              "Effect": "Allow",
+              "Action": [
+                "cloudformation:DescribeStacks",
+                "cloudformation:ListStackResources"
+              ],
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/cloud-glider-${Environment}-gen-*/*"
+              }
+            },
+            {
+              "Sid": "ManageGenerationState",
+              "Effect": "Allow",
+              "Action": [
+                "dynamodb:GetItem",
+                "dynamodb:PutItem",
+                "dynamodb:DeleteItem"
+              ],
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-generations"
+              },
+              "Condition": {
+                "ForAllValues:StringLike": {
+                  "dynamodb:LeadingKeys": [
+                    "GEN#*"
+                  ]
                 }
               }
             }

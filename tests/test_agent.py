@@ -23,12 +23,14 @@ class FakeClock:
 
 def config():
     return AgentConfig(
+        request_id="1",
         environment="sandbox",
         generation="000001",
         stack_id="arn:aws:cloudformation:us-west-2:111122223333:stack/cloud-glider-sandbox-gen-000001/one",
         predecessor_stack_id="NONE",
         handoff_token="OPERATOR_BOOTSTRAP",
         state_table_name="cloud-glider-sandbox-state",
+        generation_table_name="cloud-glider-sandbox-generations",
         bootstrap_version="bootstrap-v1",
         template_version="template-v1",
         template_bucket="artifacts",
@@ -48,7 +50,9 @@ def config():
 
 def control(**overrides):
     values = {
+        "request_id": "1", "cleanup_requested": False, "cleanup_status": "IDLE",
         "propagation_enabled": True,
+        "generation_table_name": "cloud-glider-sandbox-generations",
         "desired_template_version": "template-v1",
         "desired_bootstrap_version": "bootstrap-v1",
         "template_s3_bucket": "artifacts",
@@ -84,6 +88,7 @@ class FakeGateway:
         self.clock = clock
         self.controls = list(controls or [control()])
         self.current = {
+            "request_id": cfg.request_id,
             "generation": cfg.generation,
             "stack_id": cfg.stack_id,
             "instance_id": self.instance_id,
@@ -131,6 +136,8 @@ class FakeGateway:
 
     def own_parameters(self):
         return {
+            "RequestId": self.cfg.request_id,
+            "GenerationTableName": self.cfg.generation_table_name,
             "Environment": self.cfg.environment,
             "Owner": "operator",
             "Generation": self.cfg.generation,
@@ -193,10 +200,14 @@ class FakeGateway:
             raise TransientFailure("simulated timeout after request submission")
         return "successor-stack-id"
 
+    def reconcile_submission(self, specification, stack):
+        pass
+
     def read_generation_state(self, generation):
         self.heartbeat_reads += 1
         parameters = self.created["parameters"]
         return {
+            "request_id": self.cfg.request_id,
             "generation": generation,
             "stack_id": "successor-stack-id",
             "instance_id": "i-successor",
@@ -246,6 +257,32 @@ class AgentTests(unittest.TestCase):
         agent = Agent(config(), gateway, clock=clock, sleep=clock.sleep, logger=lambda value: None)
         agent.verify_self()
         return agent
+
+    def test_generation_table_change_blocks_agent_activity(self):
+        clock = FakeClock()
+        gateway = FakeGateway(config(), clock, [control(generation_table_name="foreign-table")])
+        agent = Agent(config(), gateway, clock=clock, sleep=clock.sleep)
+        with self.assertRaises(SafetyViolation) as caught:
+            agent.cycle()
+        self.assertEqual(caught.exception.code, "GENERATION_TABLE_MISMATCH")
+
+    def test_active_cleanup_blocks_all_agent_activity(self):
+        clock = FakeClock()
+        gateway = FakeGateway(config(), clock, [control(cleanup_requested=True, cleanup_status="QUIESCING")])
+        agent = self.make_agent(gateway, clock)
+        with self.assertRaises(TransientFailure):
+            agent.cycle()
+        self.assertNotIn("heartbeat", gateway.calls)
+        self.assertNotIn("create", gateway.calls)
+
+    def test_stale_request_id_blocks_all_agent_activity(self):
+        clock = FakeClock()
+        gateway = FakeGateway(config(), clock, [control(request_id="2")])
+        agent = self.make_agent(gateway, clock)
+        with self.assertRaises(TransientFailure):
+            agent.cycle()
+        self.assertNotIn("heartbeat", gateway.calls)
+        self.assertNotIn("create", gateway.calls)
 
     def test_disabled_propagation_only_heartbeats(self):
         clock = FakeClock()

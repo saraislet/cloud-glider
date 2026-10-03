@@ -1,152 +1,131 @@
-# Operator bootstrap runbook
+# Bootstrap and cleanup runbook
 
-The bootstrap role now requires its independently administered boundary and the
-exact `ApprovedGenerationTemplateUrl`. An empty URL blocks bootstrap even when a
-request is present. Complete the [guardrail rollout](../iam/permission-guardrails.md)
-and coordinate the URL with the foundation and boundary stacks before requesting
-bootstrap. HOLD remains the stop mechanism during migration.
+Use one DynamoDB item: `CONTROL/GLOBAL` in `cloud-glider-sandbox-state`, Region
+`us-west-2`. Generation details live separately in `cloud-glider-sandbox-generations`. Pick a small generation limit. Billing alerts and notification verification remain deferred to V2.
 
-The bootstrap request and propagation permission are independent:
+## AWS Lambda
 
-| Record | Meaning |
-| --- | --- |
-| `CONTROL/GLOBAL.propagation_enabled` | Allows the EC2 agent to create successors. |
-| `BOOTSTRAP/REQUEST.bootstrap_requested` | Boolean operator authorization to create generation 000000. |
-| `HOLD/ACTIVE` | Stops new bootstrap and successor provisioning at their fresh checks. |
+The existing `cloud-glider-sandbox-bootstrap` Lambda launches the first generation.
+This release extends it with the three switches below, automatic request preparation,
+cleanup, and result messages. **The new interface and cleanup are implemented on the
+branch but are not deployed to AWS yet.** Follow deployment/migration below first.
 
-For the first trial, leave propagation disabled and inspect the first instance.
-The Lambda also supports bootstrap while propagation is enabled; in that case
-the first instance can immediately begin the bounded propagation cycle.
+## Start, stop, or clean up through DynamoDB
 
-## Deploy the trigger before requesting bootstrap
+1. Open DynamoDB → Tables → `cloud-glider-sandbox-state` → Explore table items.
+2. Edit the item with `PK=CONTROL`, `SK=GLOBAL`.
+3. Set **one Boolean** to true and save:
 
-1. Confirm cost limits, immutable
-   artifact approvals, and initialized CONTROL/CURRENT records. A prepared READY
-   record may exist, but its `bootstrap_requested` Boolean must remain false. Review the added runtime role, stream reads, alarm, Lambda/log costs,
-   and eventual generation compute costs.
-2. Review an UPDATE change set for `cfn/foundation.yaml` using the existing
-   approved administrative path. The bootstrap-related change enables the state
-   table stream and adds `StateTableStreamArn` to outputs. Require no table
-   replacement and preserve existing approved AMI/network parameters. Execute
-   only the reviewed update and wait for UPDATE_COMPLETE.
-3. Read `StateTableStreamArn` and the foundation's current `AllowedImageId`,
-   `AllowedSubnetId`, `AllowedSecurityGroupId`, and `Owner` values. Validate the
-   AMI with `scripts/validate_generation_inputs.py` and obtain its RootDeviceName.
-4. Review a CREATE change set for `cfn/bootstrap.yaml`, stack name
-   `cloud-glider-sandbox-bootstrap`, in `us-west-2`. Supply `StateStreamArn` and
-   those exact foundation inputs, plus the validated RootDeviceName. This creates
-   a new runtime role and needs CAPABILITY_IAM. GliderManager can submit it using
-   `--role-arn arn:aws:iam::123456789012:role/cloud-glider-sandbox-foundation-cfn`
-   after the [service-role supplement](../iam/glider-manager-policy-review.md)
-   is reviewed and applied; do not broaden deployment-role permissions to bypass
-   authorization failures. The existing generation service role is reused.
-5. After approved deployment, verify the event source mapping is Enabled, points
-   at the correct stream, and has the request-only filter and operational SNS
-   failure destination. Review the function configuration, logs, and error alarm.
+   | Switch | Action |
+   | --- | --- |
+   | `start_requested` | Bootstrap if needed and enable propagation; otherwise enable the existing chain |
+   | `stop_requested` | Stop propagation and keep running instances |
+   | `cleanup_requested` | Stop launches, delete the generation chain, and reset for another start |
 
-The Lambda source is `bootstrap/handler.py`. After editing it, run
-`python3 scripts/render_bootstrap_template.py`; the generated inline code in
-`cfn/bootstrap.yaml` is tested for exact agreement with the source. Deployment
-does not require a new EC2 agent tarball or generation template release.
+4. Refresh the item. Read `operation_status` and `last_result`.
 
-## Prepare the Boolean, then request the first generation
+The Lambda checks prerequisites automatically and resets request switches to false.
+You do not need to check READY, schema versions, or cleanup status before requesting
+an action. Leave other attributes unchanged. No manual Lambda invocation is needed.
 
-Prepare `BOOTSTRAP/REQUEST` with `bootstrap_requested=false` and status READY.
-This does not launch compute, even if the Lambda is already deployed. Preview:
+Examples of `last_result`:
 
-```sh
-python3 scripts/request_bootstrap.py --region us-west-2
-```
+- “Bootstrap submitted. Propagation follows its current setting.”
+- “Start rejected: cleanup is still running or needs attention. Start again after it finishes.”
+- “Request rejected: choose just one switch: start, stop, or cleanup.”
+- “Cleanup complete. Ready for another start.”
 
-Apply the preparation after inspecting its approved control digest and identity:
+Processing is asynchronous; DynamoDB does not show a Lambda popup. Refresh to see
+the result. A once-per-minute reconciliation timer recovers pending requests and
+continues accepted operations. SUBMITTED means AWS accepted creation, not workload
+health. An emergency hold blocks start.
 
-```sh
-python3 scripts/request_bootstrap.py --region us-west-2 --apply
-```
+Cleanup waits for in-flight creation, deletes verified stacks through CloudFormation,
+and checks residual resources before resetting. Only the latest cleanup is kept.
+Holds, shared infrastructure, artifacts, and audit/log storage remain; some costs continue.
 
-An unchanged READY record with `bootstrap_requested=false` reports
-`ALREADY_PREPARED` on repeat runs, without writes. This confirms preparation only,
-not deployment readiness. Active, completed, legacy, or stale records require
-inspection. The script never overwrites a request or changes propagation.
-The prepared record has no TTL or preparation expiry. If approved artifact/control
-values change, the fingerprint check fails closed; inspect before preparing a
-replacement. Existing legacy REQUESTED/CREATING/SUBMITTED records must not be
-blindly replaced or reset. Deploy the Boolean-aware Lambda/filter before toggling.
+## If an operation fails
 
-When ready to start compute, edit the **Boolean** `bootstrap_requested` from
-`false` to `true` on `PK=BOOTSTRAP, SK=REQUEST` in DynamoDB. Leave the other
-attributes unchanged. This is the only switch needed; no script is required
-for the toggle. The equivalent conditional CLI command is:
+1. Read `last_result`. Check `/aws/lambda/cloud-glider-sandbox-bootstrap` logs and stack events.
+2. Resolve the reported submission, ownership, deletion, or residual-resource problem.
+3. Submitted bootstrap retries verify the exact stack and restore inventory before clearing a matching marker. If `LOCK/PROVISIONING` remains, confirm the submission outcome and that its process has finished before conditionally clearing it. Age or one empty listing is insufficient.
+4. Request cleanup again to resume it, or use the recovery helper below. Start during cleanup is rejected, not queued.
+
+Do not replace the lifecycle item, reuse request numbers, reset CURRENT manually,
+or bypass checks with direct EC2 termination or force deletion. For an incident,
+use the approved emergency-hold path; cleanup never clears a hold.
+
+## Python alternatives and recovery helpers
+
+Run from the repository root. Preview first, then repeat with `--apply`.
+These are alternatives to console edits and **still rely on the Lambda**.
 
 ```sh
-aws dynamodb update-item --region us-west-2 \
-  --table-name cloud-glider-sandbox-state \
-  --key '{"PK":{"S":"BOOTSTRAP"},"SK":{"S":"REQUEST"}}' \
-  --update-expression 'SET bootstrap_requested = :yes' \
-  --condition-expression '#s = :ready AND bootstrap_requested = :no' \
-  --expression-attribute-names '{"#s":"status"}' \
-  --expression-attribute-values '{":ready":{"S":"READY"},":yes":{"BOOL":true},":no":{"BOOL":false}}'
+python3 scripts/lifecycle.py start
+python3 scripts/lifecycle.py stop
+python3 scripts/lifecycle.py cleanup
 ```
 
-Confirm compute costs before toggling. Billing alerts and notification-delivery
-verification are deferred to V2. Keep
-`CONTROL/GLOBAL.propagation_enabled=false` for the initial inspection trial;
-bootstrap also supports it being true. CloudTrail records the operator toggle.
-Only MODIFY events whose old Boolean is false and new Boolean is true with READY
-status pass the filter. Insertion, repeated true writes, and status changes do
-not trigger bootstrap. The stream event has a 15-minute maximum delivery age.
+Read the result in CONTROL/GLOBAL. If the Lambda itself fails, restore it or its
+trigger first; these scripts do not bypass it.
 
-Inspect request status:
+### Optional initial bootstrap preparation
+
+Initialize approved settings with `scripts/initialize_control.py`. The Lambda
+prepares the first request automatically on start. To prepare it explicitly:
 
 ```sh
-aws dynamodb get-item --region us-west-2 \
-  --table-name cloud-glider-sandbox-state --consistent-read \
-  --key '{"PK":{"S":"BOOTSTRAP"},"SK":{"S":"REQUEST"}}'
-aws cloudformation describe-stacks --region us-west-2 \
-  --stack-name cloud-glider-sandbox-gen-000000
+python3 scripts/request_bootstrap.py
 ```
 
-Expect READY -> CREATING -> SUBMITTED after the Boolean becomes true. SUBMITTED records a stack ID and only
-means CloudFormation accepted creation. Wait for CREATE_COMPLETE, then verify
-CURRENT belongs to the expected instance and stack, the approved artifact
-identities match, and distinct healthy heartbeats are arriving. EC2 running and
-Lambda success are not readiness evidence. With propagation disabled, verify
-there is no generation 000001 before considering the separately audited enable
-operation. The bootstrap Lambda never claims CURRENT or marks the workload healthy.
+The advanced `lifecycle.py bootstrap`, `enable`, and `disable` commands retain
+separate bootstrap/propagation control for an alternative approach.
 
-## Stop, failures, and inspection
+### Resume an inspected failed cleanup
 
-A normal propagation stop does not revoke bootstrap. Set `bootstrap_requested`
-back to false to withdraw authorization before the final provisioning read.
-The Lambda checks it both when claiming the request and immediately before
-CreateStack. If status remains READY, a later false-to-true transition can retry.
-If status is CREATING or SUBMITTED, inspect instead of resetting status: a create
-may already be in flight. The Boolean remains true after submission as a record
-of authorization; status prevents later toggles from launching a second chain.
-For an incident use the approved emergency-hold path as well as disabling
-propagation. Neither switch nor HOLD reverses a submitted CloudFormation request.
+```sh
+python3 scripts/lifecycle.py resume-cleanup
+```
 
-Inspect `/aws/lambda/cloud-glider-sandbox-bootstrap`, the request, CURRENT,
-generation records, live instances, and stack events on any error. Stream retries
-are bounded to two with a 15-minute maximum record age; discarded-event metadata
-is sent to the operational topic. Do not infer success from a lack of retries.
+Resume preserves inventory and restarts the 30-minute cleanup deadline. The
+controller allows three minutes for an outstanding submission marker to settle.
 
-A CREATING request with no stack is ambiguous, including a crash before submission.
-The handler never submits again from this state. Failed or conflicting stacks
-are also left for inspection. A matching CREATE_IN_PROGRESS/CREATE_COMPLETE stack
-can be reconciled on delivery retry without another CreateStack call. A failed
-create uses DO_NOTHING so surviving resources are preserved; cleanup goes through
-CloudFormation after verifying no request is still in flight.
+## Deploy or migrate this release
 
-Do not delete the request, reset CURRENT, or blindly reset CREATING to READY.
-There is no automatic retry/rebootstrap procedure for the first pass. A recovery
-requires a reviewed inventory and explicit operator decision. Retain SUBMITTED
-and any legacy CANCELLED records even after cleanup to prevent replay and unintended restart.
+1. Independently administer the reviewed permission-boundary update; foundation/bootstrap deployment cannot change those ceilings. Review foundation/bootstrap change sets, runtime permissions, independent boundary updates, and timer costs. Require no state-table replacement; do not broaden deployment permissions.
+2. Create the retained `cloud-glider-sandbox-generations` table through the reviewed foundation change set while operator provisioning is paused; do not replace the control table. Publish approved, immutable generation-template and agent-artifact versions with their SHA-256 digests. The template requires `RequestId` and `GenerationTableName`.
+3. For an existing installation, complete the offline migration below. For a new one, initialize approved CONTROL/CURRENT settings.
+4. Apply coordinated reviewed templates and artifact settings.
+5. Verify CONTROL stream filters, Lambda concurrency one, reconciliation, and IAM before use.
 
-## Validation before enabling propagation
+### Existing installation: offline migration
 
-Run repository tests, safety validation, renderer --check, and cfn-lint. After
-reviewed deployment, validate the runtime IAM restrictions, stream delivery and
-failure notification path, and a disabled-propagation bootstrap. Verify hold,
-duplicate delivery, failed bootstrap, artifact mismatch, and ownership conflict
-preserve existing resources. Local mocks do not prove IAM or live delivery.
+1. Disable legacy propagation and withdraw bootstrap authorization.
+2. Pause the old event source and operator provisioning. Wait for Lambda/CloudFormation operations to settle; inspect ambiguous CREATING requests.
+3. Delete legacy generation stacks through CloudFormation. Verify instance/root-volume deletion and inspect residual assets.
+4. Reconcile and release old locks; preserve holds.
+5. Confirm the separate generation table exists and is empty. Preview, inspect, then apply:
+
+   ```sh
+   python3 scripts/migrate_lifecycle.py --operator-path-paused
+   ```
+
+6. Complete the coordinated rollout, then resume the event source.
+
+Never migrate a live chain. Migration keeps an audit snapshot and initializes the
+cycle once. It rejects an already migrated lifecycle; do not reset its counter.
+
+## Reference and validation
+
+CONTROL holds the operator switches and messages alongside approved settings. The control table also holds CURRENT, BOOTSTRAP, holds/locks, and reusable latest-event audit records. Heartbeats and stack inventory use the separate generation table. Earlier audit history remains until an explicit offline compaction; normal cleanup does not erase it.
+BOOTSTRAP/REQUEST holds controller-managed launch permission, cycle identity,
+and cleanup state. No routine edits to that item are needed. HOLD stays independent.
+
+For Lambda source edits, run `python3 scripts/render_bootstrap_template.py`.
+Run unit tests, repository safety checks, renderer `--check`, and cfn-lint.
+Before live use, test holds, conflicting/stale requests, submission races,
+failed deletion, residual resources, and reset conflicts in the sandbox.
+Local tests do not verify live IAM or delivery.
+
+See [decision 0013](decisions/0013-control-operator-switches.md) for this interface
+and [decision 0012](decisions/0012-shared-chain-lifecycle.md) for cleanup mechanics.

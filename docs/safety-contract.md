@@ -5,7 +5,7 @@ merged or deployed, even if it makes a happy-path propagation test pass.
 
 ## System invariants
 
-1. **Fresh operator control.** The agent must strongly read `CONTROL/GLOBAL` and
+1. **Fresh operator control.** The agent must transactionally read `CONTROL/GLOBAL`, `BOOTSTRAP/REQUEST`, and
    `HOLD/ACTIVE` immediately before every `CreateStack` or `ExecuteChangeSet`
    operation that can provision successor compute. `propagation_enabled=false`
    or the existence of `HOLD/ACTIVE` stops successor provisioning.
@@ -21,7 +21,9 @@ merged or deployed, even if it makes a happy-path propagation test pass.
    boundaries, or SCPs.
 4. **Safe predecessor survival.** A predecessor is not retired until its
    successor is healthy, the continuation gate has passed, and ownership has
-   changed through a successful conditional write.
+   changed through a successful conditional write. Explicit operator cleanup is
+   the exception: it first fences provisioning, then deletes verified cycle stacks
+   through CloudFormation. Normal stop preserves running instances.
 5. **Idempotent coordination.** Leases, state transitions, request tokens, and
    ownership changes are deterministic or protected by conditional writes.
    Timeouts are reconciled against AWS state before retry.
@@ -191,3 +193,9 @@ retirement and preflight cleanup remain separate. Empty or inconsistent release
 approvals prevent new compute. Role boundary and organization-policy changes
 follow [the guardrail runbook](../iam/permission-guardrails.md). These controls do
 not replace the control-state, ownership, health or concurrency invariants.
+
+## Reusable lifecycle and operator requests
+
+Decisions [0012](decisions/0012-shared-chain-lifecycle.md) and [0013](decisions/0013-control-operator-switches.md) move authoritative propagation permission into BOOTSTRAP/REQUEST. CONTROL/GLOBAL holds operator request switches and feedback. Pending stop/cleanup blocks successor creation and handoff before acknowledgement. Every worker is fenced to its incremental request ID; non-expiring submission markers and exact inventory prevent cleanup from resetting around ambiguous creation. Bootstrap may enable propagation immediately; automatic health, ownership, template and capacity gates remain. Cleanup preserves HOLD and independent permission boundaries.
+
+Decision [0014](decisions/0014-separated-generation-state.md) places generation state/inventory in a separate DynamoDB table. Cross-table transactions retain lifecycle and ownership conditions; approved table identity is checked before use. DynamoDB audits reuse latest-event keys instead of preserving a full event history.

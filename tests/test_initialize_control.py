@@ -39,7 +39,7 @@ class InitializeControlTests(unittest.TestCase):
             self.args(), now="2026-08-24T00:00:00.000Z", event_id="event-1"
         )
         control = transaction[0]["Put"]["Item"]
-        self.assertEqual(control["propagation_enabled"], {"BOOL": False})
+        self.assertNotIn("propagation_enabled", control)
         self.assertNotIn("emergency_hold", control)
         self.assertEqual(control["max_generation"], {"N": "2"})
         self.assertEqual(control["max_live_generations"], {"N": "3"})

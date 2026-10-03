@@ -30,10 +30,10 @@ through generation `2`.
 
 - `cfn/network.yaml` creates the dedicated VPC, public subnet, internet gateway,
   route, and no-ingress generation security group.
-- `cfn/foundation.yaml` creates the retained control table, audit archive,
+- `cfn/foundation.yaml` creates separate retained control and generation-state tables, audit archive,
   category-specific log groups, artifact bucket, and IAM roles.
-- `cfn/bootstrap.yaml` defines the operator bootstrap Lambda and request-only
-  stream trigger; see [the bootstrap runbook](docs/bootstrap.md).
+- `cfn/bootstrap.yaml` defines the bootstrap/cleanup Lambda and operator-request
+  stream triggers; see [the bootstrap runbook](docs/bootstrap.md).
 - `cfn/generation.yaml` defines one generation EC2 instance. It deliberately
   contains no IAM or networking resources.
 - `agent/` contains the Python propagation state machine and
@@ -59,6 +59,15 @@ through generation `2`.
   runtime allow permission and which direct network mutations remain denied.
 - `iam/scp-requirements.md` records the account SCP requirements and links to
   the private policy renderer and reviewed rollout procedure.
+
+## Operator controls
+
+Use `CONTROL/GLOBAL`: set one Boolean `start_requested`, `stop_requested`, or
+`cleanup_requested` to true. Refresh `operation_status` and `last_result` in the
+same item. Detailed generation records live in the separate `cloud-glider-sandbox-generations` table; latest audit results stay with the controls. Start prepares bootstrap and enables propagation; stop keeps instances;
+cleanup deletes the generation chain and resets for another cycle. See the
+[concise runbook](docs/bootstrap.md). This interface requires the reviewed release
+and offline migration for existing installations; it is not deployed by this change.
 
 ## Safe starting values
 
