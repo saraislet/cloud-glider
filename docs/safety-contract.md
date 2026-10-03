@@ -20,7 +20,7 @@ merged or deployed, even if it makes a happy-path propagation test pass.
    detach, or delete IAM policies, roles, instance profiles, permission
    boundaries, or SCPs.
 4. **Safe predecessor survival.** A predecessor is not retired until its
-   successor is healthy, the continuation gate has passed, and ownership has
+   real successor passes approved identity/configuration and health checks, and ownership has
    changed through a successful conditional write. Explicit operator cleanup is
    the exception: it first fences provisioning, then deletes verified cycle stacks
    through CloudFormation. Normal stop preserves running instances.
@@ -35,7 +35,7 @@ merged or deployed, even if it makes a happy-path propagation test pass.
    automated recovery, handoff, and propagation.
 8. **Bounded concurrency.** Three live generation instances is the absolute
    ceiling, further limited by CONTROL. After fresh N+1 health validation,
-   successful continuation preflight, and conditional ownership transfer,
+   approved successor identity/configuration, and conditional ownership transfer,
    CloudFormation deletion of N may overlap creation of N+2. Completion of N
    deletion is not a prerequisite when a slot remains. Retiring instances and
    unresolved create requests consume slots until authoritative reconciliation
@@ -43,22 +43,20 @@ merged or deployed, even if it makes a happy-path propagation test pass.
    Never admit N+3 while N, N+1, and N+2 occupy the three slots. A fourth
    instance is an invariant breach. See [decision 0005](decisions/0005-overlapping-handoff.md).
 
-## Concurrent readiness and continuation preflight
+## Real successor validation
 
-Once the approved N+1 stack identity and parameters are known, its boot/readiness
-wait may overlap an unexecuted N+2 CREATE change-set preflight. No N+2 compute
-is created by preflight. Both activities must succeed before handoff or N
-retirement, with fresh health, control, identity, ownership and capacity checks
-at the join. Failure, timeout, lease loss or ambiguous evidence blocks handoff
-and preserves N. Track and reconcile preview cleanup without weakening stop/hold
-precedence. At max_generation use the existing boundary exception. See
-[decision 0006](decisions/0006-preflight-during-successor-boot.md).
+No separate N+2 continuation change set is created. Before handoff, reread the
+real N+1 stack ID, parameters, service role, completed creation status, instance
+identity and fresh eligible health record. Fresh control plus transactional
+hold, lease and CURRENT ownership checks still gate transfer. Missing or
+ambiguous evidence preserves N. Capacity/quota checks apply before every actual
+creation. See [decision 0018](decisions/0018-remove-continuation-preflight.md).
 
 ## Overlap release requirements
 
 This is an approved design change, not a claim that the existing runtime
 implements every guard. Before an overlap release, revalidate successor health
-after preflight and immediately before handoff, durably record retirement
+immediately before handoff, durably record retirement
 intent with handoff, reconcile deletion failures, and account for in-flight
 creates and terminating instances under the propagation lease. A fresh stop or
 hold blocks new create, handoff, and retirement submissions; accepted AWS
@@ -167,8 +165,8 @@ audit values.
   gates and never admit a fourth instance. Test a configured ceiling of two.
 - Fail or time out deletion after handoff; retain durable retirement intent,
   reconcile the exact stack, and prevent duplicate or unrelated deletion.
-- Expire N+1 health during preflight; do not hand off or retire N.
-- Complete readiness and preflight in either order; require both before handoff.
+- Expire N+1 health before handoff; do not hand off or retire N.
+- Verify propagation creates only the real successor, without preview placeholders.
   Fail or time out either activity, change control or identity during the join,
   or lose the lease; preserve N and reconcile the exact preview without execution.
 - Restart while both activities are in flight; reconcile deterministic requests
@@ -189,7 +187,7 @@ generation template must never use `CAPABILITY_IAM` or contain `AWS::IAM::*`.
 Runtime roles require their separately administered role-specific boundaries.
 The foundation deployer cannot edit those boundary policies or replace its own
 ceiling. CreateStack/CreateChangeSet require the exact approved versioned URL;
-retirement and preflight cleanup remain separate. Empty or inconsistent release
+retirement and legacy preview cleanup remain separate. Empty or inconsistent release
 approvals prevent new compute. Role boundary and organization-policy changes
 follow [the guardrail runbook](../iam/permission-guardrails.md). These controls do
 not replace the control-state, ownership, health or concurrency invariants.

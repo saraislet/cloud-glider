@@ -387,9 +387,7 @@ class SdkTests(unittest.TestCase):
                 "change_set_name": "preview",
             }
             self.gateway.create_stack(spec)
-            self.gateway.create_preflight(spec)
             self.gateway.delete_stack("stack", spec["role_arn"], "retire-token")
-            self.gateway.discard_preflight("preview", "stack", spec["role_arn"])
             self.gateway.claim_initial_current({"generation": "000001"})
             self.gateway.acquire_lease("owner", "000001", 1, 61)
             self.gateway.renew_lease("owner", 62)
@@ -425,10 +423,10 @@ class SdkTests(unittest.TestCase):
         self.assertEqual(create["ClientRequestToken"], "stable-token")
         self.assertEqual(create["OnFailure"], "DO_NOTHING")
         self.assertIn("versionId=v%2B1", create["TemplateURL"])
-        self.assertEqual(by_operation["create_change_set"]["ChangeSetType"], "CREATE")
         self.assertEqual(
             by_operation["delete_stack"]["ClientRequestToken"], "retire-token"
         )
+        self.assertNotIn("create_change_set", [op for op, _ in calls])
         self.assertNotIn("execute_change_set", [op for op, _ in calls])
         transaction = calls[-1][1]["TransactItems"]
         self.assertEqual(len(transaction), 7)

@@ -225,34 +225,6 @@ class GatewayLifecycleTests(unittest.TestCase):
             gateway._call.call_args.args[:2], ("dynamodb", "transact_write_items")
         )
 
-    def test_preflight_records_exact_stack_id_before_release(self):
-        gateway = self.gateway()
-        gateway._call.side_effect = lambda *args, **kw: (
-            {"Id": "change-set-id", "StackId": "preflight-stack-id"}
-            if args[0] == "cloudformation"
-            else {}
-        )
-        specification = {**self.specification(), "change_set_name": "preflight"}
-        self.assertEqual(gateway.create_preflight(specification), "change-set-id")
-        inventory_call = gateway._call.call_args_list[2]
-        inventory = inventory_call.kwargs["Item"]
-        self.assertEqual(inventory["stack_id"], {"S": "preflight-stack-id"})
-
-    def test_stale_preflight_does_not_delete_reused_stack_name(self):
-        gateway = self.gateway()
-        gateway.describe_stack = Mock(
-            return_value={
-                "StackId": "new-stack",
-                "StackStatus": "REVIEW_IN_PROGRESS",
-                "Parameters": {"RequestId": "2"},
-            }
-        )
-        gateway.discard_preflight("old-change-set", "reused-name", "role")
-        self.assertEqual(len(gateway._call.call_args_list), 1)
-        self.assertEqual(
-            gateway._call.call_args.args[:2], ("cloudformation", "delete_change_set")
-        )
-
     def test_heartbeat_conflict_is_terminal_when_lifecycle_remains_valid(self):
         gateway = self.gateway()
         gateway._call.return_value = {

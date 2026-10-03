@@ -14,7 +14,8 @@ through generation `2`.
 ## Project goals
 
 - Safely replace EC2 generations without retiring generation `N` until
-  generation `N+1` is healthy and `N+2` has passed its continuation preflight.
+  the real generation `N+1` passes approved identity, health, fresh control,
+  and conditional ownership checks.
 - Keep propagation operator-controlled through durable DynamoDB state and an
   emergency hold mechanism.
 - Make lifecycle operations idempotent, observable, and safe to retry after

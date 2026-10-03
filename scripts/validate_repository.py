@@ -169,13 +169,13 @@ def main() -> int:
         "read_control_and_hold",
         "acquire_lease",
         "wait_for_healthy_successor",
-        "continuation_preflight",
         "conditional_handoff",
         "delete_stack",
     ):
         require(agent, marker, str(agent_path))
+    if "create_change_set" in gateway or "continuation_preflight" in agent:
+        raise SystemExit("propagation must not create disposable continuation previews")
     for marker in (
-        'ChangeSetType="CREATE"',
         "transact_write_items",
         "attribute_not_exists(PK) AND attribute_not_exists(SK)",
         "service-quotas",

@@ -1,5 +1,7 @@
 # Decision 0005: overlapping retirement and next-generation creation
 
+> Continuation/preflight requirements are superseded by [decision 0018](0018-remove-continuation-preflight.md). Other safety requirements remain.
+
 Status: accepted design; runtime implementation and release validation pending.
 
 ## Decision and scope

@@ -6,7 +6,7 @@ Add explicit baked delivery mode to the current generation and bootstrap
 parameter contract. Baked startup verifies the installed archive identity and
 file hashes and uses the image's SDK environment/service. Preserve request IDs,
 separate generation state, current operator switches and cleanup fencing.
-Root sizes below 8 GiB require baked mode. Successors and continuation preflight
+Root sizes below 8 GiB require baked mode. Successors
 inherit the same image/runtime parameters.
 
 The earlier deployment was made from the obsolete glider repository. Preserve

@@ -1,5 +1,7 @@
 # Decision 0001: first-pass propagation agent
 
+> Continuation/preflight requirements are superseded by [decision 0018](0018-remove-continuation-preflight.md). Other safety requirements remain.
+
 Status: accepted for the sandbox first pass
 
 ## Decision
