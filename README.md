@@ -53,6 +53,8 @@ through generation `2`.
   infrastructure changes must preserve.
 - `docs/audit-logging.md` defines audit categories, fields, retention, and known
   cross-account limitations.
+- [Performance log](docs/performance-log.md) records public-safe evidence,
+  measurement gaps, and the format for future run summaries.
 - `iam/runtime-role-assumptions.md` records why public IPv4 assignment adds no
   runtime allow permission and which direct network mutations remain denied.
 - `iam/scp-requirements.md` records the account SCP requirements and links to
