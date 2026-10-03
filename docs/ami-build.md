@@ -30,3 +30,15 @@ CloudFormation to end storage charges. Preserve the AMI and its root snapshot.
 
 A rebuilt image does not update deployed controller/schema or CONTROL approvals.
 Follow [the coordinated release runbook](minimal-ami.md) after validation.
+
+## Bounded-root build workspace
+
+The October 2 rebuild encountered target-disk exhaustion while generating an
+initramfs after Ubuntu installed a newer AWS kernel alongside the source kernel.
+The builder now verifies and retains the selected `/boot/vmlinuz` AWS kernel
+and its modules, removes obsolete kernels and build headers, and bind-mounts a
+builder-root scratch directory over the target's `/var/tmp` during initramfs
+construction. The target remains 2 GiB and the 384 MiB final/boot headroom checks
+remain required. Build failure creates no approved image; Packer cleans up the
+builder with `-on-error=cleanup`. The selected kernel and package inventory are
+recorded by the normal image manifest/package evidence.

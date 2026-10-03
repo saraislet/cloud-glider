@@ -71,6 +71,16 @@ systemd-analyze verify /etc/systemd/system/cloud-glider.service
 # Keep the EC2 kernel; generic kernels and build-only packages consume scarce space.
 mapfile -t generic < <(dpkg-query -W -f='${binary:Package}\n' | grep -E '^linux-(image|modules)(-extra)?-[0-9].*-generic$|^linux-image-virtual$' || true)
 if [ "${#generic[@]}" -gt 0 ]; then apt-get purge -y "${generic[@]}"; fi
+# Preserve the selected target AWS kernel and its modules; headers are build-only.
+selected_kernel=$(readlink -f /boot/vmlinuz)
+selected_kernel=${selected_kernel##*/vmlinuz-}
+test -s "/boot/vmlinuz-$selected_kernel" && test -d "/lib/modules/$selected_kernel"
+dpkg-query -W -f='${binary:Package} ${db:Status-Abbrev}\n' |
+  awk '$2 == "ii" {print $1}' > /tmp/glider-image/installed-kernels.txt
+python3 /tmp/glider-image/prune_kernels.py "$selected_kernel" < /tmp/glider-image/installed-kernels.txt > /tmp/glider-image/obsolete-kernels.txt
+mapfile -t obsolete < /tmp/glider-image/obsolete-kernels.txt
+if [ "${#obsolete[@]}" -gt 0 ]; then apt-get purge -y "${obsolete[@]}"; fi
+test -s "/boot/vmlinuz-$selected_kernel" && test -d "/lib/modules/$selected_kernel"
 apt-get purge -y snapd
 apt-get purge -y liblzo2-2 squashfs-tools
 apt-get clean

@@ -49,6 +49,11 @@ for path in dev proc sys run; do
   mount --rbind "/$path" "$root/$path"
   mount --make-rslave "$root/$path"
 done
+# Initramfs scratch space belongs on the disposable builder's larger root disk.
+# The generated boot artifact remains on the target, but temporary unpacked
+# modules must not consume the final 2 GiB filesystem.
+mkdir -p /var/tmp/cloud-glider-initramfs "$root/var/tmp"
+mount --bind /var/tmp/cloud-glider-initramfs "$root/var/tmp"
 # Override the source image's 40-force-partuuid.cfg: the target has a new UUID.
 # Use normal initramfs boot and avoid importing host boot entries.
 printf 'GRUB_FORCE_PARTUUID=\nGRUB_DISABLE_LINUX_UUID=false\nGRUB_DISABLE_OS_PROBER=true\nGRUB_CMDLINE_LINUX="console=tty0 console=ttyAMA0,115200n8"\n' > "$root/etc/default/grub.d/99-cloud-glider.cfg"
