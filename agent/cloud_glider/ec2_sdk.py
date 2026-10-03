@@ -43,13 +43,32 @@ class Ec2SdkGateway(AwsSdkGateway):
                 ),
             ],
         )
-        live = sum(
-            (
-                len(reservation.get("Instances", []))
-                for page in instances
-                for reservation in page.get("Reservations", [])
-            )
-        )
+        occupied = {
+            instance["InstanceId"]
+            for page in instances
+            for reservation in page.get("Reservations", [])
+            for instance in reservation.get("Instances", [])
+        }
+        # Filtered EC2 inventory can lag. CURRENT and its durable retirement
+        # target remain occupied unless an exact lookup proves termination.
+        current = self.read_current()
+        for identifier in (
+            current.get("instance_id"),
+            current.get("predecessor_instance_id"),
+        ):
+            if not identifier or identifier == "NONE":
+                continue
+            if (
+                identifier == current.get("predecessor_instance_id")
+                and current.get("retirement_completed") is True
+            ):
+                continue
+            instance = self.describe_instance(identifier)
+            if not instance:
+                raise TransientFailure("capacity identity lookup is ambiguous")
+            if instance["State"]["Name"] != "terminated":
+                occupied.add(identifier)
+        live = len(occupied)
         if live >= max_live_generations:
             raise TransientFailure(
                 f"live generation ceiling reached ({live}/{max_live_generations})"

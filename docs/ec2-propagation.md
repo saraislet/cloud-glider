@@ -35,8 +35,8 @@ This release removes successor stack creation/deletion and the unused
 CloudFormation SDK client from the direct path. Baked startup performs no
 artifact download, package install, extraction or unit replacement. These are
 plausible latency savings, not measured propagation improvements. Confirmed
-predecessor termination is deliberately serialized before another launch,
-which may offset gains compared with the overlapping CloudFormation baseline.
+the initial release serialized predecessor termination before another launch.
+Decision 0020 allows boot overlap; no speedup has been measured for that change.
 
 The agent emits `phase_timing` records with UTC start/end timestamps, monotonic
 duration, request/generation/instance/correlation identity and PASSED, DEFERRED
@@ -48,3 +48,22 @@ compatibility, not propagation or live IAM correctness. A separately authorized
 bounded benchmark must record real RunInstances/TerminateInstances event times,
 authoritative heartbeat readiness and conditional handoff times, consistent
 hop boundaries, controls, live counts and retries before comparing latency.
+
+## Retirement overlap and recovery
+
+After accepted termination (or an exact `shutting-down` observation), the current
+owner may launch its candidate with capacity available. It retains CURRENT and
+its predecessor retirement intent until exact termination is confirmed. The
+candidate cannot take ownership during that wait. Restart the current owner's
+service to reconcile the same candidate and exact predecessor; never clear the
+intent or provisioning marker to force progress. A missing exact EC2 lookup
+blocks progress. With a ceiling of two, launch waits for termination; with three,
+one retiring predecessor, current owner and candidate may coexist. Stop/HOLD
+blocks retries and handoff. Terminal generations wait for confirmed retirement.
+
+Release review must include the profile ARN correction from `e28b760` (PR “Fix
+EC2 agent profile ARN and record live AMI verification”); it is not included in
+this source branch based on `24212a5`. Build a new artifact and matching baked
+AMI, review all pins, and deploy only after separate operator authorization with
+the prior cycle cleaned and propagation disabled. Authorize a separate bounded
+benchmark to measure performance and slow-termination behavior.
