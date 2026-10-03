@@ -36,8 +36,8 @@ Its ten-generation duration was 405.991s; sampled live peak was three.
 This release removes successor stack creation/deletion and the unused
 CloudFormation SDK client from the direct path. Baked startup performs no
 artifact download, package install, extraction or unit replacement. These are
-plausible latency savings, not measured propagation improvements. Confirmed
-the initial release serialized predecessor termination before another launch.
+plausible latency savings, not measured propagation improvements. The
+initial release serialized predecessor termination before another launch.
 Decision 0020 allows boot overlap; no speedup has been measured for that change.
 
 The agent emits `phase_timing` records with UTC start/end timestamps, monotonic
@@ -63,9 +63,8 @@ blocks progress. With a ceiling of two, launch waits for termination; with three
 one retiring predecessor, current owner and candidate may coexist. Stop/HOLD
 blocks retries and handoff. Terminal generations wait for confirmed retirement.
 
-Release review must include the profile ARN correction from `e28b760` (PR “Fix
-EC2 agent profile ARN and record live AMI verification”); it is not included in
-this source branch based on `24212a5`. Build a new artifact and matching baked
+The integrated source includes the profile ARN correction merged in PR #12
+(`cabf646`). Build a new artifact and matching baked
 AMI, review all pins, and deploy only after separate operator authorization with
 the prior cycle cleaned and propagation disabled. Authorize a separate bounded
 benchmark to measure performance and slow-termination behavior.
