@@ -266,7 +266,7 @@ class AgentTests(unittest.TestCase):
 
     def test_idle_owner_uses_three_requests_and_slow_poll(self):
         for values, hold in ((control(propagation_enabled=False), False),
-                             (control(max_generation=1), False), (control(), True)):
+                             (control(), True)):
             with self.subTest(values=values, hold=hold):
                 clock = FakeClock()
                 gateway = FakeGateway(config(), clock, [values])
@@ -278,13 +278,15 @@ class AgentTests(unittest.TestCase):
                 self.assertEqual(agent._poll_seconds, 60)
 
     def test_candidate_keeps_fast_readiness_cadence(self):
-        clock = FakeClock()
-        gateway = FakeGateway(config(), clock)
-        gateway.current["instance_id"] = "i-predecessor"
-        agent = self.make_agent(gateway, clock)
-        self.assertEqual(agent.cycle(), "CANDIDATE")
-        self.assertEqual(agent._poll_seconds, 5)
-        self.assertNotIn("create", gateway.calls)
+        for limit in (1, 2):
+            with self.subTest(limit=limit):
+                clock = FakeClock()
+                gateway = FakeGateway(config(), clock, [control(max_generation=limit)])
+                gateway.current["instance_id"] = "i-predecessor"
+                agent = self.make_agent(gateway, clock)
+                self.assertEqual(agent.cycle(), "CANDIDATE")
+                self.assertEqual(agent._poll_seconds, 5)
+                self.assertNotIn("create", gateway.calls)
 
     def test_idle_owner_resumes_with_fresh_stop_gate(self):
         clock = FakeClock()
@@ -297,15 +299,26 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(agent._poll_seconds, 5)
         self.assertNotIn("create", gateway.calls)
 
-    def test_raising_boundary_resumes_active_cadence_and_handoff(self):
-        clock = FakeClock()
-        gateway = FakeGateway(config(), clock, [control(max_generation=1)])
-        agent = self.make_agent(gateway, clock)
-        self.assertEqual(agent.cycle(), "MAX_GENERATION_REACHED")
-        gateway.controls = [control(max_generation=2)]
-        self.assertEqual(agent.cycle(), "HANDOFF_COMPLETE")
-        self.assertEqual(agent._poll_seconds, 5)
-        self.assertLess(gateway.calls.index("handoff"), gateway.calls.index("delete-predecessor"))
+    def test_generation_limit_exits_without_sleep_or_more_polling(self):
+        for enabled, hold in ((True, False), (False, False), (True, True), (False, True)):
+            with self.subTest(enabled=enabled, hold=hold):
+                clock = FakeClock()
+                gateway = FakeGateway(config(), clock, [control(
+                    max_generation=1, propagation_enabled=enabled)])
+                gateway.hold_active = hold
+                logs = []
+
+                def unexpected_sleep(seconds):
+                    self.fail("completed agent must not sleep or poll again")
+
+                agent = Agent(config(), gateway, clock=clock,
+                              sleep=unexpected_sleep, logger=logs.append)
+                self.assertEqual(agent.run(), 0)
+                self.assertEqual(gateway.calls.count("control"), 1)
+                self.assertEqual(gateway.calls.count("heartbeat"), 1)
+                for operation in ("acquire", "create", "handoff", "delete-predecessor"):
+                    self.assertNotIn(operation, gateway.calls)
+                self.assertEqual(json.loads(logs[-1])["result"], "MAX_GENERATION_REACHED")
 
     def test_incomplete_control_read_does_not_retain_idle_delay(self):
         clock = FakeClock()
@@ -331,14 +344,11 @@ class AgentTests(unittest.TestCase):
             waits.append(seconds)
             if len(waits) == 2:
                 gateway.controls = [control(max_generation=1)]
-            if len(waits) == 3:
-                raise StopIteration
             clock.sleep(seconds)
 
         agent = Agent(config(), gateway, clock=clock, sleep=sleep, logger=logs.append)
-        with self.assertRaises(StopIteration):
-            agent.run()
-        self.assertEqual(waits, [60, 60, 60])
+        self.assertEqual(agent.run(), 0)
+        self.assertEqual(waits, [60, 60])
         self.assertEqual(gateway.calls.count("control"), 3)
         results = [json.loads(line)["result"] for line in logs]
         self.assertEqual(results, ["STOPPED_BY_OPERATOR", "MAX_GENERATION_REACHED"])

@@ -13,7 +13,9 @@
 - Region and compute: `us-west-2`, Linux `arm64`, and `t4g.micro` only.
 - Readiness: two consecutive healthy heartbeats at a 5-second cadence,
   2-second predecessor polling, and a 10-minute successor wait including stack
-  creation. An idle current owner polls no faster than once per 60 seconds.
+  creation. A stopped current owner polls no faster than once per 60 seconds.
+  At the generation limit, the current owner exits successfully without polling;
+  a new limit takes effect on a fresh run from generation 0 after cleanup.
 - Runtime defaults: `config/runtime-defaults.json` is authoritative for values
   written into initial control state. Agents read those values from DynamoDB.
 - Control store: DynamoDB, not S3; encrypted at rest with an AWS-owned key.
@@ -78,3 +80,13 @@ budget is a planning target while billing alerts are deferred; verify current
 - Automating an operator-only IAM deny as a break-glass response. Version 1
   uses the `HOLD/ACTIVE` record plus `propagation_enabled=false`; the deny
   procedure is documented for manual operator use and is not automated.
+
+## Potential v3 task
+
+- Update the bootstrap Lambda to reset `BOOTSTRAP/REQUEST.bootstrap_requested`
+  to `false` after attempting to start generation `000000`, regardless of
+  whether the attempt succeeds or fails. The reset must not depend on the
+  generation ultimately becoming healthy. Preserve the durable request status
+  and one-shot protection; clearing the Boolean must not automatically rearm
+  bootstrap or change `propagation_enabled`. This is a deferred design note
+  only; current Lambda behavior remains unchanged.
