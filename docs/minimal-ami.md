@@ -25,22 +25,52 @@ SDK transport. Bake the pinned `agent/requirements.txt` into the service's
 `/etc/cloud-glider/image.json` containing `agent_sha256` and hashes of the
 installed release files. Do not include credentials or generation state.
 
-The existing AMI build checkout owns the Packer recipe and its pending boot-copy
-fixes. Those files and uncommitted work were left intact. Build a matching
-current-contract archive/image there using this reconciled source; do not
-replace its image with an archive built from an older branch. Repeat image
-metadata validation (`scripts/validate_baked_ami.py`), cold-boot smoke tests,
-wrong-digest/file startup checks, and observed bounded propagation before
-claiming a current-contract release is ready.
+The reconciled repository includes the Packer recipe and the boot-copy fixes.
+Build an archive from the current lifecycle source, then bake that exact archive.
+The 2 GiB target uses builder scratch space for initramfs generation and removes
+obsolete kernels and build headers while preserving the selected AWS kernel.
+Metadata validation and an isolated cold-boot test gate release deployment.
+The smoke stack reports explicit runtime evidence through a scoped CloudFormation
+wait-condition callback; it has no instance profile or propagation configuration.
 
 Upload the same baked archive and corresponding generation template as immutable
-versions. Review their exact hashes and version IDs together with the image and
-root snapshot. Through the existing approved CloudFormation path, update the
-foundation image allowlist and bootstrap's image/mode/root parameters. Pause
-operator provisioning and follow the current lifecycle migration runbook for
-the separate generation table and schema-2 control/request records. Do not
-replace the current controller with the legacy deployed template. Prepare a
-fresh request only after verifying cleanup and reconciling old ownership.
+versions. Review their hashes and version IDs with the image and root snapshot.
+Update the exact image/template approval parameters through CloudFormation and
+bootstrap's baked mode and 2 GiB root settings. Preserve the current lifecycle
+controller, schema-2 request and separate generation table. Conditionally update
+the approved control artifacts and request fingerprint only while provisioning
+is idle, CURRENT is uninitialized, requests are disabled and no hold or lease exists.
+Keep propagation disabled after deployment. An observed bounded propagation run
+is a separate operational validation; cold-boot success alone does not prove handoff.
+
+## Current-source rebuild on October 3, 2026
+
+[Release receipt](../config/releases/2026-10-03-current-minimal-ami.json):
+`ami-081b2ebbf3d760365`, encrypted 2 GiB snapshot `snap-0ad13fad7806f969d`,
+baked archive from commit `932096b584a275940b296e91fe49ebb58d692375`.
+Metadata checks passed. The isolated cold boot returned
+`CLOUD_GLIDER_AMI_SMOKE_PASS`, the matching archive hash, Python 3.12.3 and
+632,647,680 free bytes. Both smoke instances were terminated through
+CloudFormation, with no attached volumes remaining. All 212 tests passed.
+A live propagation/handoff run has not been performed with this image.
+
+The exact archive, generation template and bootstrap template were uploaded,
+version-pinned, downloaded and verified. Change sets were prepared for the
+boundary, foundation and bootstrap stacks. Boundary execution was denied:
+GliderManager lacks `iam:CreatePolicyVersion` and `iam:DeletePolicyVersion`.
+The effective policies were verified to exactly match the previous rendered
+CloudFormation documents. Rollback was continued with only those unchanged
+failed policy resources skipped. No runtime-stack update or control-record
+release transaction was applied. Propagation and bootstrap remain disabled.
+
+An approved security administrator must complete the boundary release. Inspect
+stack status and effective policy documents first, then create a fresh boundary
+change set using the receipt's exact AMI and versioned generation URL. The only
+policy changes are substitution of that image ARN and exact template URL; keep
+all actions, principals and resource patterns unchanged. After UPDATE_COMPLETE,
+review and execute the prepared foundation/bootstrap changes, then conditionally
+update the approved CONTROL tuple and READY request fingerprint while all
+provisioning remains idle. Do not enable propagation as part of release recovery.
 
 ## Legacy release actually deployed on October 2, 2026
 
@@ -74,5 +104,5 @@ propagation remained false and max_generation=2. No new chain was launched.
 
 The deployment credentials denied lambda:GetFunctionConfiguration; stack
 parameters, property-level change contexts and UPDATE_COMPLETE were verified.
-This source reconciliation makes no further AWS changes. Do not apply current
-main to that deployment until a coordinated schema/image migration is reviewed.
+The subsequent current-source release must use the migrated lifecycle controller
+and a rebuilt compatible image; the legacy receipt remains historical evidence.

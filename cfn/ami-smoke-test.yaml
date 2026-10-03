@@ -1,4 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::LanguageExtensions
 Description: Isolated Cloud Glider candidate AMI smoke test; never starts propagation.
 Parameters:
   CandidateImageId:
@@ -18,6 +19,15 @@ Rules:
       - Assert: !Equals [!Ref 'AWS::Region', us-west-2]
         AssertDescription: Smoke tests run only in us-west-2.
 Resources:
+  SmokeResultHandle:
+    Type: AWS::CloudFormation::WaitConditionHandle
+  SmokeResult:
+    Type: AWS::CloudFormation::WaitCondition
+    DependsOn: TestInstance
+    Properties:
+      Handle: !Ref SmokeResultHandle
+      Timeout: '600'
+      Count: 1
   TestInstance:
     Type: AWS::EC2::Instance
     Properties:
@@ -54,10 +64,33 @@ Resources:
           #!/bin/bash
           set -euo pipefail
           exec > >(tee /var/log/cloud-glider-smoke.log /dev/console) 2>&1
-          trap 'echo CLOUD_GLIDER_AMI_SMOKE_FAIL' ERR
-          /opt/cloud-glider/venv/bin/python /usr/local/lib/cloud-glider/smoke_test.py --expected-sha256 '${ExpectedAgentSha256}'
+          signal_result() {
+            /usr/bin/python3 - '${SmokeResultHandle}' "$1" <<'PYRESULT'
+          import json, sys, urllib.request
+          from pathlib import Path
+          status = sys.argv[2]
+          evidence = Path('/var/log/cloud-glider-smoke-result.log')
+          lines = evidence.read_text().splitlines() if evidence.exists() else []
+          result = next((json.loads(line) for line in reversed(lines) if line.startswith('{"result":')), {})
+          if status == 'SUCCESS' and result.get('result') != 'CLOUD_GLIDER_AMI_SMOKE_PASS':
+              raise SystemExit('missing explicit smoke result')
+          body = json.dumps({'Status': status, 'Reason': 'Isolated baked-runtime smoke checks',
+                             'UniqueId': 'runtime', 'Data': json.dumps(result)}).encode()
+          request = urllib.request.Request(sys.argv[1], data=body, method='PUT',
+                                           headers={'Content-Type': ''})
+          with urllib.request.urlopen(request, timeout=30) as response:
+              if response.status != 200:
+                  raise SystemExit('smoke result delivery failed')
+          PYRESULT
+          }
+          trap 'echo CLOUD_GLIDER_AMI_SMOKE_FAIL; signal_result FAILURE' ERR
+          /opt/cloud-glider/venv/bin/python /usr/local/lib/cloud-glider/smoke_test.py --expected-sha256 '${ExpectedAgentSha256}' | tee /var/log/cloud-glider-smoke-result.log
+          signal_result SUCCESS
           # Bound successful-test spend. Delete this stack after collecting evidence.
           shutdown -h now
 Outputs:
+  SmokeResultData:
+    Value:
+      Fn::ToJsonString: !GetAtt SmokeResult.Data
   InstanceId:
     Value: !Ref TestInstance
