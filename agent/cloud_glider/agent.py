@@ -22,6 +22,10 @@ GENERATION_RE = re.compile(r"^[0-9]{6}$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 REQUIRED_CONTROL_FIELDS = {
     "propagation_enabled",
+    "generation_table_name",
+    "request_id",
+    "cleanup_requested",
+    "cleanup_status",
     "desired_template_version",
     "desired_bootstrap_version",
     "template_s3_bucket",
@@ -46,7 +50,7 @@ REQUIRED_CONTROL_FIELDS = {
     "readiness_timeout_seconds",
 }
 GENERATION_PARAMETER_NAMES = {
-    "Environment", "Owner", "Generation", "PredecessorStackId", "HandoffToken",
+    "Environment", "Owner", "Generation", "RequestId", "GenerationTableName", "PredecessorStackId", "HandoffToken",
     "ApprovedImageId", "InstanceType", "ImageArchitecture", "SubnetId", "SecurityGroupId",
     "AgentInstanceProfileName", "StateTableName", "AgentArtifactBucket", "AgentArtifactKey",
     "AgentArtifactVersionId", "AgentArtifactSha256", "BootstrapVersion", "TemplateVersion",
@@ -71,11 +75,13 @@ class TransientFailure(RuntimeError):
 @dataclasses.dataclass(frozen=True)
 class AgentConfig:
     environment: str
+    request_id: str
     generation: str
     stack_id: str
     predecessor_stack_id: str
     handoff_token: str
     state_table_name: str
+    generation_table_name: str
     bootstrap_version: str
     template_version: str
     template_bucket: str
@@ -104,6 +110,10 @@ class AgentConfig:
         return config
 
     def validate(self) -> None:
+        if self.generation_table_name != f"cloud-glider-{self.environment}-generations":
+            raise ValueError("generation_table_name must be the designated environment table")
+        if not re.fullmatch(r"[1-9][0-9]{0,17}", self.request_id):
+            raise ValueError("request_id must be a positive incremental cycle number")
         if not GENERATION_RE.fullmatch(self.generation):
             raise ValueError("generation must be six digits")
         if not self.stack_id.startswith("arn:"):
@@ -132,6 +142,7 @@ class Gateway(Protocol):
     def stack_instance_id(self, stack_id: str) -> str: ...
     def verify_template_artifact(self, control: dict[str, Any]) -> None: ...
     def create_stack(self, specification: dict[str, Any]) -> str: ...
+    def reconcile_submission(self, specification: dict[str, Any], stack: dict[str, Any]) -> None: ...
     def read_generation_state(self, generation: str) -> dict[str, Any] | None: ...
     def check_capacity(self, max_live_generations: int) -> None: ...
     def create_preflight(self, specification: dict[str, Any]) -> str: ...
@@ -194,6 +205,14 @@ class Agent:
         missing = REQUIRED_CONTROL_FIELDS - control.keys()
         if missing:
             raise SafetyViolation("CONTROL_SCHEMA_INVALID", f"control record lacks {sorted(missing)}")
+        if control["generation_table_name"] != self.config.generation_table_name:
+            raise SafetyViolation("GENERATION_TABLE_MISMATCH", "generation table differs from approved control")
+        if control["request_id"] != self.config.request_id:
+            raise TransientFailure("stale chain identity; agent is fenced")
+        if type(control["propagation_enabled"]) is not bool or type(control["cleanup_requested"]) is not bool:
+            raise SafetyViolation("CONTROL_SCHEMA_INVALID", "lifecycle switches must be Boolean")
+        if control["cleanup_requested"] or control["cleanup_status"] not in ("IDLE", "COMPLETE"):
+            raise TransientFailure("cleanup fences agent activity")
         if control["max_live_generations"] != 3:
             raise SafetyViolation("LIVE_GENERATION_LIMIT_INVALID", "absolute maximum must remain 3")
         if control["concurrency_model"] != "PREFLIGHT_THEN_RETIRE":
@@ -219,6 +238,7 @@ class Agent:
 
     def _identity(self) -> dict[str, Any]:
         return {
+            "request_id": self.config.request_id,
             "generation": self.config.generation,
             "stack_id": self.config.stack_id,
             "instance_id": self.gateway.instance_id,
@@ -244,6 +264,8 @@ class Agent:
                 f"generation parameter set changed; missing={sorted(missing)}, extra={sorted(extra)}",
             )
         expected = {
+            "RequestId": self.config.request_id,
+            "GenerationTableName": self.config.generation_table_name,
             "Environment": self.config.environment,
             "Generation": self.config.generation,
             "PredecessorStackId": self.config.predecessor_stack_id,
@@ -291,7 +313,7 @@ class Agent:
         identity = {**self._identity(), "status": "CURRENT", "updated_at": utc_now()}
         if not self.gateway.claim_initial_current(identity):
             current = self.gateway.read_current()
-            if current.get("generation") != self.config.generation:
+            if (current.get("request_id"), current.get("generation"), current.get("stack_id"), current.get("instance_id")) != (self.config.request_id, self.config.generation, self.config.stack_id, self.gateway.instance_id):
                 raise SafetyViolation("BOOTSTRAP_OWNERSHIP_CONFLICT", "another generation claimed CURRENT")
 
     def is_current_owner(self, current: dict[str, Any] | None = None) -> bool:
@@ -299,6 +321,7 @@ class Agent:
             current = self.gateway.read_current()
         return (
             current.get("status") == "CURRENT"
+            and current.get("request_id") == self.config.request_id
             and current.get("generation") == self.config.generation
             and current.get("stack_id") == self.config.stack_id
             and current.get("instance_id") == self.gateway.instance_id
@@ -353,6 +376,7 @@ class Agent:
                 "environment": self.config.environment,
                 "generation": f"{generation:06d}",
                 "purpose": "generation-stack",
+                "bootstrap-request-id": self.config.request_id,
             },
         }
 
@@ -364,6 +388,7 @@ class Agent:
         if existing:
             if existing.get("Parameters") != specification["parameters"]:
                 raise SafetyViolation("SUCCESSOR_RECONCILIATION_MISMATCH", "existing successor has different parameters")
+            self.gateway.reconcile_submission(specification, existing)
             stack_id = existing["StackId"]
         else:
             self.gateway.verify_template_artifact(control)
@@ -421,6 +446,7 @@ class Agent:
         stack_id: str, instance_id: str, now: int,
     ) -> bool:
         expected = {
+            "request_id": control["request_id"],
             "generation": specification["generation"],
             "stack_id": stack_id,
             "instance_id": instance_id,
@@ -493,6 +519,7 @@ class Agent:
             "control_identity": {key: fresh[key] for key in REQUIRED_CONTROL_FIELDS},
         }
         successor = {
+            "request_id": self.config.request_id,
             "generation": successor_spec["generation"],
             "stack_id": stack_id,
             "instance_id": state["instance_id"],

@@ -32,6 +32,8 @@ class SdkTests(unittest.TestCase):
         self.factory = Mock(wraps=self.session)
         cfg = SimpleNamespace(
             state_table_name="cloud-glider-test",
+            generation_table_name="cloud-glider-test-generations",
+            request_id="1",
             environment="sandbox",
             emergency_hold_function_name="cloud-glider-hold",
         )
@@ -74,51 +76,84 @@ class SdkTests(unittest.TestCase):
     def test_control_hold_and_incomplete_reads(self):
         stub = self.stub("dynamodb")
         expected = {
-            "RequestItems": {
-                "cloud-glider-test": {
-                    "Keys": [
-                        {"PK": {"S": "CONTROL"}, "SK": {"S": "GLOBAL"}},
-                        {"PK": {"S": "HOLD"}, "SK": {"S": "ACTIVE"}},
-                    ],
-                    "ConsistentRead": True,
+            "TransactItems": [
+                {
+                    "Get": {
+                        "TableName": "cloud-glider-test",
+                        "Key": {"PK": {"S": pk}, "SK": {"S": sk}},
+                    }
                 }
-            }
+                for pk, sk in [
+                    ("CONTROL", "GLOBAL"),
+                    ("HOLD", "ACTIVE"),
+                    ("BOOTSTRAP", "REQUEST"),
+                ]
+            ]
+        }
+        lifecycle = {
+            "schema_version": {"S": "2"},
+            "request_id": {"S": "1"},
+            "propagation_enabled": {"BOOL": False},
+            "cleanup_requested": {"BOOL": False},
+            "cleanup_status": {"S": "IDLE"},
         }
         stub.add_response(
-            "batch_get_item",
+            "transact_get_items",
             {
-                "Responses": {
-                    "cloud-glider-test": [
-                        {
-                            "PK": {"S": "CONTROL"},
-                            "propagation_enabled": {"BOOL": False},
-                        },
-                        {"PK": {"S": "HOLD"}, "SK": {"S": "ACTIVE"}},
-                    ]
-                }
+                "Responses": [
+                    {"Item": {"PK": {"S": "CONTROL"}}},
+                    {"Item": {"PK": {"S": "HOLD"}, "SK": {"S": "ACTIVE"}}},
+                    {"Item": lifecycle},
+                ]
             },
             expected,
         )
         control, hold = self.gateway.read_control_and_hold()
         self.assertFalse(control["propagation_enabled"])
         self.assertTrue(hold)
-        stub.add_response(
-            "batch_get_item", {"UnprocessedKeys": expected["RequestItems"]}, expected
-        )
+        stub.add_response("transact_get_items", {"Responses": [{}]}, expected)
         with self.assertRaisesRegex(TransientFailure, "incomplete"):
             self.gateway.read_control_and_hold()
 
     def test_conditional_conflicts_and_access_denial(self):
         stub = self.stub("dynamodb")
-        stub.add_client_error("update_item", "ConditionalCheckFailedException")
+        stub.add_client_error(
+            "transact_write_items",
+            "TransactionCanceledException",
+            modeled_fields={
+                "CancellationReasons": [
+                    {"Code": "None"},
+                    {"Code": "ConditionalCheckFailed"},
+                ]
+            },
+        )
         self.assertFalse(self.gateway.acquire_lease("owner", "000001", 1, 61))
-        stub.add_client_error("update_item", "ConditionalCheckFailedException")
-        with self.assertRaisesRegex(SafetyViolation, "lease changed"):
+        stub.add_client_error(
+            "transact_write_items",
+            "TransactionCanceledException",
+            modeled_fields={
+                "CancellationReasons": [
+                    {"Code": "None"},
+                    {"Code": "ConditionalCheckFailed"},
+                ]
+            },
+        )
+        stub.add_response(
+            "get_item",
+            {
+                "Item": {
+                    "request_id": {"S": "1"},
+                    "cleanup_requested": {"BOOL": False},
+                    "cleanup_status": {"S": "IDLE"},
+                }
+            },
+        )
+        with self.assertRaises(SafetyViolation):
             self.gateway.renew_lease("owner", 61)
         stub.add_client_error("delete_item", "ConditionalCheckFailedException")
         self.gateway.release_lease("owner")
         stub.add_client_error(
-            "update_item",
+            "transact_write_items",
             "AccessDeniedException",
             "ConditionalCheckFailedException in message",
         )
@@ -127,11 +162,42 @@ class SdkTests(unittest.TestCase):
 
     def test_heartbeat_conflict_remains_safety_violation(self):
         stub = self.stub("dynamodb")
-        stub.add_client_error("put_item", "ConditionalCheckFailedException")
+        stub.add_client_error(
+            "transact_write_items",
+            "TransactionCanceledException",
+            modeled_fields={
+                "CancellationReasons": [
+                    {"Code": "None"},
+                    {"Code": "ConditionalCheckFailed"},
+                ]
+            },
+        )
+        stub.add_response(
+            "get_item",
+            {
+                "Item": {
+                    "request_id": {"S": "1"},
+                    "cleanup_requested": {"BOOL": False},
+                    "cleanup_status": {"S": "IDLE"},
+                }
+            },
+        )
         with self.assertRaises(SafetyViolation):
             self.gateway.write_heartbeat(
                 {"generation": "000001", "stack_id": "stack", "instance_id": "i-test"}
             )
+
+    def test_sdk_preserves_transaction_cancellation_reasons(self):
+        reasons = [{"Code": "TransactionConflict"}, {"Code": "None"}]
+        stub = self.stub("dynamodb")
+        stub.add_client_error(
+            "transact_write_items",
+            "TransactionCanceledException",
+            modeled_fields={"CancellationReasons": reasons},
+        )
+        with self.assertRaises(TransientFailure):
+            self.gateway.renew_lease("owner", 61)
+        # No follow-up read is needed to identify a transient cancellation.
 
     def test_only_missing_stack_is_absence(self):
         stub = self.stub("cloudformation")
@@ -151,6 +217,17 @@ class SdkTests(unittest.TestCase):
         ):
             with self.assertRaises(TransientFailure):
                 self.gateway.describe_stack("test")
+
+    def test_lease_transport_failure_is_not_a_conditional_conflict(self):
+        with patch.object(
+            self.gateway._clients["dynamodb"],
+            "transact_write_items",
+            side_effect=EndpointConnectionError(endpoint_url="https://example.invalid"),
+        ):
+            with self.assertRaises(TransientFailure):
+                self.gateway.acquire_lease("owner", "000001", 1, 61)
+            with self.assertRaises(TransientFailure):
+                self.gateway.claim_initial_current({"generation": "000001"})
 
     def test_paginated_capacity_counts_all_instances(self):
         stub = self.stub("ec2")
@@ -258,6 +335,7 @@ class SdkTests(unittest.TestCase):
                             "generation": "000001",
                             "error_code": "TEST",
                             "correlation_id": "id",
+                            "request_id": "1",
                         }
                     ).encode(),
                 },
@@ -281,11 +359,24 @@ class SdkTests(unittest.TestCase):
                 params, client.meta.service_model.operation_model(api).input_shape
             )
             calls.append((operation, params))
+            if operation == "describe_stacks":
+                return {
+                    "Stacks": [
+                        {
+                            "StackId": "stack",
+                            "StackStatus": "REVIEW_IN_PROGRESS",
+                            "Parameters": [
+                                {"ParameterKey": "RequestId", "ParameterValue": "2"}
+                            ],
+                        }
+                    ]
+                }
             return {"StackId": "stack", "Id": "preview"}
 
         with patch.object(self.gateway, "_call", side_effect=record):
             spec = {
                 "stack_name": "cloud-glider-sandbox-gen-000002",
+                "generation": "000002",
                 "template_bucket": "artifacts",
                 "template_key": "generation/template.yaml",
                 "template_version_id": "v+1",
@@ -313,7 +404,10 @@ class SdkTests(unittest.TestCase):
                         "stack_id": "stack",
                         "instance_id": "i-test",
                         "lease_owner": "owner",
-                        "control_identity": {"propagation_enabled": True},
+                        "control_identity": {
+                            "propagation_enabled": True,
+                            "environment": "sandbox",
+                        },
                     },
                     {
                         "generation": "000002",
@@ -326,22 +420,29 @@ class SdkTests(unittest.TestCase):
                     {"occurred_at": "now", "event_id": "event"},
                 )
             )
-        create = calls[0][1]
+        by_operation = {op: params for op, params in calls}
+        create = by_operation["create_stack"]
         self.assertEqual(create["ClientRequestToken"], "stable-token")
         self.assertEqual(create["OnFailure"], "DO_NOTHING")
         self.assertIn("versionId=v%2B1", create["TemplateURL"])
-        self.assertEqual(calls[1][1]["ChangeSetType"], "CREATE")
-        self.assertEqual(calls[2][1]["ClientRequestToken"], "retire-token")
+        self.assertEqual(by_operation["create_change_set"]["ChangeSetType"], "CREATE")
+        self.assertEqual(
+            by_operation["delete_stack"]["ClientRequestToken"], "retire-token"
+        )
         self.assertNotIn("execute_change_set", [op for op, _ in calls])
         transaction = calls[-1][1]["TransactItems"]
-        self.assertEqual(len(transaction), 6)
-        self.assertEqual(transaction[1]["ConditionCheck"]["Key"]["PK"], {"S": "HOLD"})
+        self.assertEqual(len(transaction), 7)
+        self.assertEqual(transaction[2]["ConditionCheck"]["Key"]["PK"], {"S": "HOLD"})
         self.assertEqual(
-            transaction[2]["ConditionCheck"]["ConditionExpression"],
+            transaction[3]["ConditionCheck"]["ConditionExpression"],
             "lease_owner = :owner",
         )
-        self.assertIn("ConditionExpression", transaction[3]["Update"])
-        self.assertIn("ConditionExpression", transaction[4]["Update"])
+        self.assertIn(
+            "request_id = :request_id", transaction[4]["Update"]["ConditionExpression"]
+        )
+        self.assertIn("ConditionExpression", transaction[5]["Update"])
+        self.assertEqual(transaction[5]["Update"]["TableName"], "cloud-glider-test-generations")
+        self.assertEqual(transaction[4]["Update"]["TableName"], "cloud-glider-test")
 
     def test_handoff_transaction_cancel_remains_conflict(self):
         # A minimal shaped transaction fixture comes from the full method above;

@@ -2,10 +2,11 @@
 
 ## Bootstrap
 
-The operator toggles `BOOTSTRAP/REQUEST.bootstrap_requested` from false to true
-to ask the bootstrap Lambda for the first generation. This is independent of `CONTROL/GLOBAL.propagation_enabled`;
-the Lambda does not modify or gate on that flag. Keep it false for initial
-inspection. `HOLD/ACTIVE` blocks both paths. See [the bootstrap runbook](bootstrap.md).
+Set `CONTROL/GLOBAL.start_requested=true` to bootstrap and enable propagation.
+The Lambda prepares the request and checks prerequisites. Read progress/messages
+in the same CONTROL item. Internal permissions remain in BOOTSTRAP/REQUEST;
+no routine edits there are needed. HOLD blocks start.
+See [the bootstrap runbook](bootstrap.md).
 
 ## Lifecycle
 
@@ -15,7 +16,7 @@ generation may conditionally claim an `UNINITIALIZED` `CURRENT/GLOBAL` record.
 All other generations begin as candidates.
 
 Every loop writes `GEN#{generation}/STATE`. A current owner may continue only
-when `CONTROL/GLOBAL.propagation_enabled=true`, `HOLD/ACTIVE` is absent, and its
+when `BOOTSTRAP/REQUEST.propagation_enabled=true`, `HOLD/ACTIVE` is absent, and its
 generation is below `max_generation`. It then:
 
 1. conditionally acquires `LOCK/PROPAGATION`;
@@ -44,16 +45,21 @@ this design approval as a completed runtime release. AMI baking is separate.
 
 ## DynamoDB records
 
+Control and coordination stay in `cloud-glider-{environment}-state`; generation state and stack inventory use `cloud-glider-{environment}-generations`.
+
 - `CONTROL/GLOBAL`: operator control, limits, timing, and approved immutable
   template/bootstrap/agent identities.
-- `BOOTSTRAP/REQUEST`: retained one-shot operator request and submission status.
+- `BOOTSTRAP/REQUEST`: shared lifecycle switches, incremental cycle identity, bootstrap status, and latest cleanup progress.
 - `CURRENT/GLOBAL`: authoritative generation, stack, instance, status, and
   handoff token.
-- `GEN#{generation}/STATE`: identity and heartbeat evidence. Writes are
+- Generation table `GEN#{generation}/STATE`: identity and heartbeat evidence. Writes are
   conditional on the original stack and instance and cannot overwrite `ERROR`.
 - `LOCK/PROPAGATION`: expiring owner token used to serialize propagation.
+- `LOCK/PROVISIONING`: non-expiring submission marker; cleanup waits for a reconciled outcome.
+- Generation table `GEN#.../RESOURCE#<stack ARN>`: exact submitted stack inventory, including preflights.
 - `HOLD/ACTIVE`: append-only incident stop created only by the dedicated Lambda.
-- `AUDIT#PROPAGATION/EVENT#{timestamp}#{uuid}`: transactional handoff audit.
+- `AUDIT#PROPAGATION/LATEST_HANDOFF`, `LATEST_HOLD`, `LATEST_INITIALIZATION`, `LATEST_BOOTSTRAP`, `LATEST_MIGRATION`: latest event per action.
+- `AUDIT#RECOVERY/LATEST`: latest hold-clear result. These fixed keys replace expanding event history.
 
 CloudTrail is authoritative for AWS API changes. The service writes structured
 JSON lifecycle events to the systemd journal; the configured EC2 status alarm
@@ -104,7 +110,7 @@ operator cleanup is still needed to end instance and storage charges.
 
 ## Stop and incident response
 
-For a normal stop, set `propagation_enabled=false`. A generation already
+For a normal stop, set `CONTROL/GLOBAL.stop_requested=true`. A generation already
 running remains intact, while every fresh successor create/handoff gate fails
 closed. This does not cancel a separate bootstrap request; use its cancellation
 procedure or an emergency hold. For an incident, also create `HOLD/ACTIVE` through the approved emergency path.
@@ -156,3 +162,12 @@ Record their VersionIds and SHA-256 digests. Initialize control with those exact
 values while propagation remains disabled, then bootstrap the first generation
 using the same values. A rebuilt tarball has a new digest and must be explicitly
 approved in control before it can propagate.
+
+## Chain cleanup
+
+See [the lifecycle decision](decisions/0012-shared-chain-lifecycle.md) and
+[operator runbook](bootstrap.md). Agents inherit RequestId through the approved
+template and reject a stale cycle or active cleanup. Provisioning claims a durable
+marker transactionally with lifecycle/HOLD checks. Heartbeats, CURRENT claims,
+leases, and handoffs are fenced by the same cycle. Normal stop keeps instances
+running; only explicit cleanup authorizes generation deletion without handoff.

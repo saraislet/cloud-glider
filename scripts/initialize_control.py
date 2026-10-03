@@ -41,9 +41,15 @@ def build_transaction(args: argparse.Namespace, *, now: str, event_id: str) -> l
         raise ValueError("the safety contract fixes --max-live-generations at 3")
 
     control = {
+        "start_requested": {"BOOL": False}, "stop_requested": {"BOOL": False},
+        "cleanup_requested": {"BOOL": False}, "operation_status": av_string("IDLE"),
+        "last_result": av_string("Ready for a start or cleanup request."),
+        "command_sequence": {"N": "0"}, "active_command": av_string("NONE"),
+        "active_request_id": av_string(""), "active_command_sequence": {"N": "0"},
+        "last_result_sequence": {"N": "0"}, "cycle_initialized": {"BOOL": False},
         "PK": av_string("CONTROL"),
         "SK": av_string("GLOBAL"),
-        "propagation_enabled": {"BOOL": False},
+        "generation_table_name": av_string(f"cloud-glider-{args.environment}-generations"),
         "desired_template_version": av_string(args.template_version),
         "desired_bootstrap_version": av_string(args.bootstrap_version),
         "template_s3_bucket": av_string(args.template_bucket),
@@ -79,7 +85,7 @@ def build_transaction(args: argparse.Namespace, *, now: str, event_id: str) -> l
     }
     audit = {
         "PK": av_string("AUDIT#PROPAGATION"),
-        "SK": av_string(f"EVENT#{now}#{event_id}"),
+        "SK": av_string("LATEST_INITIALIZATION"),
         "schema_version": av_string("1.0"),
         "event_id": av_string(event_id),
         "occurred_at": av_string(now),

@@ -117,6 +117,19 @@ class GuardrailTests(unittest.TestCase):
         self.assertNotIn("dynamodb:UpdateItem", hold)
         self.assertNotIn("dynamodb:PutItem", hold)
 
+    def test_cleanup_boundaries_keep_operator_and_deletion_limits(self):
+        context = {"dynamodb:LeadingKeys": ["BOOTSTRAP"]}
+        for role in ("Agent", "Hold"):
+            self.assertEqual(self.boundary(role, "dynamodb:ConditionCheckItem", TABLE, context), "allowed")
+            self.assertNotEqual(self.boundary(role, "dynamodb:UpdateItem", TABLE, context), "allowed")
+        self.assertEqual(self.boundary("Bootstrap", "dynamodb:UpdateItem", TABLE, {"dynamodb:LeadingKeys": ["CONTROL"]}), "allowed")
+        self.assertNotEqual(self.boundary("Bootstrap", "dynamodb:DeleteItem", TABLE, {"dynamodb:LeadingKeys": ["HOLD"]}), "allowed")
+        tags = {"cloudformation:RoleARN": GENERATION, "aws:ResourceTag/project": "cloud-glider", "aws:ResourceTag/environment": "sandbox", "aws:ResourceTag/purpose": "generation-stack"}
+        self.assertEqual(self.boundary("Bootstrap", "cloudformation:DeleteStack", STACK, tags), "allowed")
+        for changed in ({**tags, "aws:ResourceTag/project": "other"}, {**tags, "cloudformation:RoleARN": FOUNDATION}):
+            self.assertNotEqual(self.boundary("Bootstrap", "cloudformation:DeleteStack", STACK, changed), "allowed")
+        self.assertNotEqual(self.boundary("Bootstrap", "cloudformation:DeleteStack", STACK.replace("-gen-000001", "-foundation"), tags), "allowed")
+
     def test_creation_requires_exact_release_and_service_role(self):
         for boundary, stack in [("Agent", STACK), ("Bootstrap", STACK.replace("000001", "000000"))]:
             for url, expected in [(URL, "allowed"), (URL + "-different", "explicitDeny"), (None, "explicitDeny")]:
@@ -158,11 +171,19 @@ class GuardrailTests(unittest.TestCase):
             for action in ["dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:BatchWriteItem"]:
                 self.assertEqual(self.boundary("Agent", action, TABLE, {"dynamodb:LeadingKeys": [key]}), "explicitDeny")
         self.assertEqual(self.boundary("Agent", "dynamodb:ConditionCheckItem", TABLE, {"dynamodb:LeadingKeys": ["CONTROL", "HOLD"]}), "allowed")
-        for key in ["CURRENT", "GEN#000001", "LOCK", "AUDIT#PROPAGATION"]:
+        for key in ["CURRENT", "LOCK", "AUDIT#PROPAGATION"]:
             self.assertEqual(self.boundary("Agent", "dynamodb:UpdateItem", TABLE, {"dynamodb:LeadingKeys": [key]}), "allowed")
         self.assertEqual(self.boundary("Agent", "dynamodb:PutItem", TABLE, {"dynamodb:LeadingKeys": ["CURRENT", "CONTROL"]}), "explicitDeny")
         self.assertEqual(self.boundary("Hold", "dynamodb:PutItem", TABLE, {"dynamodb:LeadingKeys": ["HOLD"]}), "allowed")
         self.assertEqual(self.boundary("Hold", "dynamodb:DeleteItem", TABLE, {"dynamodb:LeadingKeys": ["HOLD"]}), "explicitDeny")
+
+    def test_generation_table_permissions_are_separate(self):
+        generations = TABLE.replace("-state", "-generations")
+        for role, action in [("Agent", "dynamodb:UpdateItem"), ("Hold", "dynamodb:UpdateItem"), ("Bootstrap", "dynamodb:PutItem"), ("Bootstrap", "dynamodb:DeleteItem")]:
+            self.assertEqual(self.boundary(role, action, generations, {"dynamodb:LeadingKeys": ["GEN#000001"]}), "allowed")
+            self.assertNotEqual(self.boundary(role, action, TABLE, {"dynamodb:LeadingKeys": ["GEN#000001"]}), "allowed")
+            for key in ("CONTROL", "CURRENT", "HOLD", "BOOTSTRAP"):
+                self.assertNotEqual(self.boundary(role, action, generations, {"dynamodb:LeadingKeys": [key]}), "allowed")
 
     def test_s3_metadata_reads_and_artifact_immutability(self):
         for action in ["s3:GetBucketLocation", "s3:GetBucketVersioning"]:

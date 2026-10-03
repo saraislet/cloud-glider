@@ -119,6 +119,43 @@ Resources:
         - Key: purpose
           Value: control-and-coordination
 
+  GenerationTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: !Sub 'cloud-glider-${Environment}-generations'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      DeletionProtectionEnabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+        RecoveryPeriodInDays: 35
+      SSESpecification:
+        # DynamoDB remains encrypted at rest with the free AWS-owned key.
+        SSEEnabled: false
+      TimeToLiveSpecification:
+        AttributeName: expires_at
+        Enabled: true
+      Tags:
+        - Key: project
+          Value: cloud-glider
+        - Key: environment
+          Value: !Ref Environment
+        - Key: owner
+          Value: !Ref Owner
+        - Key: purpose
+          Value: generation-state
+
   ArtifactBucket:
     Type: AWS::S3::Bucket
     DeletionPolicy: Retain
@@ -441,11 +478,18 @@ Resources:
               - Sid: RecordGenerationError
                 Effect: Allow
                 Action: dynamodb:UpdateItem
-                Resource: !GetAtt StateTable.Arn
+                Resource: !GetAtt GenerationTable.Arn
                 Condition:
                   ForAllValues:StringLike:
                     dynamodb:LeadingKeys:
                       - 'GEN#*'
+              - Sid: CheckReporterCycle
+                Effect: Allow
+                Action: dynamodb:ConditionCheckItem
+                Resource: !GetAtt StateTable.Arn
+                Condition:
+                  ForAllValues:StringEquals:
+                    dynamodb:LeadingKeys: [BOOTSTRAP]
               - Sid: WriteFunctionLogs
                 Effect: Allow
                 Action:
@@ -479,6 +523,7 @@ Resources:
       Environment:
         Variables:
           TABLE_NAME: !Ref StateTable
+          GENERATION_TABLE: !Ref GenerationTable
           ENVIRONMENT: !Ref Environment
       Code:
         ZipFile: |
@@ -494,6 +539,9 @@ Resources:
           error_pattern = re.compile(r"^[A-Z][A-Z0-9_]{2,63}$")
 
           def handler(event, context):
+              request_id = str(event.get("request_id", ""))
+              if not re.fullmatch(r"[1-9][0-9]{0,17}", request_id):
+                  raise ValueError("request_id is required")
               generation = str(event.get("generation", ""))
               error_code = str(event.get("error_code", ""))
               correlation_id = str(event.get("correlation_id", ""))
@@ -515,6 +563,7 @@ Resources:
                   ":correlation": {"S": correlation_id},
                   ":now": {"S": now},
                   ":generation": {"S": generation},
+                  ":request": {"S": request_id},
               }
               hold = {
                   "PK": {"S": "HOLD"},
@@ -530,7 +579,7 @@ Resources:
               }
               audit = {
                   "PK": {"S": "AUDIT#PROPAGATION"},
-                  "SK": {"S": f"EVENT#{now}#{event_id}"},
+                  "SK": {"S": "LATEST_HOLD"},
                   "schema_version": {"S": "1.0"},
                   "event_id": {"S": event_id},
                   "occurred_at": {"S": now},
@@ -572,12 +621,17 @@ Resources:
                   try:
                       dynamodb.transact_write_items(
                           TransactItems=[
+                              {"ConditionCheck": {"TableName": table,
+                                  "Key": {"PK": {"S": "BOOTSTRAP"}, "SK": {"S": "REQUEST"}},
+                                  "ConditionExpression": "request_id = :id AND cleanup_requested = :no AND cleanup_status IN (:idle, :complete)",
+                                  "ExpressionAttributeValues": {":id": {"S": request_id}, ":no": {"BOOL": False},
+                                      ":idle": {"S": "IDLE"}, ":complete": {"S": "COMPLETE"}}}},
                               hold_operation,
                               {
                                   "Update": {
-                                      "TableName": table,
+                                      "TableName": os.environ["GENERATION_TABLE"],
                                       "Key": {"PK": {"S": f"GEN#{generation}"}, "SK": {"S": "STATE"}},
-                                      "UpdateExpression": "SET #status = :error, generation = :generation, error_code = :code, error_correlation_id = :correlation, updated_at = :now",
+                                      "UpdateExpression": "SET request_id = :request, #status = :error, generation = :generation, error_code = :code, error_correlation_id = :correlation, updated_at = :now",
                                       "ExpressionAttributeNames": {"#status": "status"},
                                       "ExpressionAttributeValues": generation_values,
                                   }
@@ -586,7 +640,6 @@ Resources:
                                   "Put": {
                                       "TableName": table,
                                       "Item": audit,
-                                      "ConditionExpression": "attribute_not_exists(PK) AND attribute_not_exists(SK)",
                                   }
                               },
                           ]
@@ -1103,9 +1156,15 @@ Resources:
                   ForAllValues:StringLike:
                     dynamodb:LeadingKeys:
                       - CURRENT
-                      - 'GEN#*'
                       - LOCK
                       - 'AUDIT#PROPAGATION'
+              - Sid: ReadAndWriteGenerationState
+                Effect: Allow
+                Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:UpdateItem]
+                Resource: !GetAtt GenerationTable.Arn
+                Condition:
+                  ForAllValues:StringLike:
+                    dynamodb:LeadingKeys: ['GEN#*']
               - Sid: AssertNoEmergencyHoldAtHandoff
                 Effect: Allow
                 Action: dynamodb:ConditionCheckItem
@@ -1115,6 +1174,7 @@ Resources:
                     dynamodb:LeadingKeys:
                       - HOLD
                       - CONTROL
+                      - BOOTSTRAP
               - Sid: ReleaseOnlyPropagationLease
                 Effect: Allow
                 Action: dynamodb:DeleteItem
@@ -1308,6 +1368,8 @@ Outputs:
     Value: !Ref StateTable
   ArtifactBucketName:
     Value: !Ref ArtifactBucket
+  GenerationTableName:
+    Value: !Ref GenerationTable
   AuditArchiveBucketName:
     Value: !Ref AuditArchiveBucket
   AgentRoleArn:

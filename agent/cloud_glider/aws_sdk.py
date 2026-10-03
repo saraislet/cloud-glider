@@ -15,7 +15,6 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 from .agent import AgentConfig, SafetyViolation, TransientFailure
 
-
 IMDS = "http://169.254.169.254/latest"
 
 
@@ -123,6 +122,7 @@ class AwsSdkGateway:
                 "_code": error.get("Code", "Unknown"),
                 "_error": str(exc),
                 "_returncode": 1,
+                "_cancellation_reasons": exc.response.get("CancellationReasons", []),
             }
             if allow_failure:
                 return result
@@ -145,36 +145,218 @@ class AwsSdkGateway:
         result = self._call(
             "dynamodb",
             "get_item",
-            TableName=self.config.state_table_name,
+            TableName=(
+                self.config.generation_table_name
+                if pk.startswith("GEN#")
+                else self.config.state_table_name
+            ),
             Key={"PK": {"S": pk}, "SK": {"S": sk}},
             ConsistentRead=True,
         )
         return _item(result.get("Item"))
 
     def read_control_and_hold(self) -> tuple[dict[str, Any], bool]:
-        request = {
-            self.config.state_table_name: {
-                "Keys": [
-                    {"PK": {"S": "CONTROL"}, "SK": {"S": "GLOBAL"}},
-                    {"PK": {"S": "HOLD"}, "SK": {"S": "ACTIVE"}},
-                ],
-                "ConsistentRead": True,
+        keys = [("CONTROL", "GLOBAL"), ("HOLD", "ACTIVE"), ("BOOTSTRAP", "REQUEST")]
+        result = self._call(
+            "dynamodb",
+            "transact_get_items",
+            TransactItems=[
+                {
+                    "Get": {
+                        "TableName": self.config.state_table_name,
+                        "Key": {"PK": {"S": pk}, "SK": {"S": sk}},
+                    }
+                }
+                for pk, sk in keys
+            ],
+        )
+        if len(result.get("Responses", [])) != 3:
+            raise TransientFailure("control transaction was incomplete")
+        control, hold, lifecycle = [
+            _item(entry.get("Item")) for entry in result["Responses"]
+        ]
+        if "propagation_enabled" in control or lifecycle.get("schema_version") != "2":
+            raise SafetyViolation(
+                "LIFECYCLE_MIGRATION_REQUIRED", "legacy or missing lifecycle control"
+            )
+        if lifecycle.get("request_id") != self.config.request_id:
+            raise TransientFailure("stale chain identity")
+        pending_stop = any(
+            (
+                control.get(field) is True
+                for field in ("stop_requested", "cleanup_requested")
+            )
+        )
+        for field in (
+            "request_id",
+            "propagation_enabled",
+            "cleanup_requested",
+            "cleanup_status",
+        ):
+            if field not in lifecycle:
+                raise SafetyViolation(
+                    "LIFECYCLE_SCHEMA_INVALID", "missing lifecycle gate"
+                )
+            control[field] = lifecycle[field]
+        if pending_stop:
+            control["propagation_enabled"] = False
+        return (control, bool(hold))
+
+    def _lifecycle_check(self, *, provisioning=False):
+        values = {
+            ":id": {"S": self.config.request_id},
+            ":no": {"BOOL": False},
+            ":idle": {"S": "IDLE"},
+            ":complete": {"S": "COMPLETE"},
+        }
+        condition = "request_id = :id AND cleanup_requested = :no AND cleanup_status IN (:idle, :complete)"
+        if provisioning:
+            condition += " AND propagation_enabled = :yes"
+            values[":yes"] = {"BOOL": True}
+        return {
+            "ConditionCheck": {
+                "TableName": self.config.state_table_name,
+                "Key": {"PK": {"S": "BOOTSTRAP"}, "SK": {"S": "REQUEST"}},
+                "ConditionExpression": condition,
+                "ExpressionAttributeValues": values,
             }
         }
-        result = self._call("dynamodb", "batch_get_item", RequestItems=request)
-        items = [
-            _item(value)
-            for value in result.get("Responses", {}).get(
-                self.config.state_table_name, []
-            )
-        ]
-        control = next((value for value in items if value.get("PK") == "CONTROL"), {})
-        hold = any(
-            value.get("PK") == "HOLD" and value.get("SK") == "ACTIVE" for value in items
+
+    def _fenced_write(self, operation, conflict_code=None, *, return_conflict=False):
+        result = self._call(
+            "dynamodb",
+            "transact_write_items",
+            allow_failure=True,
+            TransactItems=[self._lifecycle_check(), operation],
         )
-        if result.get("UnprocessedKeys"):
-            raise TransientFailure("control read was incomplete")
-        return control, hold
+        if result.get("_code") == "TransactionCanceledException":
+            reasons = result.get("_cancellation_reasons", [])
+            codes = tuple(reason.get("Code") or "None" for reason in reasons)
+            # Cancellation alone is not proof of lost ownership. Contention,
+            # throttling, and missing/ambiguous reasons defer this attempt.
+            confirmed_condition = (
+                len(codes) == 2
+                and all(code in ("None", "ConditionalCheckFailed") for code in codes)
+                and "ConditionalCheckFailed" in codes
+            )
+            if not confirmed_condition:
+                raise TransientFailure(
+                    "transaction cancelled; retry after rereading state"
+                )
+            if return_conflict:
+                return False
+            lifecycle = self._get("BOOTSTRAP", "REQUEST")
+            if (
+                codes == ("None", "ConditionalCheckFailed")
+                and conflict_code
+                and lifecycle.get("request_id") == self.config.request_id
+                and lifecycle.get("cleanup_requested") is False
+                and lifecycle.get("cleanup_status") in ("IDLE", "COMPLETE")
+            ):
+                raise SafetyViolation(
+                    conflict_code, "coordination state condition changed"
+                )
+            raise TransientFailure("lifecycle or state condition changed")
+        if result.get("_returncode"):
+            raise TransientFailure(result["_error"])
+        return True
+
+    def _begin_provisioning(self, specification):
+        # Non-expiring marker: a lost AWS response requires reconciliation.
+        token = specification["client_token"]
+        table = self.config.state_table_name
+        transaction = [
+            self._lifecycle_check(provisioning=True),
+            {
+                "ConditionCheck": {
+                    "TableName": table,
+                    "Key": {"PK": {"S": "CONTROL"}, "SK": {"S": "GLOBAL"}},
+                    "ConditionExpression": "stop_requested = :no AND cleanup_requested = :no",
+                    "ExpressionAttributeValues": {":no": {"BOOL": False}},
+                }
+            },
+            {
+                "ConditionCheck": {
+                    "TableName": table,
+                    "Key": {"PK": {"S": "HOLD"}, "SK": {"S": "ACTIVE"}},
+                    "ConditionExpression": "attribute_not_exists(PK)",
+                }
+            },
+            {
+                "Put": {
+                    "TableName": table,
+                    "Item": _ddb_item(
+                        {
+                            "PK": "LOCK",
+                            "SK": "PROVISIONING",
+                            "request_id": self.config.request_id,
+                            "token": token,
+                            "stack_name": specification["stack_name"],
+                        }
+                    ),
+                    "ConditionExpression": "attribute_not_exists(PK)",
+                }
+            },
+        ]
+        self._call("dynamodb", "transact_write_items", TransactItems=transaction)
+        return token
+
+    def reconcile_submission(self, specification, stack):
+        marker = self._get("LOCK", "PROVISIONING")
+        if not marker:
+            return
+        if (
+            marker.get("request_id") != self.config.request_id
+            or marker.get("token") != specification["client_token"]
+            or marker.get("stack_name") != specification["stack_name"]
+            or (stack.get("RoleARN") != specification["role_arn"])
+            or (
+                stack.get("Tags", {}).get("bootstrap-request-id")
+                != self.config.request_id
+            )
+            or (
+                stack.get("StackStatus")
+                not in ("CREATE_IN_PROGRESS", "CREATE_COMPLETE")
+            )
+        ):
+            raise TransientFailure(
+                "ambiguous provisioning marker requires operator inspection"
+            )
+        self._record_submission(specification, stack["StackId"])
+        self._end_provisioning(specification["client_token"])
+
+    def _record_submission(self, specification, stack_id):
+        # Persist the exact stack ARN before releasing the submission marker.
+        item = _ddb_item(
+            {
+                "PK": f"GEN#{specification['generation']}",
+                "SK": "RESOURCE#" + stack_id,
+                "request_id": self.config.request_id,
+                "stack_id": stack_id,
+            }
+        )
+        self._call(
+            "dynamodb",
+            "put_item",
+            TableName=self.config.generation_table_name,
+            Item=item,
+            ConditionExpression="attribute_not_exists(PK) OR request_id = :id",
+            ExpressionAttributeValues={":id": {"S": self.config.request_id}},
+        )
+
+    def _end_provisioning(self, token):
+        self._call(
+            "dynamodb",
+            "delete_item",
+            TableName=self.config.state_table_name,
+            Key={"PK": {"S": "LOCK"}, "SK": {"S": "PROVISIONING"}},
+            ConditionExpression="request_id = :id AND #token = :token",
+            ExpressionAttributeNames={"#token": "token"},
+            ExpressionAttributeValues={
+                ":id": {"S": self.config.request_id},
+                ":token": {"S": token},
+            },
+        )
 
     def read_current(self) -> dict[str, Any]:
         return self._get("CURRENT", "GLOBAL")
@@ -189,22 +371,17 @@ class AwsSdkGateway:
             names[name] = key
             values[marker] = _av(value)
             assignments.append(f"{name} = {marker}")
-        result = self._call(
-            "dynamodb",
-            "update_item",
-            TableName=self.config.state_table_name,
-            Key={"PK": {"S": "CURRENT"}, "SK": {"S": "GLOBAL"}},
-            UpdateExpression="SET " + ", ".join(assignments),
-            ConditionExpression="#status = :uninitialized",
-            ExpressionAttributeNames=names,
-            ExpressionAttributeValues=values,
-            allow_failure=True,
-        )
-        if result.get("_code") == "ConditionalCheckFailedException":
-            return False
-        if result.get("_returncode"):
-            raise TransientFailure(result["_error"])
-        return True
+        operation = {
+            "Update": {
+                "TableName": self.config.state_table_name,
+                "Key": {"PK": {"S": "CURRENT"}, "SK": {"S": "GLOBAL"}},
+                "UpdateExpression": "SET " + ", ".join(assignments),
+                "ConditionExpression": "#status = :uninitialized",
+                "ExpressionAttributeNames": names,
+                "ExpressionAttributeValues": values,
+            }
+        }
+        return self._fenced_write(operation, return_conflict=True)
 
     def write_heartbeat(self, state: dict[str, Any]) -> None:
         item = _ddb_item({"PK": f"GEN#{state['generation']}", "SK": "STATE", **state})
@@ -212,67 +389,58 @@ class AwsSdkGateway:
             ":stack": {"S": state["stack_id"]},
             ":instance": {"S": state["instance_id"]},
         }
-        result = self._call(
-            "dynamodb",
-            "put_item",
-            TableName=self.config.state_table_name,
-            Item=item,
-            ConditionExpression="attribute_not_exists(PK) OR (stack_id = :stack AND instance_id = :instance AND #status <> :error)",
-            ExpressionAttributeNames={"#status": "status"},
-            ExpressionAttributeValues={**values, ":error": {"S": "ERROR"}},
-            allow_failure=True,
+        self._fenced_write(
+            {
+                "Put": {
+                    "TableName": self.config.generation_table_name,
+                    "Item": item,
+                    "ConditionExpression": "attribute_not_exists(PK) OR (stack_id = :stack AND instance_id = :instance AND #status <> :error)",
+                    "ExpressionAttributeNames": {"#status": "status"},
+                    "ExpressionAttributeValues": {**values, ":error": {"S": "ERROR"}},
+                }
+            },
+            conflict_code="GENERATION_IDENTITY_CONFLICT",
         )
-        if result.get("_code") == "ConditionalCheckFailedException":
-            raise SafetyViolation(
-                "GENERATION_IDENTITY_CONFLICT", "generation heartbeat identity changed"
-            )
-        if result.get("_returncode"):
-            raise TransientFailure(result["_error"])
 
     def acquire_lease(
         self, owner: str, generation: str, now: int, expires: int
     ) -> bool:
-        result = self._call(
-            "dynamodb",
-            "update_item",
-            TableName=self.config.state_table_name,
-            Key={"PK": {"S": "LOCK"}, "SK": {"S": "PROPAGATION"}},
-            UpdateExpression="SET lease_owner = :owner, generation = :generation, expires_at = :expires",
-            ConditionExpression="attribute_not_exists(PK) OR expires_at < :now OR lease_owner = :owner",
-            ExpressionAttributeValues={
-                ":owner": {"S": owner},
-                ":generation": {"S": generation},
-                ":expires": {"N": str(expires)},
-                ":now": {"N": str(now)},
+        return self._fenced_write(
+            {
+                "Update": {
+                    "TableName": self.config.state_table_name,
+                    "Key": {"PK": {"S": "LOCK"}, "SK": {"S": "PROPAGATION"}},
+                    "UpdateExpression": "SET lease_owner = :owner, generation = :generation, expires_at = :expires, request_id = :id",
+                    "ConditionExpression": "attribute_not_exists(PK) OR expires_at < :now OR lease_owner = :owner",
+                    "ExpressionAttributeValues": {
+                        ":owner": {"S": owner},
+                        ":generation": {"S": generation},
+                        ":expires": {"N": str(expires)},
+                        ":now": {"N": str(now)},
+                        ":id": {"S": self.config.request_id},
+                    },
+                }
             },
-            allow_failure=True,
+            return_conflict=True,
         )
-        if result.get("_code") == "ConditionalCheckFailedException":
-            return False
-        if result.get("_returncode"):
-            raise TransientFailure(result["_error"])
-        return True
 
     def renew_lease(self, owner: str, expires: int) -> None:
-        result = self._call(
-            "dynamodb",
-            "update_item",
-            TableName=self.config.state_table_name,
-            Key={"PK": {"S": "LOCK"}, "SK": {"S": "PROPAGATION"}},
-            UpdateExpression="SET expires_at = :expires",
-            ConditionExpression="lease_owner = :owner",
-            ExpressionAttributeValues={
-                ":owner": {"S": owner},
-                ":expires": {"N": str(expires)},
+        self._fenced_write(
+            {
+                "Update": {
+                    "TableName": self.config.state_table_name,
+                    "Key": {"PK": {"S": "LOCK"}, "SK": {"S": "PROPAGATION"}},
+                    "UpdateExpression": "SET expires_at = :expires",
+                    "ConditionExpression": "lease_owner = :owner AND request_id = :id",
+                    "ExpressionAttributeValues": {
+                        ":owner": {"S": owner},
+                        ":expires": {"N": str(expires)},
+                        ":id": {"S": self.config.request_id},
+                    },
+                }
             },
-            allow_failure=True,
+            conflict_code="LEASE_OWNERSHIP_LOST",
         )
-        if result.get("_code") == "ConditionalCheckFailedException":
-            raise SafetyViolation(
-                "LEASE_OWNERSHIP_LOST", "propagation lease changed owners"
-            )
-        if result.get("_returncode"):
-            raise TransientFailure(result["_error"])
 
     def release_lease(self, owner: str) -> None:
         result = self._call(
@@ -373,6 +541,7 @@ class AwsSdkGateway:
         return [{"Key": key, "Value": value} for key, value in sorted(tags.items())]
 
     def create_stack(self, specification: dict[str, Any]) -> str:
+        token = self._begin_provisioning(specification)
         result = self._call(
             "cloudformation",
             "create_stack",
@@ -384,6 +553,8 @@ class AwsSdkGateway:
             ClientRequestToken=specification["client_token"],
             Tags=self._tags(specification),
         )
+        self._record_submission(specification, result["StackId"])
+        self._end_provisioning(token)
         return result["StackId"]
 
     def read_generation_state(self, generation: str) -> dict[str, Any] | None:
@@ -431,6 +602,7 @@ class AwsSdkGateway:
             )
 
     def create_preflight(self, specification: dict[str, Any]) -> str:
+        token = self._begin_provisioning(specification)
         result = self._call(
             "cloudformation",
             "create_change_set",
@@ -444,6 +616,8 @@ class AwsSdkGateway:
             Description="Cloud Glider unexecuted continuation preflight",
             Tags=self._tags(specification),
         )
+        self._record_submission(specification, result["StackId"])
+        self._end_provisioning(token)
         return result["Id"]
 
     def describe_change_set(self, change_set_id: str) -> dict[str, Any]:
@@ -460,19 +634,26 @@ class AwsSdkGateway:
             ChangeSetName=change_set_id,
             allow_failure=True,
         )
-        self._call(
-            "cloudformation",
-            "delete_stack",
-            StackName=stack_name,
-            RoleARN=role_arn,
-            allow_failure=True,
-        )
+        stack = self.describe_stack(stack_name)
+        if (
+            stack
+            and stack.get("Parameters", {}).get("RequestId") == self.config.request_id
+            and stack.get("StackStatus") == "REVIEW_IN_PROGRESS"
+        ):
+            self._call(
+                "cloudformation",
+                "delete_stack",
+                StackName=stack["StackId"],
+                RoleARN=role_arn,
+                allow_failure=True,
+            )
 
     def handoff(
         self, expected: dict[str, Any], successor: dict[str, Any], audit: dict[str, Any]
     ) -> bool:
         table = self.config.state_table_name
         current_values = {
+            ":request_id": {"S": self.config.request_id},
             ":generation": {"S": expected["generation"]},
             ":stack": {"S": expected["stack_id"]},
             ":instance": {"S": expected["instance_id"]},
@@ -486,9 +667,10 @@ class AwsSdkGateway:
         audit_item = _ddb_item(
             {
                 "PK": "AUDIT#PROPAGATION",
-                "SK": f"EVENT#{audit['occurred_at']}#{audit['event_id']}",
+                "SK": "LATEST_HANDOFF",
                 "schema_version": "1.0",
                 "category": "PROPAGATION",
+                "request_id": self.config.request_id,
                 "action": "CONDITIONAL_HANDOFF",
                 "resource_type": "CURRENT_RECORD",
                 "resource_id": "CURRENT/GLOBAL",
@@ -497,18 +679,33 @@ class AwsSdkGateway:
                 **audit,
             }
         )
+        control_identity = {
+            key: value
+            for key, value in expected["control_identity"].items()
+            if key
+            not in (
+                "request_id",
+                "propagation_enabled",
+                "cleanup_requested",
+                "cleanup_status",
+            )
+        }
         control_names = {
-            f"#c{index}": key
-            for index, key in enumerate(sorted(expected["control_identity"]))
+            f"#c{index}": key for index, key in enumerate(sorted(control_identity))
         }
         control_values = {
-            f":c{index}": _av(expected["control_identity"][key])
-            for index, key in enumerate(sorted(expected["control_identity"]))
+            f":c{index}": _av(control_identity[key])
+            for index, key in enumerate(sorted(control_identity))
         }
         control_condition = " AND ".join(
             f"#c{index} = :c{index}" for index in range(len(control_names))
         )
+        control_condition += (
+            " AND stop_requested = :operator_no AND cleanup_requested = :operator_no"
+        )
+        control_values[":operator_no"] = {"BOOL": False}
         transaction = [
+            self._lifecycle_check(provisioning=True),
             {
                 "ConditionCheck": {
                     "TableName": table,
@@ -539,8 +736,8 @@ class AwsSdkGateway:
                 "Update": {
                     "TableName": table,
                     "Key": {"PK": {"S": "CURRENT"}, "SK": {"S": "GLOBAL"}},
-                    "UpdateExpression": "SET generation = :next_generation, stack_id = :next_stack, instance_id = :next_instance, #status = :current, handoff_token = :token, updated_at = :updated",
-                    "ConditionExpression": "generation = :generation AND stack_id = :stack AND instance_id = :instance AND #status = :current",
+                    "UpdateExpression": "SET request_id = :request_id, generation = :next_generation, stack_id = :next_stack, instance_id = :next_instance, #status = :current, handoff_token = :token, updated_at = :updated",
+                    "ConditionExpression": "request_id = :request_id AND generation = :generation AND stack_id = :stack AND instance_id = :instance AND #status = :current",
                     "ExpressionAttributeNames": {"#status": "status"},
                     "ExpressionAttributeValues": {
                         **current_values,
@@ -554,7 +751,7 @@ class AwsSdkGateway:
             },
             {
                 "Update": {
-                    "TableName": table,
+                    "TableName": self.config.generation_table_name,
                     "Key": {
                         "PK": {"S": f"GEN#{successor['generation']}"},
                         "SK": {"S": "STATE"},
@@ -574,7 +771,6 @@ class AwsSdkGateway:
                 "Put": {
                     "TableName": table,
                     "Item": audit_item,
-                    "ConditionExpression": "attribute_not_exists(PK) AND attribute_not_exists(SK)",
                 }
             },
         ]
@@ -607,6 +803,7 @@ class AwsSdkGateway:
                 "generation": generation,
                 "error_code": error_code,
                 "correlation_id": correlation_id,
+                "request_id": self.config.request_id,
             }
         ).encode()
         result = self._call(
