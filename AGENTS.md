@@ -66,7 +66,7 @@
 
 ### Git, review, and documentation
 
-- Work only within the `glider` repository and use a dedicated branch or worktree for each independent task.
+- Work only within the `cloud-glider` repository and use a dedicated branch or worktree for each independent task.
 - Do not push directly to protected branches. Keep changes narrowly scoped and reviewable.
 - Do not modify `.github/workflows/`, deployment permissions, secrets, or repository security settings unless explicitly assigned.
 - Never commit credentials, tokens, private keys, or other secrets.

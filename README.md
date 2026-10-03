@@ -75,8 +75,10 @@ through generation `2`.
 - readiness: two healthy heartbeats, 5 seconds apart
 - readiness polling: 2 seconds
 - readiness timeout: 10 minutes for the successor wait, including stack creation
-- idle current-owner polling: at least 60 seconds when stopped or at the limit;
+- idle current-owner polling: at least 60 seconds when stopped;
   candidates retain the configured heartbeat cadence
+- generation limit: the current owner exits successfully and stops polling;
+  clean up before starting a new run from generation 0
 - monitoring: free EC2 basic metrics and one-minute status checks; the separate
   per-generation status alarm remains enabled
 - state-table encryption: AWS-owned key (encrypted at rest without billed KMS usage)

@@ -15,10 +15,12 @@ one CURRENT read within the initial ownership/heartbeat decision and removing
 the scheduling-only control read. Do not reuse that snapshot across cycles or
 at the post-lease ownership, provisioning, preflight, or handoff gates.
 
-Only current owners that are disabled, held, or at `max_generation` use a
+Only current owners that are disabled or held use a
 minimum 60-second interval. Candidates keep the configured heartbeat cadence,
 so fast readiness checks still receive fresh candidate evidence. A stopped
 owner can take one idle interval plus API latency to notice re-enablement.
+At `max_generation`, the current owner logs completion and exits successfully
+without further polling; see [decision 0010](0010-terminal-generation-limit.md).
 The slow interval is reset on each cycle and does not apply to incomplete
 control reads. No instance is stopped or deleted by this optimization.
 

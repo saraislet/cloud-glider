@@ -519,12 +519,11 @@ class Agent:
         self.heartbeat(control, hold, current)
         if not self.is_current_owner(current):
             return "CANDIDATE"
+        if self.generation_number >= int(control["max_generation"]):
+            return "MAX_GENERATION_REACHED"
         if hold or not control["propagation_enabled"]:
             self._poll_seconds = max(60, self._poll_seconds)
             return "STOPPED_BY_OPERATOR"
-        if self.generation_number >= int(control["max_generation"]):
-            self._poll_seconds = max(60, self._poll_seconds)
-            return "MAX_GENERATION_REACHED"
         lease_seconds = max(60, int(control["readiness_poll_seconds"]) * 4)
         now = int(self.clock())
         if not self.gateway.acquire_lease(self.lease_owner, self.config.generation, now, now + lease_seconds):
@@ -557,6 +556,8 @@ class Agent:
                     if result != previous_result:
                         self.log("cycle_complete", result=result)
                     previous_result = result
+                    if result == "MAX_GENERATION_REACHED":
+                        return 0  # Successful completion; systemd must not restart polling.
                 except TransientFailure as exc:
                     self.log("cycle_deferred", reason=str(exc))
                     previous_result = None  # Report recovery even if the result is unchanged.

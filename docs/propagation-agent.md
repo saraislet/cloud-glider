@@ -67,9 +67,9 @@ heartbeat and ownership decision. Ownership is reread after lease acquisition;
 fresh control reads before provisioning, preflight, and handoff remain intact.
 
 Candidates and active owners use the configured heartbeat interval. A current
-owner blocked by disabled propagation, emergency hold, or `max_generation`
-sleeps for at least 60 seconds between cycles. Re-enabling propagation or raising
-the boundary may therefore take one idle interval plus API latency to be noticed.
+owner blocked by disabled propagation or emergency hold sleeps for at least
+60 seconds between cycles. Re-enabling propagation may therefore take one idle
+interval plus API latency to be noticed.
 The instance remains running and heartbeats continue; this is not shutdown.
 The scheduler reuses the cycle's interval instead of issuing another control
 read just to choose a sleep duration.
@@ -82,6 +82,25 @@ Basic EC2 monitoring and AWS-owned DynamoDB encryption reduce monitoring and
 KMS charges. The separate EC2 status alarm is retained. See
 [decision 0004](decisions/0004-reduced-cost-operation.md) for deployment and
 verification requirements.
+
+## Generation limit and a new run
+
+After handoff, a current owner at or above `max_generation` writes its final
+heartbeat, logs `MAX_GENERATION_REACHED`, and exits with status 0. This takes
+precedence over disabled propagation or an active hold. Candidates continue
+heartbeating until they become current, preserving the predecessor's readiness
+and handoff checks. The service uses `Restart=on-failure`; successful completion
+does not restart it. No further polling or heartbeat writes occur.
+
+Changing `max_generation` after completion does not resume that run. Treat it
+as configuration for the next run, starting from generation 0. Do not restart
+the completed service to extend a chain. Disable propagation and verify no
+creation is in flight, then inspect and clean up generation resources through
+CloudFormation before preparing a fresh run. Reconcile retained CURRENT and
+bootstrap records through an explicitly reviewed operator path; do not merely
+flip the old request Boolean or overwrite ownership. Preserve incident evidence
+when a hold is active. Exiting the agent leaves the instance running for inspection;
+operator cleanup is still needed to end instance and storage charges.
 
 ## Stop and incident response
 
