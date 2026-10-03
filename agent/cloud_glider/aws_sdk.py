@@ -58,6 +58,10 @@ def _item(raw: dict[str, Any] | None) -> dict[str, Any]:
 
 
 def _av(value: Any) -> dict[str, Any]:
+    if value is None:
+        return {"NULL": True}
+    if isinstance(value, dict):
+        return {"M": {key: _av(item) for key, item in value.items()}}
     if isinstance(value, bool):
         return {"BOOL": value}
     if isinstance(value, (int, float)):
@@ -159,7 +163,16 @@ class AwsSdkGateway:
         return _item(result.get("Item"))
 
     def read_control_and_hold(self) -> tuple[dict[str, Any], bool]:
+        control, hold, _ = self._read_control_snapshot()
+        return control, hold
+
+    def read_cycle_snapshot(self) -> tuple[dict[str, Any], bool, dict[str, Any]]:
+        return self._read_control_snapshot(include_current=True)
+
+    def _read_control_snapshot(self, *, include_current=False):
         keys = [("CONTROL", "GLOBAL"), ("HOLD", "ACTIVE"), ("BOOTSTRAP", "REQUEST")]
+        if include_current:
+            keys.append(("CURRENT", "GLOBAL"))
         result = self._call(
             "dynamodb",
             "transact_get_items",
@@ -173,11 +186,10 @@ class AwsSdkGateway:
                 for pk, sk in keys
             ],
         )
-        if len(result.get("Responses", [])) != 3:
+        if len(result.get("Responses", [])) != len(keys):
             raise TransientFailure("control transaction was incomplete")
-        control, hold, lifecycle = [
-            _item(entry.get("Item")) for entry in result["Responses"]
-        ]
+        records = [_item(entry.get("Item")) for entry in result["Responses"]]
+        control, hold, lifecycle = records[:3]
         if "propagation_enabled" in control or lifecycle.get("schema_version") != "2":
             raise SafetyViolation(
                 "LIFECYCLE_MIGRATION_REQUIRED", "legacy or missing lifecycle control"
@@ -203,7 +215,7 @@ class AwsSdkGateway:
             control[field] = lifecycle[field]
         if pending_stop:
             control["propagation_enabled"] = False
-        return (control, bool(hold))
+        return control, bool(hold), records[3] if include_current else {}
 
     def _lifecycle_check(self, *, provisioning=False):
         values = {

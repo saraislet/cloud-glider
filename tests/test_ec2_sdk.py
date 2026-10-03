@@ -245,6 +245,10 @@ class Ec2SdkTests(unittest.TestCase):
                 "generation": "000001",
                 "request_id": "1",
                 "heartbeat_sequence": 2,
+                "functional_readiness": {
+                    "producer_instance_id": "i-candidate",
+                    "proved_at_epoch": 10,
+                },
             },
         }
         self.g.handoff(
@@ -256,6 +260,16 @@ class Ec2SdkTests(unittest.TestCase):
         self.assertIn("request_id = :id", tx[4]["Put"]["ConditionExpression"])
         self.assertEqual(
             tx[5]["ConditionCheck"]["TableName"], self.cfg.generation_table_name
+        )
+        candidate_check = tx[5]["ConditionCheck"]
+        self.assertIn(
+            "functional_readiness", candidate_check["ExpressionAttributeNames"].values()
+        )
+        self.assertTrue(
+            any(
+                "M" in value and "producer_instance_id" in value["M"]
+                for value in candidate_check["ExpressionAttributeValues"].values()
+            )
         )
         self.assertEqual(tx[6]["Put"]["Item"]["SK"], {"S": "LATEST_HANDOFF"})
         names = tx[1]["ConditionCheck"]["ExpressionAttributeNames"].values()

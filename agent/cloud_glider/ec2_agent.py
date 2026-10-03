@@ -13,6 +13,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+# Readiness proof lifetime is independent of heartbeat and polling cadence.
+FUNCTIONAL_READINESS_MAX_AGE_SECONDS = 15
+FUNCTIONAL_READINESS_REFRESH_SECONDS = 5
+
 GENERATION_RE = re.compile(r"^[0-9]{6}$")
 INSTANCE_RE = re.compile(r"^i-[0-9a-f]{17}$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -170,6 +174,9 @@ class Ec2Agent:
         # Ownership observations are independent of health publication cadence.
         self._poll_seconds = 1
         self._last_heartbeat_at = None
+        self._heartbeat_at_epoch = None
+        self._last_readiness_at = None
+        self._functional_readiness = None
 
     @property
     def generation_number(self) -> int:
@@ -389,22 +396,53 @@ class Ec2Agent:
                     "BOOTSTRAP_OWNERSHIP_CONFLICT", "another instance claimed CURRENT"
                 )
 
-    def heartbeat(self, control: dict, hold: bool, current: dict) -> None:
-        self.heartbeat_sequence += 1
+    def heartbeat(
+        self,
+        control: dict,
+        hold: bool,
+        current: dict,
+        *,
+        telemetry_tick=True,
+        refresh_readiness=True,
+    ) -> None:
+        if telemetry_tick:
+            self.heartbeat_sequence += 1
+            self._heartbeat_at_epoch = int(self.clock())
+        proof = self._functional_readiness
+        proof_failure = None
+        if (
+            self._candidate_parent_matches(current)
+            and not hold
+            and control["propagation_enabled"]
+        ):
+            if refresh_readiness:
+                try:
+                    proof = self.prove_functional_readiness(control, current)
+                    self._last_readiness_at = self.timing_clock()
+                except TransientFailure as exc:
+                    # Replace a prior proof before retrying a failed probe.
+                    proof, proof_failure = None, exc
+        else:
+            proof = None
+        self._functional_readiness = proof
         self.gateway.write_heartbeat(
             {
                 **self._identity(),
                 "status": "CURRENT" if self.is_current_owner(current) else "CANDIDATE",
                 "predecessor_instance_id": self.config.predecessor_instance_id,
                 "handoff_token": self.config.handoff_token,
-                "workload_healthy": True,
+                "agent_live": True,
+                "functional_readiness": proof,
                 "observed_propagation_enabled": control["propagation_enabled"],
                 "observed_hold_active": hold,
                 "heartbeat_sequence": self.heartbeat_sequence,
-                "heartbeat_at_epoch": int(self.clock()),
+                "heartbeat_at_epoch": self._heartbeat_at_epoch,
                 "updated_at": utc_now(),
             }
         )
+
+        if proof_failure is not None:
+            raise proof_failure
 
     def _fresh_enabled_control(self) -> dict:
         control, hold = self.gateway.read_control_and_hold()
@@ -489,7 +527,76 @@ class Ec2Agent:
             int(self.clock()) + max(60, int(control["readiness_poll_seconds"]) * 4),
         )
 
-    def _eligible_heartbeat(
+    def _candidate_parent_matches(self, current: dict) -> bool:
+        return (
+            current.get("status") == "CURRENT"
+            and current.get("request_id") == self.config.request_id
+            and current.get("generation") == f"{self.generation_number - 1:06d}"
+            and current.get("instance_id") == self.config.predecessor_instance_id
+            and current.get("launch_template_id") == self.config.launch_template_id
+            and current.get("launch_template_version")
+            == self.config.launch_template_version
+        )
+
+    def prove_functional_readiness(self, control: dict, current: dict) -> dict:
+        """Candidate-only, read-only capability proof; never acquire ownership or launch."""
+        started_at = int(self.clock())
+        if not self._candidate_parent_matches(current):
+            raise TransientFailure("candidate parent ownership differs")
+        self.gateway.verify_launch_template(control)
+        own = self.gateway.describe_instance(self.gateway.instance_id)
+        if not own or own["State"]["Name"] != "running":
+            raise TransientFailure("candidate instance is unavailable")
+        self.gateway.verify_instance(
+            own,
+            self._specification(
+                control,
+                self.generation_number,
+                self.config.predecessor_instance_id,
+                self.config.handoff_token,
+            ),
+        )
+        next_generation = self.generation_number + 1
+        boundary = next_generation > control["max_generation"]
+        if not boundary:
+            self.gateway.check_capacity(int(control["max_live_generations"]))
+        if not self._candidate_parent_matches(self.gateway.read_current()):
+            raise TransientFailure("candidate parent changed during readiness")
+        fresh = self._fresh_enabled_control()
+        if self._control_identity(fresh) != self._control_identity(control):
+            raise TransientFailure("control changed during functional readiness")
+        if not boundary:
+            token = stable_token(
+                "handoff",
+                self.gateway.instance_id,
+                f"{next_generation:06d}",
+                control["launch_template_version"],
+            )
+            self.gateway.dry_run_instance(
+                self._specification(
+                    fresh, next_generation, self.gateway.instance_id, token
+                )
+            )
+        fresh = self._fresh_enabled_control()
+        if self._control_identity(fresh) != self._control_identity(control):
+            raise TransientFailure("control changed after candidate continuation")
+        if not self._candidate_parent_matches(self.gateway.read_current()):
+            raise TransientFailure("candidate parent changed after continuation")
+        if not 0 <= self.clock() - started_at <= FUNCTIONAL_READINESS_MAX_AGE_SECONDS:
+            raise TransientFailure(
+                "functional readiness checks exceeded freshness budget"
+            )
+        return {
+            "schema_version": "1",
+            "producer_instance_id": self.gateway.instance_id,
+            "handoff_token": self.config.handoff_token,
+            "control_sha256": control_fingerprint(fresh),
+            "proved_at_epoch": started_at,
+            "continuation_generation": f"{next_generation:06d}",
+            "continuation_status": "BOUNDARY" if boundary else "DRY_RUN_PASSED",
+        }
+
+    def _eligible_functional_readiness(
         self, state: dict, control: dict, spec: dict, instance_id: str
     ) -> bool:
         expected = {
@@ -499,33 +606,46 @@ class Ec2Agent:
             "predecessor_instance_id": spec["tags"]["predecessor-instance-id"],
             "handoff_token": spec["tags"]["handoff-token"],
             "status": "CANDIDATE",
-            "workload_healthy": True,
+            "agent_live": True,
             "observed_propagation_enabled": True,
             "observed_hold_active": False,
         }
-        if not all(state.get(k) == v for k, v in expected.items()):
-            return False
-        try:
-            age = int(self.clock()) - int(state["heartbeat_at_epoch"])
-            sequence = int(state["heartbeat_sequence"])
-        except (KeyError, TypeError, ValueError):
-            return False
-        return (
-            sequence > 0
-            and 0
-            <= age
-            <= max(
-                int(control["heartbeat_interval_seconds"]),
-                int(control["readiness_poll_seconds"]),
+        if not all(state.get(k) == v for k, v in expected.items()) or any(
+            type(state.get(key)) is not bool
+            for key in (
+                "agent_live",
+                "observed_propagation_enabled",
+                "observed_hold_active",
             )
-            * 3
+        ):
+            return False
+        proof = state.get("functional_readiness")
+        if not isinstance(proof, dict):
+            return False
+        expected_proof = {
+            "schema_version": "1",
+            "producer_instance_id": instance_id,
+            "handoff_token": spec["tags"]["handoff-token"],
+            "control_sha256": control_fingerprint(control),
+            "continuation_generation": f"{int(spec['generation']) + 1:06d}",
+            "continuation_status": (
+                "BOUNDARY"
+                if int(spec["generation"]) >= control["max_generation"]
+                else "DRY_RUN_PASSED"
+            ),
+        }
+        if any(proof.get(k) != v for k, v in expected_proof.items()):
+            return False
+        timestamp = proof.get("proved_at_epoch")
+        return (
+            type(timestamp) is int
+            and 0 <= self.clock() - timestamp <= FUNCTIONAL_READINESS_MAX_AGE_SECONDS
         )
 
-    def wait_for_healthy_successor(
+    def wait_for_ready_successor(
         self, control: dict, spec: dict, instance_id: str
     ) -> dict:
         deadline = self.clock() + int(control["readiness_timeout_seconds"])
-        prior, count = None, 0
         while self.clock() <= deadline:
             self._renew(control)
             fresh = self._fresh_enabled_control()
@@ -544,20 +664,11 @@ class Ec2Agent:
             if (
                 instance["State"]["Name"] == "running"
                 and state
-                and self._eligible_heartbeat(state, control, spec, instance_id)
+                and self._eligible_functional_readiness(
+                    state, control, spec, instance_id
+                )
             ):
-                if prior is None:
-                    prior, count = state, 1
-                elif state["heartbeat_sequence"] > prior[
-                    "heartbeat_sequence"
-                ] and state["heartbeat_at_epoch"] - prior["heartbeat_at_epoch"] >= int(
-                    control["heartbeat_interval_seconds"]
-                ):
-                    prior, count = state, count + 1
-                if count >= int(control["readiness_required_heartbeats"]):
-                    return state
-            else:
-                prior, count = None, 0
+                return state
             self.sleep(int(control["readiness_poll_seconds"]))
         raise TransientFailure("successor readiness timed out; predecessor preserved")
 
@@ -589,11 +700,17 @@ class Ec2Agent:
             raise TransientFailure("successor unavailable before handoff")
         self.gateway.verify_instance(instance, spec)
         state = self.gateway.read_generation_state(spec["generation"])
-        if not state or not self._eligible_heartbeat(state, control, spec, instance_id):
+        if not state or not self._eligible_functional_readiness(
+            state, control, spec, instance_id
+        ):
             raise TransientFailure("successor readiness expired before handoff")
         fresh = self._fresh_enabled_control()
         if self._control_identity(fresh) != self._control_identity(control):
             raise TransientFailure("control changed before handoff")
+        if not self._eligible_functional_readiness(state, fresh, spec, instance_id):
+            raise TransientFailure(
+                "functional readiness expired during final control check"
+            )
         expected = {
             **self._identity(),
             "lease_owner": self.lease_owner,
@@ -609,6 +726,7 @@ class Ec2Agent:
             "handoff_token": spec["tags"]["handoff-token"],
             "predecessor_instance_id": self.gateway.instance_id,
             "retirement_authorized": True,
+            "functional_readiness": state["functional_readiness"],
             "handoff_control_sha256": control_fingerprint(fresh),
             "continuation_generation": f"{int(spec['generation']) + 1:06d}",
             "continuation_status": (
@@ -659,6 +777,27 @@ class Ec2Agent:
                 "CONTINUATION_PROOF_MISSING",
                 "retirement has no matching continuation proof",
             )
+        proof = current.get("functional_readiness")
+        if (
+            not isinstance(proof, dict)
+            or type(proof.get("proved_at_epoch")) is not int
+            or any(
+                proof.get(key) != value
+                for key, value in {
+                    "schema_version": "1",
+                    "producer_instance_id": self.gateway.instance_id,
+                    "handoff_token": self.config.handoff_token,
+                    "control_sha256": current["handoff_control_sha256"],
+                    "continuation_generation": current["continuation_generation"],
+                    "continuation_status": expected_proof,
+                }.items()
+            )
+        ):
+            raise SafetyViolation(
+                "FUNCTIONAL_READINESS_PROOF_MISSING",
+                "retirement lacks successor-produced handoff evidence",
+            )
+        # Freshness gated handoff; the resulting retirement authorization is durable.
         if current.get("retirement_completed") is True:
             return True
         self.gateway.verify_launch_template(control)
@@ -744,15 +883,33 @@ class Ec2Agent:
 
     def cycle(self) -> str:
         self._poll_seconds = 1
-        control, hold = self.gateway.read_control_and_hold()
+        control, hold, current = self.gateway.read_cycle_snapshot()
         control = self._validated_control(control)
-        current = self.gateway.read_current()
         now = self.timing_clock()
-        if self._last_heartbeat_at is None or now - self._last_heartbeat_at >= int(
-            control["heartbeat_interval_seconds"]
-        ):
-            self.heartbeat(control, hold, current)
-            self._last_heartbeat_at = now
+        heartbeat_due = (
+            self._last_heartbeat_at is None
+            or now - self._last_heartbeat_at
+            >= int(control["heartbeat_interval_seconds"])
+        )
+        readiness_due = (
+            self._candidate_parent_matches(current)
+            and not hold
+            and control["propagation_enabled"]
+            and (
+                self._last_readiness_at is None
+                or now - self._last_readiness_at >= FUNCTIONAL_READINESS_REFRESH_SECONDS
+            )
+        )
+        if heartbeat_due or readiness_due:
+            self.heartbeat(
+                control,
+                hold,
+                current,
+                telemetry_tick=heartbeat_due,
+                refresh_readiness=readiness_due,
+            )
+            if heartbeat_due:
+                self._last_heartbeat_at = now
         if not self.is_current_owner(current):
             return "CANDIDATE"
         if hold or not control["propagation_enabled"]:
@@ -778,7 +935,7 @@ class Ec2Agent:
             with self.phase("successor_submission"):
                 spec, instance_id = self.provision_successor(control)
             with self.phase("successor_readiness"):
-                state = self.wait_for_healthy_successor(control, spec, instance_id)
+                state = self.wait_for_ready_successor(control, spec, instance_id)
             # Keep CURRENT's durable retirement intent until physical termination.
             # The candidate may boot concurrently, but cannot take ownership yet.
             if not retired:

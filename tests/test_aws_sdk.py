@@ -15,7 +15,7 @@ if importlib.util.find_spec("boto3") is not None:
     from botocore.response import StreamingBody
     from botocore.stub import ANY, Stubber
     from botocore.validate import validate_parameters
-    from cloud_glider.aws_sdk import AwsSdkGateway
+    from cloud_glider.aws_sdk import AwsSdkGateway, _av, _unmarshal
 else:
     boto3 = None
 from cloud_glider.agent import SafetyViolation, TransientFailure
@@ -53,6 +53,19 @@ class SdkTests(unittest.TestCase):
         self.addCleanup(stub.deactivate)
         self.addCleanup(stub.assert_no_pending_responses)
         return stub
+
+    def test_nested_readiness_and_absent_proof_round_trip_as_typed_attributes(self):
+        for value in (
+            None,
+            {
+                "proved_at_epoch": 10,
+                "producer_instance_id": "i-candidate",
+                "control_sha256": "a" * 64,
+            },
+        ):
+            attribute = _av(value)
+            self.assertIn("NULL" if value is None else "M", attribute)
+            self.assertEqual(_unmarshal(attribute), value)
 
     def test_reuses_regional_clients_and_bounded_config(self):
         stub = self.stub("dynamodb")
@@ -114,6 +127,49 @@ class SdkTests(unittest.TestCase):
         stub.add_response("transact_get_items", {"Responses": [{}]}, expected)
         with self.assertRaisesRegex(TransientFailure, "incomplete"):
             self.gateway.read_control_and_hold()
+
+    def test_cycle_snapshot_reads_current_in_same_transaction_and_fails_incomplete(
+        self,
+    ):
+        stub = self.stub("dynamodb")
+        keys = [
+            ("CONTROL", "GLOBAL"),
+            ("HOLD", "ACTIVE"),
+            ("BOOTSTRAP", "REQUEST"),
+            ("CURRENT", "GLOBAL"),
+        ]
+        expected = {
+            "TransactItems": [
+                {
+                    "Get": {
+                        "TableName": "cloud-glider-test",
+                        "Key": {"PK": {"S": pk}, "SK": {"S": sk}},
+                    }
+                }
+                for pk, sk in keys
+            ]
+        }
+        lifecycle = {
+            "schema_version": {"S": "2"},
+            "request_id": {"S": "1"},
+            "propagation_enabled": {"BOOL": True},
+            "cleanup_requested": {"BOOL": False},
+            "cleanup_status": {"S": "IDLE"},
+        }
+        responses = [
+            {"Item": {"PK": {"S": "CONTROL"}}},
+            {},
+            {"Item": lifecycle},
+            {"Item": {"instance_id": {"S": "i-current"}}},
+        ]
+        stub.add_response("transact_get_items", {"Responses": responses}, expected)
+        control, hold, current = self.gateway.read_cycle_snapshot()
+        self.assertTrue(control["propagation_enabled"])
+        self.assertFalse(hold)
+        self.assertEqual(current, {"instance_id": "i-current"})
+        stub.add_response("transact_get_items", {"Responses": responses[:3]}, expected)
+        with self.assertRaisesRegex(TransientFailure, "incomplete"):
+            self.gateway.read_cycle_snapshot()
 
     def test_conditional_conflicts_and_access_denial(self):
         stub = self.stub("dynamodb")
@@ -439,7 +495,9 @@ class SdkTests(unittest.TestCase):
             "request_id = :request_id", transaction[4]["Update"]["ConditionExpression"]
         )
         self.assertIn("ConditionExpression", transaction[5]["Update"])
-        self.assertEqual(transaction[5]["Update"]["TableName"], "cloud-glider-test-generations")
+        self.assertEqual(
+            transaction[5]["Update"]["TableName"], "cloud-glider-test-generations"
+        )
         self.assertEqual(transaction[4]["Update"]["TableName"], "cloud-glider-test")
 
     def test_handoff_transaction_cancel_remains_conflict(self):

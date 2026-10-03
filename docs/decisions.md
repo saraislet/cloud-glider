@@ -11,11 +11,15 @@
   one ephemeral public IPv4 address to the primary ENI. Agents cannot mutate
   networking directly and no SSH path is created.
 - Region and compute: `us-west-2`, Linux `arm64`, and `t4g.micro` only.
-- Readiness: two consecutive healthy heartbeats at a 5-second cadence,
+- Legacy CloudFormation readiness: two consecutive healthy heartbeats at a 5-second cadence,
   2-second predecessor polling, and a 10-minute successor wait including stack
   creation. A stopped current owner polls no faster than once per 60 seconds.
   At the generation limit, the current owner exits successfully without polling;
   a new limit takes effect on a fresh run from generation 0 after cleanup.
+- EC2 source readiness: [decision 0021](decisions/0021-successor-functional-readiness.md)
+  replaces the fixed observation wait with fresh successor-produced functional
+  agent proof. The deployed overlap image retains its prior heartbeat gate until
+  a separately approved rebuilt-image release.
 - Runtime defaults: `config/runtime-defaults.json` is authoritative for values
   written into initial control state. Agents read those values from DynamoDB.
 - Control store: DynamoDB, not S3; encrypted at rest with an AWS-owned key.
