@@ -274,7 +274,7 @@
                       "ec2:InstanceType": "t4g.micro",
                       "ec2:MetadataHttpTokens": "required",
                       "ec2:InstanceProfile": {
-                        "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:instance-profile/cloud-glider-${Environment}-agent"
+                        "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:instance-profile/cloud-glider/cloud-glider-${Environment}-agent"
                       },
                       "aws:RequestTag/project": "cloud-glider",
                       "aws:RequestTag/environment": {

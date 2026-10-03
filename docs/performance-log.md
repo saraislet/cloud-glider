@@ -5,6 +5,112 @@ chronological order, with newest run results and corrections first;
 keep raw operational evidence private. Use UTC timestamps and seconds, and
 write `not measured` for missing durations.
 
+## 2026-10-03 UTC — Direct EC2: ten generations passed, slower than baseline
+
+The corrected, operator-authorized EC2 run completed generations 0–9 and nine
+conditional handoffs, with no HOLD and an observed live peak of two. All eight
+continuation requests returned the expected `DryRunOperation`; ten actual
+RunInstances and nine predecessor TerminateInstances successes were retained
+before cleanup. Generation 9 confirmed predecessor termination before stopping.
+Supported cleanup terminated all ten test instances and deleted their ten root
+disks, generation alarms, seed stack and cycle records. Propagation is disabled,
+max_generation is restored to 2, and request 5 is ready with CURRENT uninitialized
+and no HOLD or locks. The private image, snapshot and approved Launch Template
+remain. Exact identities and per-generation timestamps are in the
+[release receipt](../config/releases/2026-10-03-ec2-integrated-minimal-ami.json).
+
+| Measurement | Previous CloudFormation baked-image run | Direct EC2 baked-image run |
+| --- | ---: | ---: |
+| Seed stack creation → initial ownership | 50.662s | 37.239s |
+| Mean ownership interval, nine intervals | 39.481s | 56.391s |
+| Ownership interval range | 38.555–42.458s | 35.323–71.586s |
+| Seed creation → generation 9 ownership | 405.991s | 544.756s |
+| Sampled live-instance peak | 3 | 2 |
+
+The complete EC2 chain was **34.2% slower**, an increase of 138.765s. Its mean
+ownership interval increased 42.8%. Seed startup improved by 13.423s, but the
+nine handoff intervals together increased by 152.188s. Build, deployment,
+the earlier rejected test and final cleanup are excluded from both totals.
+The EC2 sampler included pending and shutting-down instances, with a median
+interval of 3.505s and maximum of 3.706s. These are single runs with different
+source/image and concurrency behavior, not a controlled measurement of the
+provisioning APIs alone.
+
+### Why this implementation was slower
+
+The baseline agent transferred ownership and submitted DeleteStack for its own
+stack. The new owner could start provisioning while that deletion continued.
+The EC2 agent instead makes its new owner verify and terminate the predecessor,
+wait until DescribeInstances confirms `terminated`, mark retirement complete,
+and only then call RunInstances for the next generation. This puts retirement
+on the launch critical path and explains the observed reduction from three
+overlapping instances to two.
+
+Across the eight intervals with a predecessor to retire, ownership → next
+EC2 LaunchTime was 20.273–35.617s, averaging 26.104s. The first interval, with
+no predecessor retirement, spent only 1.533s before launch and completed its
+handoff in 35.323s. Later intervals averaged 59.024s. The measured endpoint
+breakdown across all nine intervals is:
+
+| Endpoint interval | Mean |
+| --- | ---: |
+| Ownership → next EC2 launch | 23.374s |
+| Launch → first workload-healthy heartbeat | 25.580s |
+| First heartbeat → conditional ownership transfer | 7.437s |
+| Complete ownership interval | 56.391s |
+
+Every captured first heartbeat had sequence 1. That first heartbeat alone is
+not the authoritative readiness gate: both runs retained two required
+heartbeats, a 5s heartbeat interval and 2s readiness polling. The EC2 retirement
+loop also sleeps on the 5s cycle cadence while termination is pending. Polling
+can delay observing completion, and the prelaunch endpoint includes ownership
+checks, template/image verification and other API work as well as retirement.
+It must not be labeled an isolated EC2 termination duration.
+
+This EC2 version also restores an unexecuted next-hop RunInstances DryRun,
+fresh controls and quota/capacity checks, whereas the comparison baseline had
+removed its CloudFormation preflight. Direct status-alarm bookkeeping and
+repeated template/instance checks add serial API calls. Their individual costs
+are **not measured**: phase JSON stayed in instance journals without remote
+export. The heartbeat-to-handoff interval includes readiness, continuation and
+handoff; it does not isolate DryRun latency. Retained launch events show no
+failed live launch after the profile fix, but cannot rule out transient read
+errors hidden in local journals.
+
+Removing CloudFormation from successor provisioning therefore did not remove
+the larger chain's waiting. Serialized retirement is the strongest supported
+explanation for the slowdown; this evidence does not assign the entire change
+to retirement or predict the exact benefit of overlap. The separately requested
+overlap implementation requires its own review and benchmark before deployment.
+
+## 2026-10-03 UTC — First direct EC2 attempt stopped at generation 0
+
+The authorized deployment used the EC2-integrated private AMI and Launch
+Template `lt-09e12d4ca882601db`, numeric version 1. Seed creation to initial
+ownership was 44.093s. The first successor RunInstances request was rejected:
+the agent policy and boundary omitted the existing instance profile's
+`/cloud-glider/` path. One instance launched, no handoff completed, and the
+sampled live peak was one. This is a failed runtime test, not a ten-generation
+benchmark; ownership intervals and a comparable total are **not measured**.
+No speedup is claimed. The exact profile-path correction is prepared, with
+257 tests and template linting passing. The failed cycle was cleaned up before
+the successful retry above.
+
+Internal phase records remain in instance journals without remote export in
+this release. API evidence and durable ownership timestamps are retained;
+unavailable internal phase durations must remain **not measured**.
+
+## 2026-10-03 UTC — EC2-integrated candidate, isolated boot
+
+The [candidate receipt](../config/releases/2026-10-03-ec2-integrated-minimal-ami.json)
+records an encrypted 2 GiB ARM64 image built from the merged EC2 backend source.
+Build duration: 686s. Metadata and isolated cold-boot contract checks passed;
+temporary resources were cleaned up. This is image compatibility evidence.
+Generation startup-to-readiness, ownership intervals, predecessor retirement
+and ten-generation propagation duration: **not measured**. Phase timing
+instrumentation is present for a later authorized run. No speedup is claimed
+against the 39.481s mean interval and 405.991s ten-generation baseline below.
+
 ## October 3: fixed baked image, ten generations
 
 The operator-authorized run from merged preflight-removal source completed
