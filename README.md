@@ -177,3 +177,7 @@ the safety contract pass in the sandbox account.
 
 See `docs/propagation-agent.md` for the state machine, record shapes, failure
 classification, and first-trial procedure.
+
+Minimal AMI propagation supports baked startup and 2 GiB roots. See the
+[release reconciliation](docs/minimal-ami.md) for current-contract compatibility
+and the separate historical deployed release.

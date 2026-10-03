@@ -171,3 +171,10 @@ template and reject a stale cycle or active cleanup. Provisioning claims a durab
 marker transactionally with lifecycle/HOLD checks. Heartbeats, CURRENT claims,
 leases, and handoffs are fenced by the same cycle. Normal stop keeps instances
 running; only explicit cleanup authorizes generation deletion without handoff.
+
+## Minimal baked AMI
+
+Use `AgentDeliveryMode=baked`, `/dev/sda1` and a 2 GiB root only with an image
+containing the current lifecycle agent. The previously deployed minimal image
+predates the current request/table contract. Follow the [reconciliation and
+release runbook](minimal-ami.md) before a coordinated image/controller release.

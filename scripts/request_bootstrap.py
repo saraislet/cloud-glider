@@ -77,7 +77,11 @@ def main(argv=None):
     if args.profile:
         common += ['--profile', args.profile]
     def aws(*command):
-        return json.loads(subprocess.check_output(['aws', *command, *common], text=True))
+        output = subprocess.check_output(['aws', *command, *common], text=True)
+        # AWS CLI can emit no JSON when GetItem finds no record.
+        if not output.strip() and command[:2] == ('dynamodb', 'get-item'):
+            return {}
+        return json.loads(output)
     control = aws('dynamodb', 'get-item', '--table-name', table, '--consistent-read',
                   '--key', json.dumps({'PK': {'S': 'CONTROL'}, 'SK': {'S': 'GLOBAL'}})).get('Item', {})
     if control.get('environment') != {'S': args.environment}:

@@ -305,6 +305,16 @@ class BootstrapTests(unittest.TestCase):
                 requester.main(['--apply'])
         write.assert_called_once()
 
+    def test_empty_cli_get_item_response_can_prepare_absent_request(self):
+        reads = [json.dumps({'Item': self.control}), '', json.dumps({'Arn': 'operator'})]
+        success = subprocess.CompletedProcess([], 0, '', '')
+        with patch.object(requester.subprocess, 'check_output', side_effect=reads), \
+             patch.object(requester.subprocess, 'run', return_value=success) as write, \
+             patch('sys.stdout', new_callable=io.StringIO) as output:
+            requester.main(['--apply'])
+        write.assert_called_once()
+        self.assertEqual(json.loads(output.getvalue())['mode'], 'APPLIED')
+
     def test_embedded_source_is_current(self):
         subprocess.run([sys.executable, str(ROOT / 'scripts/render_bootstrap_template.py'), '--check'], check=True)
 
