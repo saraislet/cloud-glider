@@ -1,5 +1,8 @@
 import copy
+import importlib.util
+import sys
 import unittest
+from types import ModuleType
 from unittest.mock import Mock, patch
 
 import test_operator_controls as operator_tests
@@ -138,7 +141,11 @@ class CleanupRetryTests(unittest.TestCase):
     def test_controller_has_no_recurring_event_route(self):
         clients = dict(zip(('dynamodb', 'cloudformation', 's3', 'ec2', 'scheduler'),
             (self.ddb, self.cfn, self.s3, self.ec2, self.scheduler)))
-        with patch.dict('os.environ', {**self.env, 'AWS_REGION': 'us-west-2'}), patch('boto3.client', side_effect=lambda name, **kw: clients[name]), patch.object(controller, 'run_operator') as work:
+        sdk = ModuleType('boto3')
+        sdk.client = Mock(side_effect=lambda name, **kw: clients[name])
+        config = ModuleType('botocore.config')
+        config.Config = Mock()
+        with patch.dict(sys.modules, {'boto3': sdk, 'botocore': ModuleType('botocore'), 'botocore.config': config}), patch.dict('os.environ', {**self.env, 'AWS_REGION': 'us-west-2'}), patch.object(controller, 'run_operator') as work:
             controller.handler({'source': 'aws.events', 'detail-type': 'Scheduled Event'}, None)
         work.assert_not_called()
         self.scheduler.create_schedule.assert_not_called()
@@ -158,6 +165,8 @@ class CleanupRetryTests(unittest.TestCase):
         record = {'eventName': 'MODIFY', 'dynamodb': {'OldImage': old, 'NewImage': self.request}}
         self.assertTrue(controller.is_cleanup_trigger(record))
 
+    @unittest.skipIf(importlib.util.find_spec('boto3') is None,
+        'Install agent/requirements.txt to run SDK transport tests')
     def test_scheduler_request_passes_sdk_model_validation(self):
         import boto3
         from botocore.stub import Stubber
