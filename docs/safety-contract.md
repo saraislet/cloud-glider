@@ -199,3 +199,9 @@ Decisions [0012](decisions/0012-shared-chain-lifecycle.md) and [0013](decisions/
 Decision [0014](decisions/0014-separated-generation-state.md) places generation state/inventory in a separate DynamoDB table. Cross-table transactions retain lifecycle and ownership conditions; approved table identity is checked before use. DynamoDB audits reuse latest-event keys instead of preserving a full event history.
 
 For explicitly selected EC2 cycles, decision [0019](decisions/0019-direct-ec2-propagation.md) supersedes the CloudFormation-only provisioning, preflight and retirement rules. The existing lifecycle schema, operator switches and separate generation table remain authoritative; see [the EC2 runbook](ec2-propagation.md).
+
+EC2 decision [0020](decisions/0020-ec2-retirement-overlap.md) permits candidate
+launch after accepted retirement while preserving CURRENT's durable retirement
+intent until exact termination. Handoff waits for that confirmation. Capacity
+counts shutting-down instances and exact CURRENT/predecessor identities even
+when filtered inventory omits them. Missing results never free a slot.

@@ -12,7 +12,7 @@
 
 ### Architecture and lifecycle invariants
 
-- The operator-approved EC2 backend in `docs/decisions/0019-direct-ec2-propagation.md` supersedes the CloudFormation-only rules below for explicitly selected EC2 cycles. CloudFormation retains the control plane, persistent launch template and seed; successor agents use direct EC2 APIs with a pinned numeric launch-template version and digest, cycle-fenced DynamoDB state, and EC2 dry-run continuation. Retirement is serialized for EC2 cycles. Legacy CloudFormation cycles retain the rules below. Never switch a live cycle's backend.
+- The operator-approved EC2 backend in `docs/decisions/0019-direct-ec2-propagation.md` supersedes the CloudFormation-only rules below for explicitly selected EC2 cycles. CloudFormation retains the control plane, persistent launch template and seed; successor agents use direct EC2 APIs with a pinned numeric launch-template version and digest, cycle-fenced DynamoDB state, and EC2 dry-run continuation. EC2 launch may overlap accepted predecessor retirement; ownership remains with the retiring predecessor’s successor until termination is confirmed. See decision 0020. Legacy CloudFormation cycles retain the rules below. Never switch a live cycle's backend.
 
 - Manage generation creation and deletion through **CloudFormation**. Prefer declarative changes over direct AWS resource mutations.
 - A generation template creates one EC2 generation. A small Python agent on that generation coordinates propagation.

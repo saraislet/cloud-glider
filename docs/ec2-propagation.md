@@ -36,9 +36,9 @@ Its ten-generation duration was 405.991s; sampled live peak was three.
 This release removes successor stack creation/deletion and the unused
 CloudFormation SDK client from the direct path. Baked startup performs no
 artifact download, package install, extraction or unit replacement. These are
-plausible latency savings, not measured propagation improvements. Confirmed
-predecessor termination is deliberately serialized before another launch,
-which may offset gains compared with the overlapping CloudFormation baseline.
+plausible latency savings, not measured propagation improvements. The
+initial release serialized predecessor termination before another launch.
+Decision 0020 allows boot overlap; no speedup has been measured for that change.
 
 The agent emits `phase_timing` records with UTC start/end timestamps, monotonic
 duration, request/generation/instance/correlation identity and PASSED, DEFERRED
@@ -50,3 +50,25 @@ compatibility, not propagation or live IAM correctness. A separately authorized
 bounded benchmark must record real RunInstances/TerminateInstances event times,
 authoritative heartbeat readiness and conditional handoff times, consistent
 hop boundaries, controls, live counts and retries before comparing latency.
+
+## Retirement overlap and recovery
+
+After accepted termination (or an exact `shutting-down` observation), the current
+owner may launch its candidate with capacity available. It retains CURRENT and
+its predecessor retirement intent until exact termination is confirmed. The
+candidate cannot take ownership during that wait. Restart the current owner's
+service to reconcile the same candidate and exact predecessor; never clear the
+intent or provisioning marker to force progress. A missing exact EC2 lookup
+blocks progress. With a ceiling of two, launch waits for termination; with three,
+one retiring predecessor, current owner and candidate may coexist. Stop/HOLD
+blocks retries and handoff. Terminal generations wait for confirmed retirement.
+
+The integrated source includes the profile ARN correction merged in PR #12
+(`cabf646`). The separately authorized overlap release at `04bc90f` was baked,
+cold-boot tested, deployed and verified over generations 0–9. The
+[overlap receipt](../config/releases/2026-10-03-ec2-overlap-minimal-ami.json)
+records AMI `ami-0dd526b0623ff67a3`, Launch Template version 2 and its exact digest,
+measured overlap, nine handoffs, terminal retirement and full cleanup. Propagation
+is disabled at idle; the operator-selected max_generation is 10 and the absolute
+three-instance ceiling is retained. Future source changes require a matching
+archive/AMI, reviewed pins and an observed bounded test before claiming improvement.

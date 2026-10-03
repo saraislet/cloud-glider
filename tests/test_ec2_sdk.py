@@ -90,6 +90,31 @@ class Ec2SdkTests(unittest.TestCase):
 
         self.g._call = Mock(side_effect=call)
 
+    def test_capacity_counts_exact_identities_omitted_by_filtered_inventory(self):
+        parent = "i-" + "9" * 17
+        self.g._pages = Mock(return_value=[{"Reservations": []}])
+        self.g.read_current = Mock(
+            return_value={
+                "instance_id": self.cfg.instance_id,
+                "predecessor_instance_id": parent,
+            }
+        )
+        self.g.describe_instance = Mock(
+            return_value={"State": {"Name": "shutting-down"}}
+        )
+        with self.assertRaisesRegex(TransientFailure, "ceiling"):
+            self.g.check_capacity(2)
+        self.assertEqual(self.g.describe_instance.call_count, 2)
+        self.g._call.assert_not_called()
+
+    def test_capacity_missing_exact_lookup_never_frees_slot(self):
+        self.g._pages = Mock(return_value=[])
+        self.g.read_current = Mock(return_value={"instance_id": self.cfg.instance_id})
+        self.g.describe_instance = Mock(return_value=None)
+        with self.assertRaisesRegex(TransientFailure, "ambiguous"):
+            self.g.check_capacity(3)
+        self.g._call.assert_not_called()
+
     def test_claim_fences_cycle_stop_hold_and_both_tables_atomically(self):
         self.g.claim_submission(self.spec)
         tx = self.calls[0][2]["TransactItems"]

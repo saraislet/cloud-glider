@@ -123,6 +123,7 @@ class FakeGateway:
             )
         }
         self.calls, self.created, self.intent = [], None, None
+        self.successor_id = CHILD if cfg.instance_id != CHILD else "i-" + "3" * 17
         self.reads = 0
         self.lease_result, self.handoff_result = True, True
         self.after_claim = None
@@ -182,10 +183,15 @@ class FakeGateway:
                 raise SafetyViolation("INSTANCE_IDENTITY_MISMATCH", "lineage differs")
 
     def find_successor(self, spec):
-        return self.instances.get(CHILD) if self.created else None
+        return self.instances.get(self.successor_id) if self.created else None
 
     def check_capacity(self, maximum):
         self.calls.append("capacity")
+        if (
+            sum(i["State"]["Name"] != "terminated" for i in self.instances.values())
+            >= maximum
+        ):
+            raise TransientFailure("live generation ceiling reached")
 
     def claim_submission(self, spec):
         self.calls.append("claim")
@@ -201,8 +207,8 @@ class FakeGateway:
     def run_instance(self, spec):
         self.calls.append("create")
         self.created = spec
-        self.instances[CHILD] = self.instance(
-            CHILD,
+        self.instances[self.successor_id] = self.instance(
+            self.successor_id,
             spec["generation"],
             spec["tags"]["predecessor-instance-id"],
             spec["tags"]["handoff-token"],
@@ -210,7 +216,7 @@ class FakeGateway:
         if self.timeout_once:
             self.timeout_once = False
             raise TransientFailure("timeout after submission")
-        return CHILD
+        return self.successor_id
 
     def read_generation_state(self, generation):
         self.reads += 1
@@ -218,7 +224,7 @@ class FakeGateway:
         return {
             "request_id": self.cfg.request_id,
             "generation": generation,
-            "instance_id": CHILD,
+            "instance_id": self.successor_id,
             "launch_template_id": LT,
             "launch_template_version": "1",
             "predecessor_instance_id": c.instance_id,
@@ -441,7 +447,7 @@ class AgentTests(unittest.TestCase):
 
     def test_child_retries_retirement_before_terminal_exit(self):
         a, g, _ = self.child_agent()
-        with self.assertRaisesRegex(TransientFailure, "waiting for predecessor"):
+        with self.assertRaisesRegex(TransientFailure, "still in progress"):
             a.cycle()
         self.assertNotIn("create", g.calls)
         with self.assertRaisesRegex(TransientFailure, "still in progress"):
@@ -449,6 +455,52 @@ class AgentTests(unittest.TestCase):
         g.instances[CURRENT]["State"]["Name"] = "terminated"
         self.assertEqual(a.cycle(), "MAX_GENERATION_REACHED")
         self.assertEqual(g.calls.count("terminate"), 1)
+
+    def overlap_agent(self):
+        a, g, clock = self.child_agent()
+        g.control["max_generation"] = 3
+        g.current.update(
+            handoff_control_sha256=control_fingerprint(g.control),
+            continuation_status="DRY_RUN_PASSED",
+        )
+        return a, g, clock
+
+    def test_launch_overlaps_retirement_but_handoff_waits_and_restart_recovers(self):
+        a, g, clock = self.overlap_agent()
+        with self.assertRaisesRegex(TransientFailure, "still in progress"):
+            a.cycle()
+        self.assertLess(g.calls.index("terminate"), g.calls.index("create"))
+        self.assertNotIn("handoff", g.calls)
+        self.assertEqual(g.current["instance_id"], CHILD)
+        restarted = Agent(
+            a.config, g, clock=clock, sleep=clock.sleep, logger=lambda _: None
+        )
+        with self.assertRaises(TransientFailure):
+            restarted.cycle()
+        self.assertEqual(g.calls.count("create"), 1)
+        self.assertEqual(g.calls.count("terminate"), 1)
+        g.instances[CURRENT]["State"]["Name"] = "terminated"
+        self.assertEqual(restarted.cycle(), "HANDOFF_COMPLETE")
+        self.assertEqual(g.calls.count("create"), 1)
+
+    def test_two_slot_limit_and_failed_retirement_block_launch(self):
+        a, g, _ = self.overlap_agent()
+        g.control["max_live_generations"] = 2
+        g.current["handoff_control_sha256"] = control_fingerprint(g.control)
+        with self.assertRaisesRegex(TransientFailure, "ceiling"):
+            a.cycle()
+        self.assertNotIn("create", g.calls)
+
+    def test_stop_and_hold_after_overlap_preserve_owner_and_candidate(self):
+        for hold in (False, True):
+            a, g, _ = self.overlap_agent()
+            with self.assertRaises(TransientFailure):
+                a.cycle()
+            g.calls.clear()
+            g.hold_active = hold
+            g.control["propagation_enabled"] = hold
+            self.assertEqual(a.cycle(), "STOPPED_BY_OPERATOR")
+            self.assertEqual(g.calls, ["control", "heartbeat"])
 
     def test_child_stop_preserves_predecessor_even_at_terminal_generation(self):
         a, g, _ = self.child_agent()

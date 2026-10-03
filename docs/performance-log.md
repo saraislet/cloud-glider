@@ -5,6 +5,48 @@ chronological order, with newest run results and corrections first;
 keep raw operational evidence private. Use UTC timestamps and seconds, and
 write `not measured` for missing durations.
 
+## 2026-10-03 UTC — EC2 retirement overlap: ten generations passed
+
+The operator-authorized overlap release completed generations 0–9 and nine
+conditional handoffs using private AMI `ami-0dd526b0623ff67a3` and numeric Launch
+Template version 2. No HOLD occurred; the sampled live peak remained three,
+including shutting-down instances. The sampler observed a candidate running
+while its owner's predecessor was shutting down, with CURRENT retained by the
+owner. At each observed ownership transfer, the older retirement target was
+terminated. Generation 9 confirmed predecessor retirement before stopping.
+Exact pins, generation timestamps, comparison and evidence hashes are in the
+[release receipt](../config/releases/2026-10-03-ec2-overlap-minimal-ami.json).
+
+| Measurement | CloudFormation baseline | Serialized EC2 | Overlap EC2 |
+| --- | ---: | ---: | ---: |
+| Seed creation → initial ownership | 50.662s | 37.239s | 36.192s |
+| Mean ownership interval, nine intervals | 39.481s | 56.391s | 38.777s |
+| Seed creation → generation 9 ownership | 405.991s | 544.756s | 385.187s |
+| Sampled live-instance peak | 3 | 2 | 3 |
+
+The overlap run took 29.3% less time than serialized EC2 and 5.1% less time
+than the earlier CloudFormation baseline. Across nine intervals, ownership
+→ successor launch averaged 3.896s,
+launch → first workload-healthy heartbeat 27.029s,
+and first heartbeat → ownership 7.852s.
+These are endpoint intervals, not individual API or pure termination durations.
+The first heartbeat is a startup proxy; authoritative readiness retained two
+heartbeats and fresh identity, control, continuation and handoff checks.
+
+This is one trial per release with different source/image and retirement behavior;
+it supports the observed benefit of removing serialized retirement from the launch
+path but does not isolate provisioning API overhead. Internal phase JSON remains
+in local journals, so SDK/DryRun durations are not measured. The sampler's median
+cadence was 3.496s and maximum 3.820s. Build, deployment, the conclusively
+rejected idle start and cleanup are excluded from chain duration.
+
+Supported cleanup terminated all ten test instances and deleted their ten root
+disks, generation alarms, seed stack and cycle records. Request 6 is READY,
+CURRENT is UNINITIALIZED, propagation/bootstrap are disabled, and no HOLD or locks
+remain. Per operator instruction, max_generation is now **10** and the absolute
+max_live_generations remains **3**. The tested private image, encrypted snapshot
+and approved Launch Template are retained.
+
 ## 2026-10-03 UTC — Direct EC2: ten generations passed, slower than baseline
 
 The corrected, operator-authorized EC2 run completed generations 0–9 and nine

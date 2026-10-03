@@ -43,6 +43,27 @@ is idle, CURRENT is uninitialized, requests are disabled and no hold or lease ex
 Keep propagation disabled after deployment. An observed bounded propagation run
 is a separate operational validation; cold-boot success alone does not prove handoff.
 
+## EC2 overlap release on October 3, 2026
+
+The current tested release uses private ARM64 AMI `ami-0dd526b0623ff67a3` and encrypted
+2 GiB snapshot `snap-011e5b3e4f10a0106`, baked from source `04bc90f` with archive
+SHA-256 `03d6d617574a4d82ec3cd5307eed69e42029562cc7fdff10c3df05ff11063203`.
+Its isolated cold boot passed both runtime and EC2
+contract checks with Python 3.12.3 and 632,483,840 free bytes.
+All 262 tests and template/repository checks passed. The reviewed image-only
+runtime permission substitutions preserve the exact agent profile restriction.
+Launch Template version 2 and immutable archive pins are recorded in the
+[release receipt](../config/releases/2026-10-03-ec2-overlap-minimal-ami.json).
+
+The supervised ten-generation run passed nine handoffs with no HOLD and a
+sampled peak of three. Candidate boot overlapped accepted predecessor retirement,
+while ownership waited for termination. Supported cleanup removed all test
+instances, disks, alarms, seed stack and cycle records. The image/snapshot and
+persistent Launch Template remain available. Propagation/bootstrap are disabled,
+CURRENT is uninitialized, max_generation is 10 and max_live_generations is 3.
+Only documentation/receipt changes followed the bake; they do not require another
+AMI build. See the [measured comparison](performance-log.md) and its limits.
+
 ## Current-source rebuild on October 3, 2026
 
 [Release receipt](../config/releases/2026-10-03-current-minimal-ami.json):

@@ -242,7 +242,7 @@ class Ec2Agent:
                 "CONTROL_SCHEMA_INVALID", "propagation_enabled must be boolean"
             )
         if (
-            control["max_live_generations"] != 3
+            control["max_live_generations"] not in (2, 3)
             or control["concurrency_model"] != "EC2_DRY_RUN_THEN_RETIRE"
         ):
             raise SafetyViolation(
@@ -626,9 +626,9 @@ class Ec2Agent:
         if not self.gateway.handoff(expected, successor, audit):
             raise TransientFailure("handoff conditions changed; predecessor preserved")
 
-    def retire_predecessor(self, control: dict, current: dict) -> None:
+    def retire_predecessor(self, control: dict, current: dict) -> bool:
         if self.config.predecessor_instance_id == "NONE":
-            return
+            return True
         if (
             current.get("predecessor_instance_id")
             != self.config.predecessor_instance_id
@@ -658,7 +658,7 @@ class Ec2Agent:
                 "retirement has no matching continuation proof",
             )
         if current.get("retirement_completed") is True:
-            return
+            return True
         self.gateway.verify_launch_template(control)
         own = self.gateway.describe_instance(self.gateway.instance_id)
         if not own or own["State"]["Name"] != "running":
@@ -709,16 +709,15 @@ class Ec2Agent:
             if self._control_identity(fresh) != self._control_identity(control):
                 raise TransientFailure("retirement control or CURRENT changed")
             self.gateway.terminate_instance(self.config.predecessor_instance_id)
-            raise TransientFailure(
-                "waiting for predecessor termination before propagation"
-            )
+            return False
         if predecessor["State"]["Name"] != "terminated":
-            raise TransientFailure("predecessor termination still in progress")
+            return False
         if self.generation_number > 1:
             self.gateway.delete_status_alarm(
                 f"{self.generation_number - 1:06d}", self.config.predecessor_instance_id
             )
         self.gateway.mark_retirement_completed(current)
+        return True
 
     @contextmanager
     def phase(self, name: str):
@@ -765,13 +764,23 @@ class Ec2Agent:
             if not self.is_current_owner():
                 return "OWNERSHIP_CHANGED"
             with self.phase("predecessor_retirement"):
-                self.retire_predecessor(control, current)
+                retired = self.retire_predecessor(control, current)
             if self.generation_number >= int(control["max_generation"]):
+                if not retired:
+                    raise TransientFailure("predecessor termination still in progress")
                 return "MAX_GENERATION_REACHED"
             with self.phase("successor_submission"):
                 spec, instance_id = self.provision_successor(control)
             with self.phase("successor_readiness"):
                 state = self.wait_for_healthy_successor(control, spec, instance_id)
+            # Keep CURRENT's durable retirement intent until physical termination.
+            # The candidate may boot concurrently, but cannot take ownership yet.
+            if not retired:
+                with self.phase("predecessor_retirement_reconciliation"):
+                    if not self.retire_predecessor(control, current):
+                        raise TransientFailure(
+                            "predecessor termination still in progress"
+                        )
             with self.phase("continuation_dry_run"):
                 self.continuation_preflight(control, spec, instance_id)
             with self.phase("conditional_handoff"):
