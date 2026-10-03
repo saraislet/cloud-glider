@@ -184,6 +184,10 @@ validation, claimed generation 0 and emitted healthy authoritative heartbeats.
 Its successor launch was denied because the agent policy and boundary used an
 instance-profile ARN without the existing `/cloud-glider/` path. That policy-only
 correction does not change the baked agent or require rebuilding the AMI.
-Operational release approval and a complete propagation benchmark remain
-pending; no speedup is claimed. See the [EC2 activation runbook](ec2-propagation.md)
-and release receipt for deployment, recovery and subsequent test evidence.
+The corrected retry completed ten generations and nine handoffs, including
+confirmed predecessor retirement and supported cleanup. All 257 tests and CI
+passed. Propagation is disabled with max_generation 2, no live test compute
+remains, and the approved image/snapshot/template are retained. The chain took
+544.756s versus the earlier CloudFormation baseline's 405.991s; no speedup is
+claimed. See the [timing analysis](performance-log.md),
+[EC2 activation runbook](ec2-propagation.md) and release receipt for evidence.
