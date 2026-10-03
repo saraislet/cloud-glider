@@ -146,6 +146,22 @@ class GuardrailTests(unittest.TestCase):
         self.assertEqual(decision(policy, 'iam:PassRole', AGENT, {**ctx, 'iam:PassedToService': 'lambda.amazonaws.com'}), 'implicitDeny')
         self.assertEqual(decision(policy, 'sts:AssumeRole', FOUNDATION, ctx), 'implicitDeny')
 
+    def test_ec2_agent_launch_requires_the_existing_profile_path(self):
+        policy = resolve(self.template['Resources']['AgentBoundary']['Properties']['PolicyDocument'], {**VALUES, 'PropagationBackend': 'ec2'})
+        profile = 'arn:aws:iam::' + ACCOUNT + ':instance-profile/cloud-glider/' + PREFIX + '-agent'
+        context = {
+            'ec2:LaunchTemplate': 'arn:aws:ec2:us-west-2:' + ACCOUNT + ':launch-template/lt-approved',
+            'ec2:InstanceType': 't4g.micro', 'ec2:MetadataHttpTokens': 'required',
+            'ec2:InstanceProfile': profile, 'aws:RequestTag/project': 'cloud-glider',
+            'aws:RequestTag/environment': 'sandbox', 'aws:RequestTag/purpose': 'generation-compute',
+        }
+        instance = 'arn:aws:ec2:us-west-2:' + ACCOUNT + ':instance/i-new'
+        self.assertEqual(decision(policy, 'ec2:RunInstances', instance, context), 'allowed')
+        for changed in (profile.replace('instance-profile/cloud-glider/', 'instance-profile/'), profile + '-other'):
+            self.assertEqual(decision(policy, 'ec2:RunInstances', instance, {**context, 'ec2:InstanceProfile': changed}), 'implicitDeny')
+        foundation = (ROOT / 'cfn/foundation.yaml').read_text()
+        self.assertIn("ec2:InstanceProfile: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:instance-profile/cloud-glider/cloud-glider-${Environment}-agent'", foundation)
+
     def test_runtime_templates_require_the_corresponding_boundary(self):
         for filename, roles in [("foundation.yaml", {"AgentRole": "agent", "GenerationServiceRole": "generation", "EmergencyHoldFunctionRole": "hold"}), ("bootstrap.yaml", {"BootstrapRole": "bootstrap"})]:
             text = (ROOT / "cfn" / filename).read_text()

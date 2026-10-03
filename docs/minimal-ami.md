@@ -178,8 +178,12 @@ The new AMI and root snapshot are retained as a private candidate. Lifecycle
 state stayed unchanged: request 3, propagation disabled, max_generation 2,
 CURRENT uninitialized, and no HOLD or provisioning/propagation lock.
 
-This candidate is **not deployed or operationally release-approved**. Live
-EC2 permissions, authoritative readiness, ownership transfer, retirement and
-cleanup still require a separately authorized runtime test. A comparable
-propagation benchmark has not run; no speedup is claimed. Follow the
-[offline EC2 activation runbook](ec2-propagation.md) before rollout.
+The subsequent authorized deployment pinned this image to Launch Template
+`lt-09e12d4ca882601db`, version 1. The first live seed passed startup identity
+validation, claimed generation 0 and emitted healthy authoritative heartbeats.
+Its successor launch was denied because the agent policy and boundary used an
+instance-profile ARN without the existing `/cloud-glider/` path. That policy-only
+correction does not change the baked agent or require rebuilding the AMI.
+Operational release approval and a complete propagation benchmark remain
+pending; no speedup is claimed. See the [EC2 activation runbook](ec2-propagation.md)
+and release receipt for deployment, recovery and subsequent test evidence.

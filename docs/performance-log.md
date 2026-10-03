@@ -5,7 +5,23 @@ chronological order, with newest run results and corrections first;
 keep raw operational evidence private. Use UTC timestamps and seconds, and
 write `not measured` for missing durations.
 
-## 2026-10-03 UTC — EC2-integrated candidate, isolated boot only
+## 2026-10-03 UTC — First direct EC2 attempt stopped at generation 0
+
+The authorized deployment used the EC2-integrated private AMI and Launch
+Template `lt-09e12d4ca882601db`, numeric version 1. Seed creation to initial
+ownership was 44.093s. The first successor RunInstances request was rejected:
+the agent policy and boundary omitted the existing instance profile's
+`/cloud-glider/` path. One instance launched, no handoff completed, and the
+sampled live peak was one. This is a failed runtime test, not a ten-generation
+benchmark; ownership intervals and a comparable total are **not measured**.
+No speedup is claimed. The exact profile-path correction is prepared, with
+257 tests and template linting passing; cleanup is in progress before retry.
+
+Internal phase records remain in instance journals without remote export in
+this release. API evidence and durable ownership timestamps are retained;
+unavailable internal phase durations must remain **not measured**.
+
+## 2026-10-03 UTC — EC2-integrated candidate, isolated boot
 
 The [candidate receipt](../config/releases/2026-10-03-ec2-integrated-minimal-ami.json)
 records an encrypted 2 GiB ARM64 image built from the merged EC2 backend source.

@@ -18,7 +18,7 @@
   "packer_run_uuid": "c2089f96-a19e-593b-8beb-bd7392dfca6b",
   "metadata_checks_passed": true,
   "release_approved": false,
-  "deployment_status": "CANDIDATE_ISOLATED_SMOKE_PASSED_NOT_DEPLOYED",
+  "deployment_status": "DEPLOYED_RUNTIME_TEST_BLOCKED_BY_INSTANCE_PROFILE_ARN",
   "smoke": {
     "result": "CLOUD_GLIDER_AMI_SMOKE_PASS",
     "free_bytes": 632487936,
@@ -51,28 +51,29 @@
     "rendered_bootstrap": "PASS",
     "failure_paths": "Includes disabled propagation, HOLD, duplicate/ambiguous submission, ambiguous readiness, failed handoff and failed baked image verification."
   },
-  "final_state": {
-    "unchanged_from_before_build": true,
-    "request_id": "3",
-    "propagation_enabled": false,
-    "max_generation": 2,
-    "current_status": "UNINITIALIZED",
-    "hold_present": false,
-    "provisioning_lock_present": false,
-    "propagation_lock_present": false
-  },
   "performance": {
-    "propagation_benchmark": "NOT_RUN",
+    "propagation_benchmark": "FIRST_ATTEMPT_FAILED_AT_GENERATION_0",
     "measured_speedup": null,
     "baseline_mean_handoff_interval_seconds": 39.481,
     "baseline_ten_generation_duration_seconds": 405.991,
-    "phase_timings_available": true
+    "phase_timings_available": false,
+    "phase_timing_limitation": "Internal phase JSON remains in instance journals; no remote export in this release.",
+    "first_attempt": {
+      "request_id": "3",
+      "seed_creation_to_ownership_seconds": 44.093,
+      "launches": 1,
+      "handoffs": 0,
+      "sampled_live_peak": 1,
+      "failure": "Client.UnauthorizedOperation: ec2:InstanceProfile condition omitted existing /cloud-glider/ path.",
+      "duplicate_launches": 0,
+      "durable_intent_preserved_until_operator_inspection": true,
+      "reconciliation": "Exact CloudTrail rejection and absent client-token instance verified; closed-gate conditional transaction released only the cleanup marker and retained GEN intent until supported cleanup."
+    }
   },
   "remaining_work": [
-    "Review live deployment and Organizations policy compatibility.",
-    "Publish immutable artifact versions and review the offline EC2 activation pins.",
-    "Deploy matching image, Launch Template and runtime permissions with propagation disabled, only when authorized.",
-    "Run a separately authorized bounded propagation test and comparable benchmark."
+    "Apply confirmed exact profile-path correction.",
+    "Complete supported cleanup and retry the bounded ten-generation benchmark.",
+    "Restore disabled propagation and max_generation=2 after the test."
   ],
   "evidence_manifest": [
     {
@@ -126,7 +127,125 @@
     {
       "file": "state-after.json",
       "sha256": "ad332ec07e29324f0484623ec56ab46a6800b5ee604f6f5c514ff1a2d9a067ea"
+    },
+    {
+      "file": "ec2-rollout/runinstances-events.json",
+      "sha256": "09b28aaa4af1bad5ec3eea0af0e5a637c4d416c744cc1e8e79c1f5bdb91e7577"
+    },
+    {
+      "file": "ec2-rollout/denied-submission-inspection.json",
+      "sha256": "7d02cf5e83f53aac5db522156b2d2a9d80e2f0fa2ba7dba9105750bf8d2eadc3"
+    },
+    {
+      "file": "ec2-rollout/denied-submission-reconciliation-transaction.json",
+      "sha256": "88babf21393f77317651a00fd7cab2b9b1a5f15e78630cbf9e4895aaf5e026b6"
+    },
+    {
+      "file": "ec2-rollout/benchmark-monitor-result.json",
+      "sha256": "18c47b7ecc9986a2fce744e692993bc6fc9167cd6b3bfd22393dc71948c79187"
+    },
+    {
+      "file": "ec2-rollout/benchmark-current-000000.json",
+      "sha256": "fb64ed108675fa75c5d1afbf82322bac2b59cbf20e4fd69b5fe016c2917df708"
+    },
+    {
+      "file": "ec2-rollout/benchmark-seed-stack.json",
+      "sha256": "dfa439b4f2901f74e3bac169bf4e3009e6ae0665a246b801cc974cbe5b0b0df7"
     }
   ],
-  "local_evidence_directory": "/Users/saraislet/Documents/src/glider-project/cloud-glider-ec2-reconcile/.artifacts/ami"
+  "local_evidence_directory": "/Users/saraislet/Documents/src/glider-project/cloud-glider-ec2-reconcile/.artifacts/ami",
+  "isolated_test_final_state": {
+    "unchanged_from_before_build": true,
+    "request_id": "3",
+    "propagation_enabled": false,
+    "max_generation": 2,
+    "current_status": "UNINITIALIZED",
+    "hold_present": false,
+    "provisioning_lock_present": false,
+    "propagation_lock_present": false
+  },
+  "deployment_authorized": true,
+  "runtime_deployment": {
+    "stacks": {
+      "cloud-glider-sandbox-boundaries": "UPDATE_COMPLETE",
+      "cloud-glider-sandbox": "UPDATE_COMPLETE",
+      "cloud-glider-sandbox-bootstrap": "UPDATE_COMPLETE"
+    },
+    "launch_template": {
+      "launch_template_id": "lt-09e12d4ca882601db",
+      "launch_template_version": "1",
+      "launch_template_sha256": "48d9a44f4105bf1a047a0c323639c9be83b2dfb27a06b27e5d2e54f06148834c"
+    },
+    "immutable_artifacts": {
+      "agent": {
+        "bucket": "cloud-glider-sandbox-482268323955-us-west-2-artifacts",
+        "key": "generation/ec2-8015a49ed4a6bd96c2b770d6a2cb9c14c52433c67fa5725caefa3bb2bd66ff94-cloud-glider-agent.tar.gz",
+        "version_id": "hRXMUkcZAVBjYH3FuX4xmT6Gjz.QnZIF",
+        "sha256": "8015a49ed4a6bd96c2b770d6a2cb9c14c52433c67fa5725caefa3bb2bd66ff94",
+        "url": "https://cloud-glider-sandbox-482268323955-us-west-2-artifacts.s3.us-west-2.amazonaws.com/generation/ec2-8015a49ed4a6bd96c2b770d6a2cb9c14c52433c67fa5725caefa3bb2bd66ff94-cloud-glider-agent.tar.gz?versionId=hRXMUkcZAVBjYH3FuX4xmT6Gjz.QnZIF"
+      },
+      "seed": {
+        "bucket": "cloud-glider-sandbox-482268323955-us-west-2-artifacts",
+        "key": "generation/ec2-0dcc981c435ed23cfbe880e17362e07f6c7cdcd5ea177bb76d5037d9f8ddfe8e-ec2-seed.yaml",
+        "version_id": "tCEuoLN9JjccyhA9_YoecwlwFnd.h8JO",
+        "sha256": "0dcc981c435ed23cfbe880e17362e07f6c7cdcd5ea177bb76d5037d9f8ddfe8e",
+        "url": "https://cloud-glider-sandbox-482268323955-us-west-2-artifacts.s3.us-west-2.amazonaws.com/generation/ec2-0dcc981c435ed23cfbe880e17362e07f6c7cdcd5ea177bb76d5037d9f8ddfe8e-ec2-seed.yaml?versionId=tCEuoLN9JjccyhA9_YoecwlwFnd.h8JO"
+      },
+      "bootstrap": {
+        "bucket": "cloud-glider-sandbox-482268323955-us-west-2-artifacts",
+        "key": "bootstrap/ec2-41ba772ce58e6fd3f44cb308383685fd4eb94072fa591def8f5cdef9a7ed830f-bootstrap.yaml",
+        "version_id": "_T5bZ4y4UH05BcPUa_IdqI4Wq4TotLE8",
+        "sha256": "41ba772ce58e6fd3f44cb308383685fd4eb94072fa591def8f5cdef9a7ed830f",
+        "url": "https://cloud-glider-sandbox-482268323955-us-west-2-artifacts.s3.us-west-2.amazonaws.com/bootstrap/ec2-41ba772ce58e6fd3f44cb308383685fd4eb94072fa591def8f5cdef9a7ed830f-bootstrap.yaml?versionId=_T5bZ4y4UH05BcPUa_IdqI4Wq4TotLE8"
+      },
+      "foundation": {
+        "bucket": "cloud-glider-sandbox-482268323955-us-west-2-artifacts",
+        "key": "foundation/ec2-9567b469111d0e17e8f5693ffe891f087072f52dbdbbe2a56d33e631a879cf83-foundation.yaml",
+        "version_id": "QVJYJLlpbXpoPzSOixIoLCug7L5l8syx",
+        "sha256": "9567b469111d0e17e8f5693ffe891f087072f52dbdbbe2a56d33e631a879cf83",
+        "url": "https://cloud-glider-sandbox-482268323955-us-west-2-artifacts.s3.us-west-2.amazonaws.com/foundation/ec2-9567b469111d0e17e8f5693ffe891f087072f52dbdbbe2a56d33e631a879cf83-foundation.yaml?versionId=QVJYJLlpbXpoPzSOixIoLCug7L5l8syx"
+      },
+      "boundaries": {
+        "bucket": "cloud-glider-sandbox-482268323955-us-west-2-artifacts",
+        "key": "foundation/ec2-51fc5d795271be36a4324a122f84f9f3ee1bdaf01ffaa18ce423fd5dd7fbd89c-permission-boundaries.json",
+        "version_id": "h5uRkDudIW8FifCRj2MWz6GsxLko5xYA",
+        "sha256": "51fc5d795271be36a4324a122f84f9f3ee1bdaf01ffaa18ce423fd5dd7fbd89c",
+        "url": "https://cloud-glider-sandbox-482268323955-us-west-2-artifacts.s3.us-west-2.amazonaws.com/foundation/ec2-51fc5d795271be36a4324a122f84f9f3ee1bdaf01ffaa18ce423fd5dd7fbd89c-permission-boundaries.json?versionId=h5uRkDudIW8FifCRj2MWz6GsxLko5xYA"
+      },
+      "launch_template": {
+        "bucket": "cloud-glider-sandbox-482268323955-us-west-2-artifacts",
+        "key": "foundation/ec2-bd91b782acd305495c741a45e0c68d99ead9ecaa4b30660357b4c6422fa59340-launch-template.yaml",
+        "version_id": "uJD750fxqhkNLDBPTsapsToZq5BtoPCx",
+        "sha256": "bd91b782acd305495c741a45e0c68d99ead9ecaa4b30660357b4c6422fa59340",
+        "url": "https://cloud-glider-sandbox-482268323955-us-west-2-artifacts.s3.us-west-2.amazonaws.com/foundation/ec2-bd91b782acd305495c741a45e0c68d99ead9ecaa4b30660357b4c6422fa59340-launch-template.yaml?versionId=uJD750fxqhkNLDBPTsapsToZq5BtoPCx"
+      }
+    }
+  },
+  "corrective_change": {
+    "status": "PREPARED_AWAITING_BROWSER_CONFIRMATION",
+    "scope": "AgentRole and AgentBoundary exact existing instance-profile path only; no replacement, no AMI/runtime-agent changes.",
+    "tests_passed": 257,
+    "cfn_lint": "PASS",
+    "change_sets": {
+      "cloud-glider-sandbox-boundaries": {
+        "sha256": "43f914fcfa315af8b87db11af14dfb93a9fd823cfc2651d17236c782ec97537b",
+        "version_id": "jdSXHRruxcASefLMJtAMF3mzcDTrCgOd",
+        "url": "https://cloud-glider-sandbox-482268323955-us-west-2-artifacts.s3.us-west-2.amazonaws.com/foundation/ec2-43f914fcfa315af8b87db11af14dfb93a9fd823cfc2651d17236c782ec97537b-permission-boundaries.json?versionId=jdSXHRruxcASefLMJtAMF3mzcDTrCgOd",
+        "change_set_id": "arn:aws:cloudformation:us-west-2:482268323955:changeSet/ec2-profile-path-fix-20261003/9a77464c-7aca-4fec-ba0c-799af010f322"
+      },
+      "cloud-glider-sandbox": {
+        "sha256": "e1ab44afe0f2af745a0225af74ee533e9b823940362548b45dc7484f1fc61eb5",
+        "version_id": "cQdPlnhHPIQ6tsRbbtDSTjBhyho0E5ah",
+        "url": "https://cloud-glider-sandbox-482268323955-us-west-2-artifacts.s3.us-west-2.amazonaws.com/foundation/ec2-e1ab44afe0f2af745a0225af74ee533e9b823940362548b45dc7484f1fc61eb5-foundation.yaml?versionId=cQdPlnhHPIQ6tsRbbtDSTjBhyho0E5ah",
+        "change_set_id": "arn:aws:cloudformation:us-west-2:482268323955:changeSet/ec2-profile-path-fix-20261003/510ed25e-923f-416f-9bef-1ee38be38f4c"
+      }
+    }
+  },
+  "final_state": {
+    "propagation_enabled": false,
+    "cleanup_status": "DELETING",
+    "request_id": "3",
+    "max_generation": 9,
+    "benchmark_incomplete": true
+  }
 }
