@@ -109,3 +109,45 @@ The deployment credentials denied lambda:GetFunctionConfiguration; stack
 parameters, property-level change contexts and UPDATE_COMPLETE were verified.
 The subsequent current-source release must use the migrated lifecycle controller
 and a rebuilt compatible image; the legacy receipt remains historical evidence.
+
+## Preflight-removal rebuild and benchmark on October 3, 2026
+
+[Release receipt](../config/releases/2026-10-03-preflight-removal-minimal-ami.json)
+records private ARM64 AMI `ami-0be3b7fd3c68a61f6`, encrypted 2 GiB gp3 root
+snapshot `snap-00925dc8f83f6339b`, and merged fixed source
+`ee59e7d206c003634ff4329833c7fc724a16dfa6` ([PR 9](https://github.com/saraislet/cloud-glider/pull/9)).
+The exact baked archive digest is
+`63ac10d5da88143c66967f41156b00954c5a2274a03fd63a696f3af063c98838`.
+Packer completed in 14m 17s using the pinned source AMI, SSM release and patched
+plugin. Metadata validation and isolated cold boot passed; Python was 3.12.3
+and free root space was 632,659,968 bytes. All 211 source tests passed.
+Builder and smoke instances were terminated and the smoke stack deleted.
+
+The operator explicitly authorized deployment and the ten-generation benchmark.
+Immutable agent/generation/bootstrap versions were uploaded and downloaded for
+hash verification. The existing templates were retained; release change sets
+substituted only the exact image and generation-template URL, with no resource
+replacement or permission expansion. Boundary, foundation and bootstrap stacks
+reached UPDATE_COMPLETE. The conditional state release required exact disabled
+records, uninitialized CURRENT, no live generations, idle provisioning and the
+existing hold; its artifact tuple and canonical fingerprint were independently
+verified. The hold was then cleared through the audited recovery helper after
+confirming the stranded placeholder and prior generation resources were absent.
+
+Request 2 ran generations 0–9 on the new image: ten launches and nine validated
+handoffs, with no hold or failed generation. Generation 0 creation-to-ownership
+was 50.662s; first creation to generation 9 ownership was 405.991s (6m 46s).
+Ownership intervals averaged 39.481s (range 38.555–42.458s). The observed peak
+was three live generations, counting pending and shutting-down instances.
+Sampling was about 3.3s, so peak observation does not prove continuous absence
+of a shorter spike. The receipt contains per-generation creation/ownership
+timestamps, stack/instance identities and local evidence hashes. These timings
+exclude AMI build, release deployment and benchmark cleanup.
+
+Standard lifecycle cleanup fenced propagation and deleted all ten generation
+stacks. Independent checks confirmed zero live Cloud Glider instances, no
+attached build/test volumes, CURRENT=UNINITIALIZED, absent hold and provisioning
+leases, propagation/bootstrap disabled, cleanup COMPLETE, and fresh request 3.
+A conditional transaction restored max_generation=2, retained the absolute
+ceiling of three and updated the request fingerprint and benchmark audit. The
+verified image remains deployed but paused; no further deployment is needed.
