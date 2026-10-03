@@ -27,6 +27,8 @@
 
 ### Health and readiness
 
+- For EC2 source releases implementing operator-approved decision 0021, successor-produced functional agent readiness replaces the fixed two-heartbeat observation wait. Preserve exact identity, bounded freshness, successor-executed continuation, final controls and conditional handoff; the agent remains the only workload. Legacy CloudFormation readiness is unchanged. See `docs/decisions/0021-successor-functional-readiness.md`.
+
 - Never treat EC2 `running` state as proof that a generation is healthy.
 - Authoritative readiness must verify the expected generation and approved template, current control state, and valid handoff ownership in addition to workload health.
 - Treat EC2 Application Status Checks as corroborating telemetry and an alert signal, not as the authoritative readiness or retirement gate.

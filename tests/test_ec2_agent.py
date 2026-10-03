@@ -1,3 +1,4 @@
+import dataclasses
 import sys
 import unittest
 from pathlib import Path
@@ -151,6 +152,10 @@ class FakeGateway:
         self.calls.append("control")
         return dict(self.control), self.hold_active
 
+    def read_cycle_snapshot(self):
+        c, h = self.read_control_and_hold()
+        return c, h, self.read_current()
+
     def read_current(self):
         return dict(self.current)
 
@@ -237,7 +242,20 @@ class FakeGateway:
             "agent_artifact_version_id": c.agent_artifact_version_id,
             "agent_artifact_sha256": c.agent_artifact_sha256,
             "status": "CANDIDATE",
-            "workload_healthy": True,
+            "agent_live": True,
+            "functional_readiness": {
+                "schema_version": "1",
+                "producer_instance_id": self.successor_id,
+                "handoff_token": self.created["tags"]["handoff-token"],
+                "control_sha256": control_fingerprint(self.control),
+                "proved_at_epoch": self.clock(),
+                "continuation_generation": f"{int(generation) + 1:06d}",
+                "continuation_status": (
+                    "BOUNDARY"
+                    if int(generation) >= self.control["max_generation"]
+                    else "DRY_RUN_PASSED"
+                ),
+            },
             "observed_propagation_enabled": True,
             "observed_hold_active": False,
             "heartbeat_sequence": self.reads,
@@ -298,15 +316,15 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(gateway.calls.count("heartbeat"), 2)
         self.assertEqual(agent.heartbeat_sequence, 2)
 
-    def test_readiness_polling_comparison_preserves_heartbeat_spacing(self):
-        for interval, expected in ((1, 5), (2, 6)):
+    def test_functional_readiness_removes_fixed_heartbeat_wait(self):
+        for interval, expected in ((1, 0), (2, 0)):
             with self.subTest(interval=interval):
                 agent, gateway, clock = self.setup_agent()
                 gateway.control["readiness_poll_seconds"] = interval
                 spec, identifier = agent.provision_successor(gateway.control)
                 gateway.calls.clear()
                 start = clock()
-                state = agent.wait_for_healthy_successor(
+                state = agent.wait_for_ready_successor(
                     gateway.control, spec, identifier
                 )
                 self.assertEqual(state["instance_id"], CHILD)
@@ -434,15 +452,234 @@ class AgentTests(unittest.TestCase):
 
     def test_stale_or_ambiguous_heartbeat_cannot_handoff(self):
         for change in (
-            {"workload_healthy": False},
+            {"agent_live": False},
+            {"agent_live": 1},
+            {"observed_propagation_enabled": 1},
+            {"observed_hold_active": 0},
+            {"functional_readiness": None},
             {"observed_hold_active": True},
             {"launch_template_version": "2"},
-            {"heartbeat_at_epoch": 1},
+            {"functional_readiness": {}},
             {"handoff_token": "foreign"},
         ):
             a, g, _ = self.setup_agent()
             original = g.read_generation_state
             g.read_generation_state = lambda n: {**original(n), **change}
+            with self.assertRaises(TransientFailure):
+                a.cycle()
+            self.assertNotIn("handoff", g.calls)
+
+    def candidate(self):
+        cfg = config(
+            generation="000001",
+            instance_id=CHILD,
+            predecessor_instance_id=CURRENT,
+            handoff_token="candidate-token",
+        )
+        a, g, clock = self.setup_agent(cfg)
+        g.current.update(generation="000000", instance_id=CURRENT)
+        return a, g, clock
+
+    def test_exact_successor_produces_own_functional_proof_without_ownership(self):
+        a, g, _ = self.candidate()
+        published = []
+        g.write_heartbeat = published.append
+        self.assertEqual(a.cycle(), "CANDIDATE")
+        proof = published[0]["functional_readiness"]
+        self.assertEqual(proof["producer_instance_id"], CHILD)
+        self.assertEqual(proof["continuation_status"], "DRY_RUN_PASSED")
+        self.assertIn("dry-run", g.calls)
+        for operation in ("create", "claim", "acquire", "handoff", "terminate"):
+            self.assertNotIn(operation, g.calls)
+        self.assertNotIn("workload_healthy", published[0])
+
+    def test_readiness_refresh_is_independent_of_heartbeat_spacing(self):
+        a, g, clock = self.candidate()
+        g.control["heartbeat_interval_seconds"] = 60
+        published = []
+        g.write_heartbeat = published.append
+        a.cycle()
+        clock.sleep(5)
+        a.cycle()
+        self.assertEqual(len(published), 2)
+        self.assertEqual(g.calls.count("dry-run"), 2)
+        self.assertEqual([s["heartbeat_sequence"] for s in published], [1, 1])
+        self.assertEqual(
+            published[0]["heartbeat_at_epoch"], published[1]["heartbeat_at_epoch"]
+        )
+        self.assertEqual(
+            published[1]["functional_readiness"]["proved_at_epoch"]
+            - published[0]["functional_readiness"]["proved_at_epoch"],
+            5,
+        )
+
+    def test_parent_accepts_actual_candidate_proof_and_preserves_it_in_current(self):
+        parent, pg, clock = self.setup_agent()
+        spec, child_id = parent.provision_successor(pg.control)
+        cfg = dataclasses.replace(
+            parent.config,
+            generation="000001",
+            instance_id=child_id,
+            predecessor_instance_id=CURRENT,
+            handoff_token=spec["tags"]["handoff-token"],
+        )
+        cg = FakeGateway(cfg, clock)
+        cg.current, cg.control, cg.instances = pg.current, pg.control, pg.instances
+        candidate = Agent(
+            cfg,
+            cg,
+            clock=clock,
+            sleep=clock.sleep,
+            logger=lambda _: None,
+            timing_clock=clock,
+        )
+        candidate.verify_self()
+        published = []
+        cg.write_heartbeat = published.append
+        self.assertEqual(candidate.cycle(), "CANDIDATE")
+        pg.read_generation_state = lambda _: dict(published[-1])
+        self.assertEqual(parent.cycle(), "HANDOFF_COMPLETE")
+        self.assertEqual(
+            pg.current["functional_readiness"], published[-1]["functional_readiness"]
+        )
+        self.assertIn("dry-run", cg.calls)
+        self.assertEqual(pg.calls.count("create"), 1)
+        self.assertNotIn("create", cg.calls)
+
+    def test_candidate_failed_refresh_clears_previous_proof(self):
+        a, g, clock = self.candidate()
+        published = []
+        g.write_heartbeat = published.append
+        a.cycle()
+        self.assertIsNotNone(published[-1]["functional_readiness"])
+        clock.sleep(5)
+        g.dry_run_instance = Mock(side_effect=TransientFailure("denied"))
+        with self.assertRaises(TransientFailure):
+            a.cycle()
+        self.assertIsNone(published[-1]["functional_readiness"])
+
+    def test_candidate_parent_control_capacity_and_probe_duration_fail_closed(self):
+        for failure in (
+            "parent-before",
+            "parent-after",
+            "stop-after",
+            "hold-after",
+            "control-after",
+            "capacity",
+            "slow",
+        ):
+            with self.subTest(failure=failure):
+                a, g, clock = self.candidate()
+                if failure == "parent-before":
+                    g.current["instance_id"] = "i-" + "4" * 17
+                elif failure == "capacity":
+                    g.check_capacity = Mock(
+                        side_effect=TransientFailure("capacity unavailable")
+                    )
+                else:
+
+                    def during_dry_run(spec):
+                        g.calls.append("dry-run")
+                        if failure == "parent-after":
+                            g.current["instance_id"] = "i-" + "4" * 17
+                        elif failure == "stop-after":
+                            g.control["propagation_enabled"] = False
+                        elif failure == "hold-after":
+                            g.hold_active = True
+                        elif failure == "control-after":
+                            g.control["max_generation"] += 1
+                        elif failure == "slow":
+                            clock.sleep(16)
+
+                    g.dry_run_instance = during_dry_run
+                with self.assertRaises(TransientFailure):
+                    a.prove_functional_readiness(g.control.copy(), g.current.copy())
+                for operation in ("claim", "create", "handoff", "terminate", "acquire"):
+                    self.assertNotIn(operation, g.calls)
+
+    def test_candidate_dry_run_uses_its_own_next_hop_identity(self):
+        a, g, _ = self.candidate()
+        g.dry_run_instance = Mock()
+        a.prove_functional_readiness(g.control, g.current)
+        spec = g.dry_run_instance.call_args.args[0]
+        self.assertEqual(spec["generation"], "000002")
+        self.assertEqual(spec["tags"]["predecessor-instance-id"], CHILD)
+        self.assertEqual(spec["launch_template_id"], LT)
+        self.assertEqual(spec["launch_template_version"], "1")
+
+    def test_proof_expiring_during_final_controls_preserves_parent(self):
+        a, g, clock = self.setup_agent()
+        spec, child_id = a.provision_successor(g.control)
+        state = g.read_generation_state(spec["generation"])
+
+        def slow_fresh_control():
+            clock.sleep(16)
+            return g.control.copy()
+
+        a._fresh_enabled_control = slow_fresh_control
+        with self.assertRaisesRegex(TransientFailure, "expired during final"):
+            a.conditional_handoff(g.control, spec, child_id, state)
+        self.assertNotIn("handoff", g.calls)
+        self.assertNotIn("terminate", g.calls)
+
+    def test_parent_continuation_alone_cannot_substitute_for_candidate_proof(self):
+        a, g, _ = self.setup_agent()
+        original = g.read_generation_state
+        g.read_generation_state = lambda n: {
+            **original(n),
+            "functional_readiness": None,
+        }
+        with self.assertRaises(TransientFailure):
+            a.cycle()
+        self.assertNotIn("handoff", g.calls)
+
+    def test_candidate_boundary_proof_does_not_attempt_next_hop(self):
+        a, g, _ = self.candidate()
+        g.control["max_generation"] = 1
+        proof = a.prove_functional_readiness(g.control, g.current)
+        self.assertEqual(proof["continuation_status"], "BOUNDARY")
+        self.assertNotIn("dry-run", g.calls)
+
+    def test_candidate_failed_capability_does_not_publish_ready(self):
+        a, g, _ = self.candidate()
+        g.write_heartbeat = Mock()
+        g.dry_run_instance = Mock(side_effect=TransientFailure("denied"))
+        with self.assertRaises(TransientFailure):
+            a.cycle()
+        g.write_heartbeat.assert_called_once()
+        self.assertIsNone(g.write_heartbeat.call_args.args[0]["functional_readiness"])
+
+    def test_candidate_stop_or_hold_publishes_no_proof(self):
+        for hold in (False, True):
+            a, g, _ = self.candidate()
+            g.hold_active = hold
+            g.control["propagation_enabled"] = hold
+            published = []
+            g.write_heartbeat = published.append
+            self.assertEqual(a.cycle(), "CANDIDATE")
+            self.assertIsNone(published[0]["functional_readiness"])
+            self.assertNotIn("dry-run", g.calls)
+
+    def test_proof_rejects_stale_future_foreign_and_wrong_continuation(self):
+        for changes in (
+            {"proved_at_epoch": 1},
+            {"proved_at_epoch": 9_000_000_000},
+            {"proved_at_epoch": True},
+            {"producer_instance_id": CURRENT},
+            {"handoff_token": "foreign"},
+            {"control_sha256": "0" * 64},
+            {"continuation_status": "BOUNDARY"},
+            {"continuation_generation": "000004"},
+        ):
+            a, g, _ = self.setup_agent()
+            original = g.read_generation_state
+
+            def changed(n):
+                state = original(n)
+                state["functional_readiness"].update(changes)
+                return state
+
+            g.read_generation_state = changed
             with self.assertRaises(TransientFailure):
                 a.cycle()
             self.assertNotIn("handoff", g.calls)
@@ -491,7 +728,30 @@ class AgentTests(unittest.TestCase):
             continuation_status="BOUNDARY",
             continuation_generation="000002",
         )
+        g.current["functional_readiness"] = {
+            "schema_version": "1",
+            "producer_instance_id": CHILD,
+            "handoff_token": "token",
+            "control_sha256": control_fingerprint(g.control),
+            "proved_at_epoch": clock(),
+            "continuation_generation": "000002",
+            "continuation_status": "BOUNDARY",
+        }
         return a, g, clock
+
+    def test_retirement_requires_durable_successor_functional_evidence(self):
+        a, g, _ = self.child_agent()
+        g.current.pop("functional_readiness")
+        with self.assertRaises(SafetyViolation):
+            a.cycle()
+        self.assertNotIn("terminate", g.calls)
+
+    def test_delayed_retirement_keeps_authorization_after_proof_freshness_expires(self):
+        a, g, clock = self.child_agent()
+        clock.sleep(60)
+        with self.assertRaisesRegex(TransientFailure, "still in progress"):
+            a.cycle()
+        self.assertIn("terminate", g.calls)
 
     def test_child_retries_retirement_before_terminal_exit(self):
         a, g, _ = self.child_agent()
@@ -509,6 +769,10 @@ class AgentTests(unittest.TestCase):
         g.control["max_generation"] = 3
         g.current.update(
             handoff_control_sha256=control_fingerprint(g.control),
+            continuation_status="DRY_RUN_PASSED",
+        )
+        g.current["functional_readiness"].update(
+            control_sha256=control_fingerprint(g.control),
             continuation_status="DRY_RUN_PASSED",
         )
         return a, g, clock
@@ -540,6 +804,9 @@ class AgentTests(unittest.TestCase):
         a, g, _ = self.overlap_agent()
         g.control["max_live_generations"] = 2
         g.current["handoff_control_sha256"] = control_fingerprint(g.control)
+        g.current["functional_readiness"]["control_sha256"] = control_fingerprint(
+            g.control
+        )
         with self.assertRaisesRegex(TransientFailure, "ceiling"):
             a.cycle()
         self.assertNotIn("create", g.calls)
@@ -553,7 +820,7 @@ class AgentTests(unittest.TestCase):
             g.hold_active = hold
             g.control["propagation_enabled"] = hold
             self.assertEqual(a.cycle(), "STOPPED_BY_OPERATOR")
-            self.assertEqual(g.calls, ["control", "heartbeat"])
+            self.assertEqual(g.calls, ["control"])
 
     def test_child_stop_preserves_predecessor_even_at_terminal_generation(self):
         a, g, _ = self.child_agent()

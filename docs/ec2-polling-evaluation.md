@@ -7,6 +7,11 @@ No architectural exception, backend switch, deployment, IAM or infrastructure
 change is introduced here. The supplied simplified-first-pass invariants remain
 binding; its separate Google design document was not available in this checkout.
 
+The later [functional-readiness source change](ec2-functional-readiness.md)
+supersedes the two-heartbeat gate and separate CURRENT read described below.
+These local measurements describe PR #14 before that subsequent design change;
+its unit-count estimates must not be reused as a forecast for the new protocol.
+
 ## Changes and local evidence
 
 EC2 agents observe ownership every second instead of coupling observations to

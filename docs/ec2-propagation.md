@@ -79,7 +79,10 @@ See the [source-only polling evaluation](ec2-polling-evaluation.md) for the
 one-second EC2 ownership loop, separately spaced heartbeats, operator-selected one-second
 readiness default, batched capacity identities and unchanged image
 verification. Review increased DynamoDB reads and lease-renewal writes before
-deployment. New EC2 CONTROL initialization selects one second; CloudFormation initialization
-retains two seconds. Existing CONTROL records require an approved configuration
-update during deployment; initialization cannot overwrite them. Heartbeat interval
-five seconds and two required healthy heartbeats remain unchanged.
+deployment. New EC2 CONTROL initialization selects one second; CloudFormation
+initialization retains two seconds. Existing CONTROL records require an approved
+configuration update during deployment; initialization cannot overwrite them.
+The subsequent source-only [functional readiness change](ec2-functional-readiness.md)
+implements operator-approved decision 0021 and replaces the EC2 two-heartbeat wait
+with successor-produced capability proof; it is not deployed. Heartbeat telemetry
+retains its configured spacing, independently of functional proof refresh.
