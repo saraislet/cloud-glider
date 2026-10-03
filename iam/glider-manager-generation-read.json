@@ -1,0 +1,9 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Sid": "ReadGenerationStateForOperationsAndMigration",
+    "Effect": "Allow",
+    "Action": ["dynamodb:DescribeTable", "dynamodb:Scan", "dynamodb:Query", "dynamodb:GetItem"],
+    "Resource": "arn:aws:dynamodb:us-west-2:123456789012:table/cloud-glider-sandbox-generations"
+  }]
+}

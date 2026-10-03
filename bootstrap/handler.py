@@ -4,6 +4,7 @@ import json
 import os
 import re
 import time
+from datetime import datetime, timezone
 from urllib.parse import quote
 
 
@@ -375,6 +376,8 @@ def complete_cleanup(ddb, table, control, current, request, env):
         'bootstrap_requested': {'BOOL': False}, 'propagation_enabled': {'BOOL': False},
         'cleanup_requested': {'BOOL': False}, 'cleanup_status': {'S': 'COMPLETE'},
         'cleanup_completed_at': {'N': str(int(time.time()))}, 'control_sha256': {'S': fingerprint(control)}}
+    for field in ('cleanup_retry_token', 'cleanup_retry_at', 'cleanup_retry_sequence'):
+        ready.pop(field, None)
     ready.pop('stack_id', None)
     ready.pop('requested_at', None)
     ready['prepared_at'] = {'N': str(int(time.time()))}
@@ -485,8 +488,10 @@ def is_cleanup_trigger(record):
     change = record.get('dynamodb', {})
     old, new = change.get('OldImage', {}), change.get('NewImage', {})
     return (record.get('eventName') == 'MODIFY' and new.get('PK') == {'S': 'BOOTSTRAP'}
-            and new.get('SK') == {'S': 'REQUEST'} and old.get('cleanup_requested') == {'BOOL': False}
-            and new.get('cleanup_requested') == {'BOOL': True})
+            and new.get('SK') == {'S': 'REQUEST'} and new.get('cleanup_requested') == {'BOOL': True}
+            and (old.get('cleanup_requested') == {'BOOL': False}
+                 or (old.get('cleanup_status') == {'S': 'NEEDS_ATTENTION'}
+                     and new.get('cleanup_status') == {'S': 'QUIESCING'})))
 
 
 
@@ -610,9 +615,9 @@ def consume_command(ddb, env, event_control=None):
         feedback.update(last_result={'S': 'Propagation stopped. Running instances remain intact.'},
                         operation_status=idle_status if active != 'NONE' else {'S': 'STOPPED'})
     else:
-        updated.update(cleanup_requested={'BOOL': True}, bootstrap_requested={'BOOL': False}, propagation_enabled={'BOOL': False})
+        updated.update(cleanup_requested={'BOOL': True}, bootstrap_requested={'BOOL': False}, propagation_enabled={'BOOL': False}, cleanup_retry_token={'S': ''})
         if cleanup_status == 'NEEDS_ATTENTION':
-            updated.update(cleanup_status={'S': 'QUIESCING'}, cleanup_started_at={'N': str(int(time.time()))}, cleanup_error={'S': ''})
+            updated.update(cleanup_status={'S': 'QUIESCING'}, cleanup_started_at={'N': str(int(time.time()))}, cleanup_error={'S': ''}, cleanup_retry_token={'S': ''})
         feedback.update(active_command={'S': 'CLEANUP'}, active_request_id={'S': request_id},
             active_command_sequence={'N': next_sequence}, operation_status={'S': 'QUIESCING'},
             last_result={'S': 'Cleanup accepted. Bootstrap and propagation are disabled.'})
@@ -677,8 +682,8 @@ def run_operator(ddb, cfn, s3, ec2, env, event_control=None):
             retry_bookkeeping = (failed.get('request_id') == {'S': target}
                 and failed.get('status') == {'S': 'SUBMITTED'}
                 and bool(read_item(ddb, env['STATE_TABLE'], 'LOCK', 'PROVISIONING')))
-            # The marker fences provisioning while scheduled retries verify the
-            # already submitted stack. They never submit a second bootstrap.
+            # The marker fences provisioning while stream retries or an operator
+            # recovery verify the submitted stack. Cleanup schedules never launch bootstrap.
             if failed.get('request_id') == {'S': target} and not retry_bookkeeping:
                 paused = {**failed, 'bootstrap_requested': {'BOOL': False}, 'propagation_enabled': {'BOOL': False}}
                 command_transaction(ddb, [{'Put': {'TableName': env['STATE_TABLE'], 'Item': paused, **exact_condition(failed)}}])
@@ -694,30 +699,147 @@ def is_operator_trigger(record):
             and any(old.get(field) != new.get(field) for field in ('start_requested', 'stop_requested', 'cleanup_requested')))
 
 
+ACTIVE_CLEANUP = ('QUIESCING', 'DELETING', 'VERIFYING')
+
+
+def cleanup_active(request, request_id=None):
+    return (request.get('cleanup_requested') == {'BOOL': True}
+        and request.get('cleanup_status', {}).get('S') in ACTIVE_CLEANUP
+        and (request_id is None or request.get('request_id') == {'S': request_id}))
+
+
+def cancel_cleanup_retry(scheduler, env, token):
+    if not token:
+        return
+    try:
+        scheduler.delete_schedule(GroupName=env['CLEANUP_SCHEDULE_GROUP'], Name=token)
+    except Exception as exc:
+        if getattr(exc, 'response', {}).get('Error', {}).get('Code') != 'ResourceNotFoundException':
+            raise
+
+
+def schedule_cleanup_retry(ddb, scheduler, env, request_id):
+    request = read_item(ddb, env['STATE_TABLE'], 'BOOTSTRAP', 'REQUEST')
+    if not cleanup_active(request, request_id):
+        return
+    token = request.get('cleanup_retry_token', {}).get('S', '')
+    if not token:
+        sequence = int(request.get('cleanup_retry_sequence', {'N': '0'})['N']) + 1
+        token = 'cleanup-' + request_id + '-' + str(sequence)
+        due = int(time.time()) + 60
+        fields = {'cleanup_retry_sequence': {'N': str(sequence)},
+            'cleanup_retry_token': {'S': token}, 'cleanup_retry_at': {'N': str(due)}}
+        # A conditional write fences stale/duplicate invocations before creating a schedule.
+        ddb.update_item(TableName=env['STATE_TABLE'], Key=key('BOOTSTRAP', 'REQUEST'),
+            UpdateExpression='SET #sequence = :sequence, #token = :token, #due = :due',
+            ConditionExpression=exact_condition(request)['ConditionExpression'],
+            ExpressionAttributeNames={**exact_condition(request)['ExpressionAttributeNames'],
+                '#sequence': 'cleanup_retry_sequence', '#token': 'cleanup_retry_token', '#due': 'cleanup_retry_at'},
+            ExpressionAttributeValues={**exact_condition(request)['ExpressionAttributeValues'],
+                ':sequence': fields['cleanup_retry_sequence'], ':token': fields['cleanup_retry_token'], ':due': fields['cleanup_retry_at']})
+        request = {**request, **fields}
+    # A fired schedule may already have auto-deleted. Never recreate a past
+    # one-time schedule; bounded delivery retries retain the matching token.
+    if token and int(request['cleanup_retry_at']['N']) <= int(time.time()):
+        return
+    target = {'Arn': env['FUNCTION_ARN'], 'RoleArn': env['CLEANUP_RETRY_ROLE_ARN'],
+        'Input': json.dumps({'source': 'cloud-glider.cleanup', 'request_id': request_id, 'retry_token': token}, sort_keys=True),
+        'RetryPolicy': {'MaximumRetryAttempts': 2, 'MaximumEventAgeInSeconds': 300}}
+    expression = 'at(' + datetime.fromtimestamp(int(request['cleanup_retry_at']['N']), timezone.utc).strftime('%Y-%m-%dT%H:%M:%S') + ')'
+    args = dict(GroupName=env['CLEANUP_SCHEDULE_GROUP'], Name=token,
+        ClientToken=hashlib.sha256(token.encode()).hexdigest(), ScheduleExpression=expression,
+        ScheduleExpressionTimezone='UTC', FlexibleTimeWindow={'Mode': 'OFF'},
+        ActionAfterCompletion='DELETE', State='ENABLED', Target=target)
+    try:
+        scheduler.create_schedule(**args)
+    except Exception as exc:
+        if getattr(exc, 'response', {}).get('Error', {}).get('Code') != 'ConflictException':
+            raise
+        existing = scheduler.get_schedule(GroupName=args['GroupName'], Name=token)
+        require(all(existing.get(field) == args[field] for field in
+            ('ScheduleExpression', 'ScheduleExpressionTimezone', 'FlexibleTimeWindow', 'ActionAfterCompletion', 'State', 'Target')),
+            'Cleanup retry schedule conflicts; inspect before resuming')
+    # AWS creation cannot be atomic with DynamoDB. A raced completion gets at most
+    # one harmless stale invocation; remove its schedule when observable here.
+    fresh = read_item(ddb, env['STATE_TABLE'], 'BOOTSTRAP', 'REQUEST')
+    if not cleanup_active(fresh, request_id) or fresh.get('cleanup_retry_token') != {'S': token}:
+        cancel_cleanup_retry(scheduler, env, token)
+
+
+def finish_cleanup_delivery(ddb, scheduler, env, before):
+    request_id = before.get('request_id', {}).get('S')
+    if not request_id:
+        return
+    fresh = read_item(ddb, env['STATE_TABLE'], 'BOOTSTRAP', 'REQUEST')
+    old_token = before.get('cleanup_retry_token', {}).get('S', '')
+    if not cleanup_active(fresh, request_id):
+        cancel_cleanup_retry(scheduler, env, old_token)
+        return
+    try:
+        schedule_cleanup_retry(ddb, scheduler, env, request_id)
+        fresh = read_item(ddb, env['STATE_TABLE'], 'BOOTSTRAP', 'REQUEST')
+        if old_token and fresh.get('cleanup_retry_token') != {'S': old_token}:
+            cancel_cleanup_retry(scheduler, env, old_token)
+    except Exception as exc:
+        fresh = read_item(ddb, env['STATE_TABLE'], 'BOOTSTRAP', 'REQUEST')
+        if cleanup_active(fresh, request_id):
+            cleanup_update(ddb, env['STATE_TABLE'], request_id, {
+                'cleanup_status': {'S': 'NEEDS_ATTENTION'}, 'cleanup_error': {'S': 'Cleanup retry scheduling failed: ' + str(exc)[:800]}})
+            operation_feedback(ddb, env, 'CLEANUP', request_id, 'NEEDS_ATTENTION',
+                'Cleanup needs attention: retry scheduling failed; inspect Lambda logs.')
+        raise
+
+
+def retry_cleanup(event, ddb, cfn, s3, ec2, scheduler, env):
+    request = read_item(ddb, env['STATE_TABLE'], 'BOOTSTRAP', 'REQUEST')
+    request_id, token = event.get('request_id'), event.get('retry_token')
+    if not isinstance(request_id, str) or not re.fullmatch('[1-9][0-9]{0,17}', request_id):
+        return
+    if not cleanup_active(request, request_id) or not token or request.get('cleanup_retry_token') != {'S': token}:
+        return  # Duplicate delivery, resumed operation, or another cycle: no work and no successor timer.
+    before = dict(request)
+    # Clear the pending token only after work succeeds. A Lambda timeout retains
+    # it for AWS's bounded delivery retry; successful processing replaces it.
+    control = read_item(ddb, env['STATE_TABLE'], 'CONTROL', 'GLOBAL')
+    try:
+        if control.get('active_command') == {'S': 'CLEANUP'} and control.get('active_request_id') == {'S': request_id}:
+            run_operator(ddb, cfn, s3, ec2, env)
+        else:
+            cleanup_step(request, ddb, cfn, ec2, env)
+        fresh = read_item(ddb, env['STATE_TABLE'], 'BOOTSTRAP', 'REQUEST')
+        if cleanup_active(fresh, request_id) and fresh.get('cleanup_retry_token') == {'S': token}:
+            ddb.update_item(TableName=env['STATE_TABLE'], Key=key('BOOTSTRAP', 'REQUEST'),
+                UpdateExpression='SET #token = :empty',
+                ConditionExpression=exact_condition(fresh)['ConditionExpression'],
+                ExpressionAttributeNames={**exact_condition(fresh)['ExpressionAttributeNames'], '#token': 'cleanup_retry_token'},
+                ExpressionAttributeValues={**exact_condition(fresh)['ExpressionAttributeValues'], ':empty': {'S': ''}})
+    finally:
+        finish_cleanup_delivery(ddb, scheduler, env, before)
+
+
 def handler(event, context):
     import boto3
     from botocore.config import Config
     env = os.environ
     require(env['AWS_REGION'] == 'us-west-2', 'Unsupported Region')
     clients = [boto3.client(service, config=Config(retries={'total_max_attempts': 1}, connect_timeout=3, read_timeout=10))
-               for service in ('dynamodb', 'cloudformation', 's3', 'ec2')]
-    ddb, cfn, s3, ec2 = clients
-    if event.get('source') == 'aws.events' and event.get('detail-type') == 'Scheduled Event':
-        run_operator(ddb, cfn, s3, ec2, env)
-        # Keep lower-level script requests resumable as well.
-        request = read_item(ddb, env['STATE_TABLE'], 'BOOTSTRAP', 'REQUEST')
-        control = read_item(ddb, env['STATE_TABLE'], 'CONTROL', 'GLOBAL')
-        if request.get('cleanup_requested') == {'BOOL': True} and control.get('active_command') != {'S': 'CLEANUP'}:
-            cleanup_step(request, ddb, cfn, ec2, env)
+               for service in ('dynamodb', 'cloudformation', 's3', 'ec2', 'scheduler')]
+    ddb, cfn, s3, ec2, scheduler = clients
+    if event.get('source') == 'cloud-glider.cleanup':
+        retry_cleanup(event, ddb, cfn, s3, ec2, scheduler, env)
         return
     for record in event.get('Records', []):
         image = record.get('dynamodb', {}).get('NewImage', {})
         if not any(trigger(record) for trigger in (is_operator_trigger, is_bootstrap_trigger, is_cleanup_trigger)):
             continue
         require(record.get('eventSourceARN') == env['STREAM_ARN'], 'Unexpected event source')
-        if is_operator_trigger(record):
-            run_operator(ddb, cfn, s3, ec2, env, image)
-        elif is_cleanup_trigger(record):
-            cleanup_step(image, ddb, cfn, ec2, env)
-        else:
-            process(image, ddb, cfn, s3, ec2, env)
+        before = read_item(ddb, env['STATE_TABLE'], 'BOOTSTRAP', 'REQUEST')
+        try:
+            if is_operator_trigger(record):
+                run_operator(ddb, cfn, s3, ec2, env, image)
+            elif is_cleanup_trigger(record):
+                cleanup_step(image, ddb, cfn, ec2, env)
+            else:
+                process(image, ddb, cfn, s3, ec2, env)
+        finally:
+            finish_cleanup_delivery(ddb, scheduler, env, before)

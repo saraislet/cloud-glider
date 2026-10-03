@@ -46,8 +46,9 @@ reset while that marker exists. It waits up to three minutes for an active submi
 a missing response or crash requires operator reconciliation, never lease expiry.
 This is a deliberately small submission interlock, not advanced lease recovery.
 
-An EventBridge rule calls the existing bootstrap Lambda once a minute to resume
-active cleanup. Timed calls never bootstrap or propagate. Reserved concurrency
+Active cleanup schedules its next one-time retry about a minute later. Completed
+schedules auto-delete; no permanent rule polls idle state (decision 0016).
+Timed calls never bootstrap or propagate. Reserved concurrency
 of one serializes controller invocations. Cleanup has a 30-minute deadline;
 failures enter `NEEDS_ATTENTION`, disable launch gates, retain inventory, and
 raise a Lambda error to the existing operational alarm. An inspected cleanup can

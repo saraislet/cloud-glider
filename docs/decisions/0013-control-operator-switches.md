@@ -37,12 +37,13 @@ internal lifecycle Booleans are permission gates, not additional operator steps.
 A conditional transaction consumes a command, increments `command_sequence`,
 resets request Booleans, changes internal lifecycle permission, and records a
 message. START checks HOLD atomically. Only accepted commands establish an
-`active_command` and target cycle. A once-per-minute reconciliation tick may
-continue an accepted start or cleanup; it cannot invent launch authorization.
+`active_command` and target cycle. DynamoDB delivers commands. Active cleanup
+uses cycle-scoped one-time retries; there is no idle or bootstrap polling timer.
+See decision 0016.
 
 Duplicate/stale stream events cannot consume later commands. Exact conditional
 CONTROL writes protect newer console edits; contention leaves a command pending
-for the next delivery/tick. Feedback is conditional on active action and target
+for a bounded delivery retry or an operator retry. Feedback is conditional on active action and target
 cycle. Progress does not overwrite the message from a newer rejection/stop.
 Pending start requests entered while cleanup finishes are rejected before the
 cleanup busy gate is cleared. START failures pause internal launch permissions
@@ -69,9 +70,8 @@ secrets, or direct EC2 mutation.
 
 Initializer and offline migration populate the interface. Existing deployments
 need the reviewed coordinated release; do not hot-migrate a live chain or replace
-its internal cycle record. This branch has not been deployed. The reconciliation
-timer adds bounded consistent-read/Lambda/log usage; review recurring costs before
-deployment. Existing CloudTrail/operational audit retention remains unchanged;
+its internal cycle record. Review the bounded reads, Lambda invocations, and
+one-time schedules used only during active cleanup before deployment. Existing CloudTrail/operational audit retention remains unchanged;
 no separate cleanup history is introduced.
 
 ## Verification

@@ -856,6 +856,29 @@
                   ]
                 }
               }
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "scheduler:CreateSchedule",
+                "scheduler:GetSchedule",
+                "scheduler:DeleteSchedule"
+              ],
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:scheduler:${AWS::Region}:${AWS::AccountId}:schedule/cloud-glider-${Environment}-cleanup/cleanup-*"
+              }
+            },
+            {
+              "Effect": "Allow",
+              "Action": "iam:PassRole",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider-${Environment}-cleanup-retry"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "iam:PassedToService": "scheduler.amazonaws.com"
+                }
+              }
             }
           ]
         }
@@ -1131,6 +1154,12 @@
                 },
                 {
                   "Fn::Sub": "arn:${AWS::Partition}:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/cloud-glider-${Environment}-audit"
+                },
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-generations"
+                },
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:events:${AWS::Region}:${AWS::AccountId}:rule/cloud-glider-${Environment}-cleanup-reconciliation"
                 }
               ]
             },
@@ -1144,9 +1173,142 @@
               "Resource": {
                 "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:instance-profile/cloud-glider-${Environment}-agent"
               }
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "lambda:AddPermission",
+                "lambda:RemovePermission",
+                "lambda:GetPolicy"
+              ],
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:cloud-glider-${Environment}-bootstrap"
+              }
             }
           ]
         }
+      }
+    },
+    "CleanupRetryBoundary": {
+      "Type": "AWS::IAM::ManagedPolicy",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "ManagedPolicyName": {
+          "Fn::Sub": "cloud-glider-${Environment}-cleanup-retry-boundary"
+        },
+        "Description": "Only the lifecycle Lambda may be invoked by cleanup retry delivery.",
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": "lambda:InvokeFunction",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:cloud-glider-${Environment}-bootstrap"
+              }
+            }
+          ]
+        }
+      }
+    },
+    "CleanupScheduleGroup": {
+      "Type": "AWS::Scheduler::ScheduleGroup",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "Name": {
+          "Fn::Sub": "cloud-glider-${Environment}-cleanup"
+        },
+        "Tags": [
+          {
+            "Key": "project",
+            "Value": "cloud-glider"
+          },
+          {
+            "Key": "environment",
+            "Value": {
+              "Ref": "Environment"
+            }
+          },
+          {
+            "Key": "purpose",
+            "Value": "cleanup-retries"
+          }
+        ]
+      }
+    },
+    "CleanupRetryRole": {
+      "Type": "AWS::IAM::Role",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "RoleName": {
+          "Fn::Sub": "cloud-glider-${Environment}-cleanup-retry"
+        },
+        "PermissionsBoundary": {
+          "Ref": "CleanupRetryBoundary"
+        },
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "scheduler.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole",
+              "Condition": {
+                "StringEquals": {
+                  "aws:SourceAccount": {
+                    "Ref": "AWS::AccountId"
+                  }
+                },
+                "ArnEquals": {
+                  "aws:SourceArn": {
+                    "Fn::GetAtt": [
+                      "CleanupScheduleGroup",
+                      "Arn"
+                    ]
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "invoke-only-cleanup-controller",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": "lambda:InvokeFunction",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:cloud-glider-${Environment}-bootstrap"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "project",
+            "Value": "cloud-glider"
+          },
+          {
+            "Key": "environment",
+            "Value": {
+              "Ref": "Environment"
+            }
+          },
+          {
+            "Key": "purpose",
+            "Value": "cleanup-retries"
+          }
+        ]
       }
     }
   },
@@ -1174,6 +1336,24 @@
     "FoundationBoundaryArn": {
       "Value": {
         "Ref": "FoundationBoundary"
+      }
+    },
+    "CleanupRetryRoleArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "CleanupRetryRole",
+          "Arn"
+        ]
+      }
+    },
+    "CleanupScheduleGroupName": {
+      "Value": {
+        "Ref": "CleanupScheduleGroup"
+      }
+    },
+    "CleanupRetryBoundaryArn": {
+      "Value": {
+        "Ref": "CleanupRetryBoundary"
       }
     }
   }

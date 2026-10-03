@@ -74,11 +74,10 @@ Resources:
 
   OperationalEmailSubscription:
     Type: AWS::SNS::Subscription
-    DependsOn: OperationalAlertsTopic
     Properties:
       Protocol: email
       Endpoint: !Ref OperationalNotificationEmail
-      TopicArn: !Sub 'arn:${AWS::Partition}:sns:${AWS::Region}:${AWS::AccountId}:cloud-glider-${Environment}-operational-alerts'
+      TopicArn: !Ref OperationalAlertsTopic
 
   StateTable:
     Type: AWS::DynamoDB::Table
