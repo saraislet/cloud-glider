@@ -1131,6 +1131,12 @@
                 },
                 {
                   "Fn::Sub": "arn:${AWS::Partition}:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/cloud-glider-${Environment}-audit"
+                },
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-generations"
+                },
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:events:${AWS::Region}:${AWS::AccountId}:rule/cloud-glider-${Environment}-cleanup-reconciliation"
                 }
               ]
             },
@@ -1143,6 +1149,17 @@
               ],
               "Resource": {
                 "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:instance-profile/cloud-glider-${Environment}-agent"
+              }
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "lambda:AddPermission",
+                "lambda:RemovePermission",
+                "lambda:GetPolicy"
+              ],
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:cloud-glider-${Environment}-bootstrap"
               }
             }
           ]

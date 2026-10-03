@@ -1,0 +1,15 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ManageCleanupSchedulePermission",
+      "Effect": "Allow",
+      "Action": [
+        "lambda:AddPermission",
+        "lambda:RemovePermission",
+        "lambda:GetPolicy"
+      ],
+      "Resource": "arn:aws:lambda:us-west-2:123456789012:function:cloud-glider-sandbox-bootstrap"
+    }
+  ]
+}

@@ -963,6 +963,7 @@ Resources:
   CleanupReconciliationRule:
     Type: AWS::Events::Rule
     Properties:
+      Name: !Sub cloud-glider-${Environment}-cleanup-reconciliation
       Description: Reconcile accepted operator requests and active cleanup; never invent launch authorization.
       ScheduleExpression: rate(1 minute)
       State: ENABLED

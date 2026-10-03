@@ -88,6 +88,16 @@ def decision(policy, action, resource, context=None):
 
 
 class GuardrailTests(unittest.TestCase):
+    def test_foundation_lifecycle_resources_are_scoped(self):
+        policy = self.boundaries['FoundationBoundary']
+        generations = TABLE.replace('-state', '-generations')
+        timer = 'arn:aws:events:us-west-2:' + ACCOUNT + ':rule/' + PREFIX + '-cleanup-reconciliation'
+        function = 'arn:aws:lambda:us-west-2:' + ACCOUNT + ':function:' + PREFIX + '-bootstrap'
+        for action, resource in [('dynamodb:CreateTable', generations), ('dynamodb:DescribeTable', generations), ('events:PutRule', timer), ('events:DescribeRule', timer), ('lambda:AddPermission', function)]:
+            self.assertEqual(decision(policy, action, resource), 'allowed')
+            self.assertEqual(decision(policy, action, resource.replace(PREFIX, 'unrelated')), 'implicitDeny')
+        self.assertEqual(decision(policy, 'dynamodb:PutItem', generations), 'implicitDeny')
+
     @classmethod
     def setUpClass(cls):
         cls.template = json.loads((ROOT / "cfn/permission-boundaries.json").read_text())
