@@ -75,6 +75,21 @@ def build_transaction(args: argparse.Namespace, *, now: str, event_id: str) -> l
         "updated_at": av_string(now),
         "updated_by": av_string(args.operator_id),
     }
+    if getattr(args, "propagation_backend", "cloudformation") == "ec2":
+        if not re.fullmatch(r"[0-9]{12}", args.approved_account_id or ""):
+            raise ValueError("EC2 requires --approved-account-id")
+        if not re.fullmatch(r"lt-[0-9a-f]{17}", args.launch_template_id or ""):
+            raise ValueError("EC2 requires --launch-template-id")
+        if not re.fullmatch(r"[1-9][0-9]*", args.launch_template_version or ""):
+            raise ValueError("EC2 requires a positive numeric --launch-template-version")
+        if not SHA256_RE.fullmatch(args.launch_template_sha256 or ""):
+            raise ValueError("EC2 requires --launch-template-sha256")
+        control.update(propagation_backend=av_string("ec2"),
+            concurrency_model=av_string("EC2_DRY_RUN_THEN_RETIRE"),
+            approved_account_id=av_string(args.approved_account_id),
+            launch_template_id=av_string(args.launch_template_id),
+            launch_template_version=av_string(args.launch_template_version),
+            launch_template_sha256=av_string(args.launch_template_sha256.lower()))
     current = {
         "PK": av_string("CURRENT"),
         "SK": av_string("GLOBAL"),
@@ -138,6 +153,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--max-live-generations", type=int, default=defaults["max_live_generations"])
     parser.add_argument("--region", default=defaults["aws_region"])
     parser.add_argument("--profile")
+    parser.add_argument("--propagation-backend", choices=["cloudformation", "ec2"], default="cloudformation")
+    parser.add_argument("--approved-account-id")
+    parser.add_argument("--launch-template-id")
+    parser.add_argument("--launch-template-version")
+    parser.add_argument("--launch-template-sha256")
     parser.add_argument("--apply", action="store_true", help="Execute instead of printing a dry run")
     return parser.parse_args(argv)
 

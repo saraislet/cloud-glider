@@ -167,9 +167,27 @@ Resources:
                 Effect: Allow
                 Action: s3:GetObjectVersion
                 Resource: !Sub 'arn:${AWS::Partition}:s3:::cloud-glider-${Environment}-${AWS::AccountId}-${AWS::Region}-artifacts/generation/*'
+              - Sid: CleanupOnlyRecordedEc2Successors
+                Effect: Allow
+                Action: ec2:TerminateInstances
+                Resource: !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*'
+                Condition:
+                  StringEquals:
+                    ec2:ResourceTag/project: cloud-glider
+                    ec2:ResourceTag/environment: !Ref Environment
+                    ec2:ResourceTag/purpose: generation-compute
+                    ec2:ResourceTag/propagation-backend: ec2
+              - Sid: CleanupOnlyGenerationAlarms
+                Effect: Allow
+                Action: cloudwatch:DeleteAlarms
+                Resource: !Sub 'arn:${AWS::Partition}:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:cloud-glider-${Environment}-gen-*-status-check'
+              - Sid: InspectStatusAlarmIdentity
+                Effect: Allow
+                Action: cloudwatch:DescribeAlarms
+                Resource: '*'
               - Sid: InspectBootstrapCapacityAndImage
                 Effect: Allow
-                Action: [ec2:DescribeInstances, ec2:DescribeImages, ec2:DescribeVolumes, ec2:DescribeAddresses, ec2:DescribeSnapshots]
+                Action: [ec2:DescribeInstances, ec2:DescribeImages, ec2:DescribeLaunchTemplateVersions, ec2:DescribeVolumes, ec2:DescribeAddresses, ec2:DescribeSnapshots]
                 Resource: '*'
               - Sid: WriteBootstrapLogs
                 Effect: Allow
@@ -281,6 +299,9 @@ Resources:
                   'AgentArtifactSha256': 'agent_artifact_sha256',
               }
               result.update({target: control[source]['S'] for target, source in fields.items()})
+              if control.get('propagation_backend') == {'S': 'ec2'}:
+                  result['LaunchTemplateId'] = control['launch_template_id']['S']
+                  result['LaunchTemplateVersion'] = control['launch_template_version']['S']
               result['GenerationTableName'] = env['GENERATION_TABLE']
               result.update(Generation='000000', PredecessorStackId='NONE', HandoffToken='OPERATOR_BOOTSTRAP', RequestId=request_id)
               return result
@@ -338,6 +359,38 @@ Resources:
                   obj = s3.get_object(Bucket=bucket, Key=path, VersionId=version)
                   require(obj.get('VersionId') == version, 'Artifact version mismatch')
                   require(hashlib.sha256(obj['Body'].read()).hexdigest() == digest, 'Artifact digest mismatch')
+
+
+          def verify_ec2_template(ec2, control, params):
+              require(control.get('approved_account_id') == {'S': params['OperationalAlertsTopicArn'].split(':')[4]}, 'Approved account mismatch')
+              template_id = control['launch_template_id']['S']
+              version = control['launch_template_version']['S']
+              require(re.fullmatch('lt-[0-9a-f]{17}', template_id) and re.fullmatch('[1-9][0-9]*', version), 'Invalid launch template pin')
+              require(control.get('concurrency_model') == {'S': 'EC2_DRY_RUN_THEN_RETIRE'}, 'EC2 continuation model mismatch')
+              versions = ec2.describe_launch_template_versions(LaunchTemplateId=template_id, Versions=[version])['LaunchTemplateVersions']
+              require(len(versions) == 1 and versions[0]['LaunchTemplateId'] == template_id
+                      and str(versions[0]['VersionNumber']) == version, 'Launch template identity mismatch')
+              data = versions[0]['LaunchTemplateData']
+              digest = hashlib.sha256(json.dumps(data, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+              require(control.get('launch_template_sha256') == {'S': digest}, 'Launch template digest mismatch')
+              require(data.get('ImageId') == params['ApprovedImageId'] and data.get('InstanceType') == 't4g.micro'
+                  and data.get('IamInstanceProfile') == {'Name': params['AgentInstanceProfileName']}
+                  and data.get('MetadataOptions') == {'HttpEndpoint': 'enabled', 'HttpTokens': 'required',
+                      'HttpPutResponseHopLimit': 1, 'InstanceMetadataTags': 'enabled'}, 'Launch template configuration mismatch')
+              networks = data.get('NetworkInterfaces', [])
+              require(len(networks) == 1 and networks[0].get('SubnetId') == params['SubnetId']
+                  and networks[0].get('Groups') == [params['SecurityGroupId']]
+                  and networks[0].get('AssociatePublicIpAddress') is True
+                  and networks[0].get('DeleteOnTermination') is True, 'Launch template network mismatch')
+              # Static bootstrap pins must agree with the versioned seed and artifact.
+              import base64
+              userdata = base64.b64decode(data['UserData']).decode()
+              raw = json.loads(userdata.split("<<'JSON'", 1)[1].split('JSON', 1)[0])
+              require(raw.get('propagation_backend') == 'ec2' and raw.get('generation_table_name') == params['GenerationTableName'], 'Launch template backend mismatch')
+              for field, param in {'template_sha256': 'TemplateSha256', 'template_s3_version_id': 'TemplateS3VersionId',
+                      'agent_artifact_sha256': 'AgentArtifactSha256', 'agent_artifact_version_id': 'AgentArtifactVersionId',
+                      'bootstrap_version': 'BootstrapVersion', 'template_version': 'TemplateVersion'}.items():
+                  require(raw.get(field) == params[param], 'Launch template artifact mismatch: ' + field)
 
 
           def finish(ddb, table, request_id, stack_id):
@@ -411,6 +464,8 @@ Resources:
                       and image[0]['RootDeviceType'] == 'ebs' and image[0]['RootDeviceName'] == params['RootDeviceName'],
                       'Approved AMI is not ready or root device differs')
               verify_artifacts(s3, control, env)
+              if control.get('propagation_backend') == {'S': 'ec2'}:
+                  verify_ec2_template(ec2, control, params)
               # A durable claim prevents duplicate execution and automatic rebootstrap after deletion.
               ddb.update_item(TableName=table, Key=key('BOOTSTRAP', 'REQUEST'),
                   UpdateExpression='SET #s = :creating',
@@ -500,7 +555,7 @@ Resources:
                   'cleanup_requested': {'BOOL': True}, 'cleanup_status': {'S': 'QUIESCING'},
                   'cleanup_started_at': {'N': str(int(time.time()))}, 'cleanup_error': {'S': ''},
                   'cleanup_target_request_id': {'S': request_id}, 'cleanup_stack_ids': {'L': []},
-                  'cleanup_volume_ids': {'L': []}}, expected=request['cleanup_status']['S'])
+                  'cleanup_volume_ids': {'L': []}, 'cleanup_instance_ids': {'L': []}}, expected=request['cleanup_status']['S'])
 
 
           def cleanup_guard(ddb, table, request_id):
@@ -676,21 +731,64 @@ Resources:
                   ids = {stack['StackId'] for stack in stacks}
                   previous_ids = known_ids
                   volumes = {entry['S'] for entry in request.get('cleanup_volume_ids', {}).get('L', [])}
+                  direct_ids = {entry['S'] for entry in request.get('cleanup_instance_ids', {}).get('L', [])}
+                  resources = {item['instance_id']['S']: item for item in states if item.get('SK', {}).get('S', '').startswith('RESOURCE#') and 'instance_id' in item}
+                  direct_ids.update(resources)
                   for instance in instances:
                       tags = {entry['Key']: entry['Value'] for entry in instance.get('Tags', [])}
-                      require(tags.get('bootstrap-request-id') == request_id
-                              and tags.get('aws:cloudformation:stack-id') in ids | previous_ids, 'Orphan or foreign instance requires inspection')
+                      require(tags.get('bootstrap-request-id') == request_id, 'Foreign cycle requires inspection')
+                      if tags.get('aws:cloudformation:stack-id') not in ids | previous_ids:
+                          record = resources.get(instance['InstanceId'])
+                          require(control.get('propagation_backend') == {'S': 'ec2'} and record is not None
+                              and tags.get('propagation-backend') == 'ec2'
+                              and tags.get('aws:ec2launchtemplate:id') == control['launch_template_id']['S']
+                              and tags.get('aws:ec2launchtemplate:version') == control['launch_template_version']['S']
+                              and record.get('client_token') == {'S': instance.get('ClientToken', '')}
+                              and record.get('launch_template_id') == control['launch_template_id']
+                              and record.get('launch_template_version') == control['launch_template_version'],
+                              'Unrecorded or mismatched EC2 successor requires inspection')
+                          direct_ids.add(instance['InstanceId'])
                       volumes.update(mapping['Ebs']['VolumeId'] for mapping in instance.get('BlockDeviceMappings', []) if 'Ebs' in mapping)
+                  # Validate every recorded direct resource, including already terminated
+                  # predecessors, before mutating any instance or stack.
+                  for instance_id in sorted(direct_ids):
+                      record = resources.get(instance_id)
+                      require(record is not None and re.fullmatch('i-[0-9a-f]{17}', instance_id), 'Missing exact EC2 inventory')
+                      exact = [i for r in ec2.describe_instances(InstanceIds=[instance_id]).get('Reservations', []) for i in r.get('Instances', [])]
+                      require(len(exact) == 1 and exact[0]['InstanceId'] == instance_id, 'Recorded EC2 deletion is ambiguous')
+                      tags = {t['Key']: t['Value'] for t in exact[0].get('Tags', [])}
+                      require(tags.get('bootstrap-request-id') == request_id and tags.get('propagation-backend') == 'ec2'
+                          and tags.get('aws:ec2launchtemplate:id') == control['launch_template_id']['S']
+                          and tags.get('aws:ec2launchtemplate:version') == control['launch_template_version']['S']
+                          and record.get('client_token') == {'S': exact[0].get('ClientToken', '')}, 'Exact EC2 ownership changed')
                   cleanup_update(ddb, table, request_id, {
-                      'cleanup_status': {'S': 'DELETING' if stacks else 'VERIFYING'},
+                      'cleanup_status': {'S': 'DELETING' if stacks or direct_ids else 'VERIFYING'},
+                      'cleanup_instance_ids': {'L': [{'S': value} for value in sorted(direct_ids)]},
                       'cleanup_stack_ids': {'L': [{'S': value} for value in sorted(ids | previous_ids)]},
                       'cleanup_volume_ids': {'L': [{'S': value} for value in sorted(volumes)]}}, expected=request['cleanup_status']['S'])
+                  direct_pending = False
+                  for instance_id in sorted(direct_ids):
+                      cleanup_guard(ddb, table, request_id)
+                      exact = [i for r in ec2.describe_instances(InstanceIds=[instance_id]).get('Reservations', []) for i in r.get('Instances', [])]
+                      require(len(exact) == 1 and exact[0]['InstanceId'] == instance_id, 'Recorded EC2 deletion is ambiguous')
+                      tags = {t['Key']: t['Value'] for t in exact[0].get('Tags', [])}
+                      record = resources.get(instance_id)
+                      require(record is not None and tags.get('bootstrap-request-id') == request_id
+                          and tags.get('propagation-backend') == 'ec2'
+                          and tags.get('aws:ec2launchtemplate:id') == control['launch_template_id']['S']
+                          and tags.get('aws:ec2launchtemplate:version') == control['launch_template_version']['S']
+                          and record.get('client_token') == {'S': exact[0].get('ClientToken', '')}, 'Exact EC2 ownership changed')
+                      if exact[0]['State']['Name'] != 'terminated':
+                          direct_pending = True
+                          if exact[0]['State']['Name'] != 'shutting-down':
+                              cleanup_guard(ddb, table, request_id)
+                              ec2.terminate_instances(InstanceIds=[instance_id])
                   for stack in stacks:
                       if stack['StackStatus'] != 'DELETE_IN_PROGRESS':
                           cleanup_guard(ddb, table, request_id)
                           cfn.delete_stack(StackName=stack['StackId'], RoleARN=env['SERVICE_ROLE_ARN'],
                               ClientRequestToken='cleanup-' + request_id + '-' + hashlib.sha256(stack['StackId'].encode()).hexdigest()[:16])
-                  if stacks:
+                  if stacks or direct_pending:
                       return
                   # Check recorded exact IDs as well as the paginated stack listing.
                   for stack_id in previous_ids:
@@ -700,6 +798,27 @@ Resources:
                           for page in cfn.get_paginator('list_stack_resources').paginate(StackName=stack_id):
                               require(not any(resource.get('ResourceStatus') == 'DELETE_SKIPPED'
                                               for resource in page['StackResourceSummaries']), 'CloudFormation retained generation resources')
+                  if direct_ids:
+                      import boto3
+                      from botocore.config import Config
+                      alarms = boto3.client('cloudwatch', region_name='us-west-2', config=Config(connect_timeout=2, read_timeout=5, retries={'total_max_attempts': 1}))
+                      try:
+                          for instance_id in direct_ids:
+                              record = resources.get(instance_id)
+                              require(record is not None, 'Missing recorded EC2 inventory')
+                              generation = record['PK']['S'].removeprefix('GEN#')
+                              name = 'cloud-glider-' + env['ENVIRONMENT'] + '-gen-' + generation + '-status-check'
+                              result = alarms.describe_alarms(AlarmNames=[name])
+                              require(not result.get('CompositeAlarms'), 'Alarm identity is ambiguous')
+                              metric = result.get('MetricAlarms', [])
+                              require(len(metric) <= 1 and (not metric or (metric[0].get('Namespace') == 'AWS/EC2'
+                                  and metric[0].get('MetricName') == 'StatusCheckFailed'
+                                  and metric[0].get('Dimensions') == [{'Name': 'InstanceId', 'Value': instance_id}])), 'Alarm ownership mismatch')
+                              if metric:
+                                  cleanup_guard(ddb, table, request_id)
+                                  alarms.delete_alarms(AlarmNames=[name])
+                      finally:
+                          alarms.close()
                   verify_residuals(ec2, env, volumes)
                   control, current, hold, request = snapshot(ddb, table)
                   cleanup_guard(ddb, table, request_id)

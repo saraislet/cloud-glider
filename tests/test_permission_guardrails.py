@@ -26,7 +26,7 @@ BUCKET = "arn:aws:s3:::" + PREFIX + "-" + ACCOUNT + "-us-west-2-artifacts"
 STACK = "arn:aws:cloudformation:us-west-2:" + ACCOUNT + ":stack/" + PREFIX + "-gen-000001/uuid"
 URL = "https://" + BUCKET.split(":::")[1] + ".s3.us-west-2.amazonaws.com/generation/generation.yaml?versionId=approved"
 CONFIG = dict(account_id=ACCOUNT, organization_id=ORG, environment="sandbox", boundary_admin_role_arn=ADMIN, recovery_role_arn=RECOVERY, foundation_role_arn=FOUNDATION)
-VALUES = {"AWS::AccountId": ACCOUNT, "AWS::Region": "us-west-2", "AWS::Partition": "aws", "Environment": "sandbox", "ApprovedGenerationTemplateUrl": URL, "AllowedImageId": "ami-approved", "AllowedSubnetId": "subnet-approved", "AllowedSecurityGroupId": "sg-approved"}
+VALUES = {"AWS::AccountId": ACCOUNT, "AWS::Region": "us-west-2", "AWS::Partition": "aws", "Environment": "sandbox", "ApprovedGenerationTemplateUrl": URL, "AllowedImageId": "ami-approved", "AllowedLaunchTemplateId": "lt-approved", "AllowedSubnetId": "subnet-approved", "AllowedSecurityGroupId": "sg-approved"}
 
 
 def array(value):
@@ -35,6 +35,10 @@ def array(value):
 
 def resolve(value, values):
     if isinstance(value, dict):
+        if set(value) == {"Fn::If"}:
+            condition, yes, no = value["Fn::If"]
+            assert condition == "DirectEc2Backend"
+            return resolve(yes if values.get("PropagationBackend") == "ec2" else no, values)
         if set(value) == {"Ref"}:
             return values[value["Ref"]]
         if set(value) == {"Fn::Sub"}:
@@ -125,6 +129,22 @@ class GuardrailTests(unittest.TestCase):
     def scp(self, action, resource, principal=AGENT, **context):
         ctx = {"aws:PrincipalArn": principal, "aws:RequestedRegion": "us-west-2", **context}
         return any(decision(p, action, resource, ctx) == "explicitDeny" for name, p in self.organization.items() if name.startswith("scp-"))
+
+    def test_ec2_backend_requires_pinned_template_and_preserves_passrole_limits(self):
+        policy = resolve(self.template['Resources']['AgentBoundary']['Properties']['PolicyDocument'], {**VALUES, 'PropagationBackend': 'ec2'})
+        lt = 'arn:aws:ec2:us-west-2:' + ACCOUNT + ':launch-template/lt-approved'
+        ctx = {'aws:PrincipalTag/propagation-backend': 'ec2', 'ec2:LaunchTemplate': lt,
+            'ec2:IsLaunchTemplateResource': True}
+        image = 'arn:aws:ec2:us-west-2::image/ami-approved'
+        self.assertEqual(decision(policy, 'ec2:RunInstances', lt, ctx), 'allowed')
+        self.assertEqual(decision(policy, 'ec2:RunInstances', image, ctx), 'allowed')
+        self.assertEqual(decision(policy, 'ec2:RunInstances', image, {**ctx, 'ec2:IsLaunchTemplateResource': False}), 'explicitDeny')
+        self.assertEqual(decision(policy, 'ec2:RunInstances', image, {**ctx, 'ec2:LaunchTemplate': lt + '-other'}), 'explicitDeny')
+        self.assertEqual(decision(policy, 'ec2:RunInstances', image), 'explicitDeny')
+        self.assertEqual(decision(policy, 'iam:PassRole', AGENT, {**ctx, 'iam:PassedToService': 'ec2.amazonaws.com'}), 'allowed')
+        self.assertEqual(decision(policy, 'iam:PassRole', GENERATION, {**ctx, 'iam:PassedToService': 'cloudformation.amazonaws.com'}), 'implicitDeny')
+        self.assertEqual(decision(policy, 'iam:PassRole', AGENT, {**ctx, 'iam:PassedToService': 'lambda.amazonaws.com'}), 'implicitDeny')
+        self.assertEqual(decision(policy, 'sts:AssumeRole', FOUNDATION, ctx), 'implicitDeny')
 
     def test_runtime_templates_require_the_corresponding_boundary(self):
         for filename, roles in [("foundation.yaml", {"AgentRole": "agent", "GenerationServiceRole": "generation", "EmergencyHoldFunctionRole": "hold"}), ("bootstrap.yaml", {"BootstrapRole": "bootstrap"})]:
@@ -308,9 +328,10 @@ class GuardrailTests(unittest.TestCase):
         for name, resource in self.template["Resources"].items():
             if resource["Type"] != "AWS::IAM::ManagedPolicy":
                 continue
-            policy = resolve(resource["Properties"]["PolicyDocument"], largest)
-            with self.subTest(name=name):
-                self.assertLessEqual(len(json.dumps(policy, separators=(",", ":"))), 6144)
+            for backend in ("cloudformation", "ec2"):
+                policy = resolve(resource["Properties"]["PolicyDocument"], {**largest, "PropagationBackend": backend, "AllowedLaunchTemplateId": "lt-" + "a" * 17})
+                with self.subTest(name=name, backend=backend):
+                    self.assertLessEqual(len(json.dumps(policy, separators=(",", ":"))), 6144)
         for text in renderer.render_policies(CONFIG).values():
             self.assertLessEqual(len(text), 5120)
             self.assertNotIn("${", text)

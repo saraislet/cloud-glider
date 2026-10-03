@@ -130,3 +130,5 @@ Local tests do not verify live IAM or delivery.
 
 See [decision 0013](decisions/0013-control-operator-switches.md) for this interface
 and [decision 0012](decisions/0012-shared-chain-lifecycle.md) for cleanup mechanics.
+
+Direct EC2 propagation is available as an explicit offline transition. See [the EC2 runbook](ec2-propagation.md) and decision 0017. Existing CloudFormation cycles retain their current behavior.

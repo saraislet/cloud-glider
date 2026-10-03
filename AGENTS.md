@@ -12,6 +12,8 @@
 
 ### Architecture and lifecycle invariants
 
+- The operator-approved EC2 backend in `docs/decisions/0017-direct-ec2-propagation.md` supersedes the CloudFormation-only rules below for explicitly selected EC2 cycles. CloudFormation retains the control plane, persistent launch template and seed; successor agents use direct EC2 APIs with a pinned numeric launch-template version and digest, cycle-fenced DynamoDB state, and EC2 dry-run continuation. Retirement is serialized for EC2 cycles. Legacy CloudFormation cycles retain the rules below. Never switch a live cycle's backend.
+
 - Manage generation creation and deletion through **CloudFormation**. Prefer declarative changes over direct AWS resource mutations.
 - A generation template creates one EC2 generation. A small Python agent on that generation coordinates propagation.
 - Store propagation control and basic generation state in **DynamoDB**.
@@ -34,6 +36,8 @@
 - Preserve the predecessor whenever health, identity, ownership, control state, or continuation results are missing or ambiguous.
 
 ### IAM and AWS safety
+
+- For EC2 cycles, the agent may launch only through the approved template and terminate only verified Glider generations; it may pass only its existing agent role to EC2. Runtime IAM and template mutation remain prohibited. See decision 0017 for the explicitly approved change to the legacy rules below.
 
 - `CloudGliderAgentRole` may read and update only Cloud Glider DynamoDB records and operate only approved CloudFormation generation stacks.
 - The agent may pass only the designated CloudFormation service role. Restrict `iam:PassRole` to that role and the CloudFormation service.

@@ -171,3 +171,5 @@ template and reject a stale cycle or active cleanup. Provisioning claims a durab
 marker transactionally with lifecycle/HOLD checks. Heartbeats, CURRENT claims,
 leases, and handoffs are fenced by the same cycle. Normal stop keeps instances
 running; only explicit cleanup authorizes generation deletion without handoff.
+
+Direct EC2 propagation is available as an explicit offline transition. See [the EC2 runbook](ec2-propagation.md) and decision 0017. Existing CloudFormation cycles retain their current behavior.

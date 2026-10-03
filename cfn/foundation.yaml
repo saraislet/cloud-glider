@@ -4,6 +4,14 @@ Description: >-
   least-privilege generation roles. Deploy only from an administrative principal.
 
 Parameters:
+  PropagationBackend:
+    Type: String
+    Default: cloudformation
+    AllowedValues: [cloudformation, ec2]
+  AllowedLaunchTemplateId:
+    Type: String
+    Default: lt-00000000000000000
+    AllowedPattern: '^lt-[0-9a-f]{17}$'
   ApprovedGenerationTemplateUrl:
     Type: String
     Default: ''
@@ -50,10 +58,11 @@ Parameters:
 Rules:
   SandboxRegionIsUsWest2:
     Assertions:
-      - Assert: !Equals [!Ref 'AWS::Region', us-west-2]
+      - Assert: !Equals [!Ref AWS::Region, us-west-2]
         AssertDescription: Cloud Glider's initial sandbox is restricted to us-west-2.
 
 Conditions:
+  DirectEc2Backend: !Equals [!Ref PropagationBackend, ec2]
   ReserveEmergencyHoldConcurrency: !Not [!Equals [!Ref EmergencyHoldReservedConcurrency, -1]]
 
 Resources:
@@ -1038,6 +1047,10 @@ Resources:
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
+              - Sid: UseApprovedSeedLaunchTemplate
+                Effect: Allow
+                Action: [ec2:RunInstances, ec2:DescribeLaunchTemplateVersions]
+                Resource: !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:launch-template/${AllowedLaunchTemplateId}'
               - Sid: RunApprovedGenerationInputs
                 Effect: Allow
                 Action: ec2:RunInstances
@@ -1135,61 +1148,245 @@ Resources:
       Policies:
         - PolicyName: control-coordination-and-generation-stacks
           PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
+            Fn::If:
+            - DirectEc2Backend
+            - Version: '2012-10-17'
+              Statement:
+              - Effect: Allow
+                Action: dynamodb:GetItem
+                Resource: !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-state'
+              - Effect: Allow
+                Action:
+                - dynamodb:ConditionCheckItem
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+                Resource: !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-state'
+                Condition:
+                  ForAllValues:StringLike:
+                    dynamodb:LeadingKeys:
+                    - CURRENT
+                    - LOCK
+                    - AUDIT#PROPAGATION
+              - Effect: Allow
+                Action: dynamodb:ConditionCheckItem
+                Resource: !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-state'
+                Condition:
+                  ForAllValues:StringEquals:
+                    dynamodb:LeadingKeys:
+                    - HOLD
+                    - CONTROL
+                    - BOOTSTRAP
+              - Effect: Allow
+                Action: dynamodb:DeleteItem
+                Resource: !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-state'
+                Condition:
+                  ForAllValues:StringEquals:
+                    dynamodb:LeadingKeys:
+                    - LOCK
+              - Effect: Allow
+                Action:
+                - s3:GetObjectVersion
+                - s3:GetObjectVersionAttributes
+                Resource: !Sub 'arn:${AWS::Partition}:s3:::cloud-glider-${Environment}-${AWS::AccountId}-${AWS::Region}-artifacts/generation/*'
+              - Effect: Allow
+                Action:
+                - s3:GetBucketLocation
+                - s3:GetBucketVersioning
+                Resource: !Sub 'arn:${AWS::Partition}:s3:::cloud-glider-${Environment}-${AWS::AccountId}-${AWS::Region}-artifacts'
+              - Effect: Allow
+                Action: s3:ListBucket
+                Resource: !Sub 'arn:${AWS::Partition}:s3:::cloud-glider-${Environment}-${AWS::AccountId}-${AWS::Region}-artifacts'
+                Condition:
+                  StringLike:
+                    s3:prefix: generation/*
+              - Effect: Allow
+                Action:
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+                Resource:
+                - !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/cloud-glider/${Environment}/operations/agent:log-stream:*'
+                - !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/cloud-glider/${Environment}/audit/propagation:log-stream:*'
+              - Effect: Allow
+                Action: cloudwatch:PutMetricData
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    cloudwatch:namespace: CloudGlider
+              - Effect: Allow
+                Action:
+                - ec2:DescribeAccountAttributes
+                - ec2:DescribeInstances
+                - ec2:DescribeInstanceStatus
+                - ec2:DescribeInstanceTypeOfferings
+                - servicequotas:GetServiceQuota
+                - servicequotas:ListServiceQuotas
+                - ec2:DescribeLaunchTemplateVersions
+                - ec2:DescribeImages
+                - ec2:DescribeSubnets
+                - ec2:DescribeInstanceTypes
+                Resource: '*'
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: !Sub 'arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:cloud-glider-${Environment}-emergency-hold'
+              - Effect: Allow
+                Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+                - dynamodb:ConditionCheckItem
+                Resource: !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-generations'
+                Condition:
+                  ForAllValues:StringLike:
+                    dynamodb:LeadingKeys:
+                    - GEN#*
+              - Effect: Allow
+                Action: ec2:RunInstances
+                Resource: !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:launch-template/${AllowedLaunchTemplateId}'
+              - Effect: Allow
+                Action: ec2:RunInstances
+                Resource:
+                - !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}::image/${AllowedImageId}'
+                - !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:subnet/${AllowedSubnetId}'
+                - !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:security-group/${AllowedSecurityGroupId}'
+                Condition:
+                  ArnEquals:
+                    ec2:LaunchTemplate: !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:launch-template/${AllowedLaunchTemplateId}'
+              - Effect: Allow
+                Action: ec2:RunInstances
+                Resource: !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*'
+                Condition:
+                  ArnEquals:
+                    ec2:LaunchTemplate: !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:launch-template/${AllowedLaunchTemplateId}'
+                  StringEquals:
+                    ec2:InstanceType: t4g.micro
+                    ec2:MetadataHttpTokens: required
+                    ec2:InstanceProfile: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:instance-profile/cloud-glider-${Environment}-agent'
+                    aws:RequestTag/project: cloud-glider
+                    aws:RequestTag/environment: !Ref Environment
+                    aws:RequestTag/purpose: generation-compute
+              - Effect: Allow
+                Action: ec2:RunInstances
+                Resource:
+                - !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:volume/*'
+                - !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:network-interface/*'
+                Condition:
+                  ArnEquals:
+                    ec2:LaunchTemplate: !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:launch-template/${AllowedLaunchTemplateId}'
+              - Effect: Allow
+                Action: ec2:CreateTags
+                Resource:
+                - !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*'
+                - !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:volume/*'
+                - !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:network-interface/*'
+                Condition:
+                  StringEquals:
+                    ec2:CreateAction: RunInstances
+                    aws:RequestTag/project: cloud-glider
+                    aws:RequestTag/environment: !Ref Environment
+              - Effect: Allow
+                Action: ec2:TerminateInstances
+                Resource: !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*'
+                Condition:
+                  StringEquals:
+                    ec2:ResourceTag/project: cloud-glider
+                    ec2:ResourceTag/environment: !Ref Environment
+                    ec2:ResourceTag/purpose: generation-compute
+              - Effect: Allow
+                Action: iam:PassRole
+                Resource: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider-${Environment}-agent'
+                Condition:
+                  StringEquals:
+                    iam:PassedToService: ec2.amazonaws.com
+              - Effect: Allow
+                Action:
+                - cloudwatch:PutMetricAlarm
+                - cloudwatch:DeleteAlarms
+                Resource: !Sub 'arn:${AWS::Partition}:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:cloud-glider-${Environment}-gen-*-status-check'
+              - Effect: Allow
+                Action: cloudwatch:DescribeAlarms
+                Resource: '*'
+              - Effect: Deny
+                Action:
+                - ec2:CreateLaunchTemplate
+                - ec2:CreateLaunchTemplateVersion
+                - ec2:ModifyLaunchTemplate
+                - ec2:DeleteLaunchTemplate
+                - ec2:DeleteLaunchTemplateVersions
+                Resource: '*'
+              - Effect: Deny
+                Action: ec2:RunInstances
+                NotResource: !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:launch-template/*'
+                Condition:
+                  ArnNotEqualsIfExists:
+                    ec2:LaunchTemplate: !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:launch-template/${AllowedLaunchTemplateId}'
+              - Effect: Deny
+                Action: ec2:RunInstances
+                Resource:
+                - !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}::image/*'
+                - !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:subnet/*'
+                - !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:security-group/*'
+                Condition:
+                  BoolIfExists:
+                    ec2:IsLaunchTemplateResource: false
+            - Version: '2012-10-17'
+              Statement:
               - Sid: ReadControlAndState
                 Effect: Allow
                 Action:
-                  - dynamodb:BatchGetItem
-                  - dynamodb:GetItem
-                  - dynamodb:Query
-                Resource: !GetAtt StateTable.Arn
+                - dynamodb:BatchGetItem
+                - dynamodb:GetItem
+                - dynamodb:Query
+                Resource: !GetAtt 'StateTable.Arn'
               - Sid: ConditionallyWriteCoordinationState
                 Effect: Allow
                 Action:
-                  - dynamodb:ConditionCheckItem
-                  - dynamodb:PutItem
-                  - dynamodb:UpdateItem
-                Resource: !GetAtt StateTable.Arn
+                - dynamodb:ConditionCheckItem
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+                Resource: !GetAtt 'StateTable.Arn'
                 Condition:
                   ForAllValues:StringLike:
                     dynamodb:LeadingKeys:
-                      - CURRENT
-                      - LOCK
-                      - 'AUDIT#PROPAGATION'
+                    - CURRENT
+                    - LOCK
+                    - AUDIT#PROPAGATION
               - Sid: ReadAndWriteGenerationState
                 Effect: Allow
-                Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:UpdateItem]
-                Resource: !GetAtt GenerationTable.Arn
+                Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+                Resource: !GetAtt 'GenerationTable.Arn'
                 Condition:
                   ForAllValues:StringLike:
-                    dynamodb:LeadingKeys: ['GEN#*']
+                    dynamodb:LeadingKeys:
+                    - GEN#*
               - Sid: AssertNoEmergencyHoldAtHandoff
                 Effect: Allow
                 Action: dynamodb:ConditionCheckItem
-                Resource: !GetAtt StateTable.Arn
+                Resource: !GetAtt 'StateTable.Arn'
                 Condition:
                   ForAllValues:StringEquals:
                     dynamodb:LeadingKeys:
-                      - HOLD
-                      - CONTROL
-                      - BOOTSTRAP
+                    - HOLD
+                    - CONTROL
+                    - BOOTSTRAP
               - Sid: ReleaseOnlyPropagationLease
                 Effect: Allow
                 Action: dynamodb:DeleteItem
-                Resource: !GetAtt StateTable.Arn
+                Resource: !GetAtt 'StateTable.Arn'
                 Condition:
                   ForAllValues:StringEquals:
                     dynamodb:LeadingKeys:
-                      - LOCK
+                    - LOCK
               - Sid: CreateGenerationStacksWithApprovedRole
                 Effect: Allow
                 Action:
-                  - cloudformation:CreateChangeSet
-                  - cloudformation:CreateStack
+                - cloudformation:CreateChangeSet
+                - cloudformation:CreateStack
                 Resource:
-                  - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/cloud-glider-${Environment}-gen-*/*'
-                  - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:changeSet/cloud-glider-${Environment}-gen-*/*'
+                - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/cloud-glider-${Environment}-gen-*/*'
+                - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:changeSet/cloud-glider-${Environment}-gen-*/*'
                 Condition:
                   StringEquals:
                     cloudformation:RoleARN: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider-${Environment}-generation-cfn'
@@ -1204,24 +1401,24 @@ Resources:
               - Sid: ExecuteOrDiscardApprovedGenerationChangeSets
                 Effect: Allow
                 Action:
-                  - cloudformation:DeleteChangeSet
-                  - cloudformation:ExecuteChangeSet
+                - cloudformation:DeleteChangeSet
+                - cloudformation:ExecuteChangeSet
                 Resource:
-                  - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/cloud-glider-${Environment}-gen-*/*'
-                  - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:changeSet/cloud-glider-${Environment}-gen-*/*'
+                - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/cloud-glider-${Environment}-gen-*/*'
+                - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:changeSet/cloud-glider-${Environment}-gen-*/*'
               - Sid: InspectGenerationStacks
                 Effect: Allow
                 Action:
-                  - cloudformation:DescribeChangeSet
-                  - cloudformation:DescribeStackEvents
-                  - cloudformation:DescribeStackResource
-                  - cloudformation:DescribeStackResources
-                  - cloudformation:DescribeStacks
-                  - cloudformation:GetTemplate
-                  - cloudformation:ListStackResources
+                - cloudformation:DescribeChangeSet
+                - cloudformation:DescribeStackEvents
+                - cloudformation:DescribeStackResource
+                - cloudformation:DescribeStackResources
+                - cloudformation:DescribeStacks
+                - cloudformation:GetTemplate
+                - cloudformation:ListStackResources
                 Resource:
-                  - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/cloud-glider-${Environment}-gen-*/*'
-                  - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:changeSet/cloud-glider-${Environment}-gen-*/*'
+                - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/cloud-glider-${Environment}-gen-*/*'
+                - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:changeSet/cloud-glider-${Environment}-gen-*/*'
               - Sid: PassOnlyGenerationServiceRole
                 Effect: Allow
                 Action: iam:PassRole
@@ -1232,30 +1429,30 @@ Resources:
               - Sid: ReadVersionedApprovedArtifacts
                 Effect: Allow
                 Action:
-                  - s3:GetObjectVersion
-                  - s3:GetObjectVersionAttributes
+                - s3:GetObjectVersion
+                - s3:GetObjectVersionAttributes
                 Resource: !Sub '${ArtifactBucket.Arn}/generation/*'
               - Sid: InspectArtifactBucket
                 Effect: Allow
                 Action:
-                  - s3:GetBucketLocation
-                  - s3:GetBucketVersioning
-                Resource: !GetAtt ArtifactBucket.Arn
+                - s3:GetBucketLocation
+                - s3:GetBucketVersioning
+                Resource: !GetAtt 'ArtifactBucket.Arn'
               - Sid: ListGenerationArtifacts
                 Effect: Allow
                 Action: s3:ListBucket
-                Resource: !GetAtt ArtifactBucket.Arn
+                Resource: !GetAtt 'ArtifactBucket.Arn'
                 Condition:
                   StringLike:
-                    s3:prefix: 'generation/*'
+                    s3:prefix: generation/*
               - Sid: WriteAgentAndPropagationLogs
                 Effect: Allow
                 Action:
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
+                - logs:CreateLogStream
+                - logs:PutLogEvents
                 Resource:
-                  - !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/cloud-glider/${Environment}/operations/agent:log-stream:*'
-                  - !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/cloud-glider/${Environment}/audit/propagation:log-stream:*'
+                - !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/cloud-glider/${Environment}/operations/agent:log-stream:*'
+                - !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/cloud-glider/${Environment}/audit/propagation:log-stream:*'
               - Sid: PublishCloudGliderMetrics
                 Effect: Allow
                 Action: cloudwatch:PutMetricData
@@ -1266,75 +1463,75 @@ Resources:
               - Sid: InspectCapacityAndReadiness
                 Effect: Allow
                 Action:
-                  - ec2:DescribeAccountAttributes
-                  - ec2:DescribeInstances
-                  - ec2:DescribeInstanceStatus
-                  - ec2:DescribeInstanceTypeOfferings
-                  - servicequotas:GetServiceQuota
-                  - servicequotas:ListServiceQuotas
+                - ec2:DescribeAccountAttributes
+                - ec2:DescribeInstances
+                - ec2:DescribeInstanceStatus
+                - ec2:DescribeInstanceTypeOfferings
+                - servicequotas:GetServiceQuota
+                - servicequotas:ListServiceQuotas
                 Resource: '*'
               - Sid: CreateButNeverClearEmergencyHold
                 Effect: Allow
                 Action: lambda:InvokeFunction
-                Resource: !GetAtt EmergencyHoldFunction.Arn
+                Resource: !GetAtt 'EmergencyHoldFunction.Arn'
               - Sid: DenyDirectComputeMutation
                 Effect: Deny
                 Action:
-                  - ec2:RunInstances
-                  - ec2:TerminateInstances
+                - ec2:RunInstances
+                - ec2:TerminateInstances
                 Resource: '*'
               - Sid: DenyDirectNetworkMutation
                 Effect: Deny
                 Action:
-                  - ec2:AllocateAddress
-                  - ec2:AssociateAddress
-                  - ec2:CreateNetworkInterface
-                  - ec2:DeleteNetworkInterface
-                  - ec2:DisassociateAddress
-                  - ec2:ModifyNetworkInterfaceAttribute
-                  - ec2:ReleaseAddress
+                - ec2:AllocateAddress
+                - ec2:AssociateAddress
+                - ec2:CreateNetworkInterface
+                - ec2:DeleteNetworkInterface
+                - ec2:DisassociateAddress
+                - ec2:ModifyNetworkInterfaceAttribute
+                - ec2:ReleaseAddress
                 Resource: '*'
               - Sid: DenyIamMutation
                 Effect: Deny
                 Action:
-                  - iam:AddRoleToInstanceProfile
-                  - iam:AttachGroupPolicy
-                  - iam:AttachRolePolicy
-                  - iam:AttachUserPolicy
-                  - iam:CreateGroup
-                  - iam:CreateInstanceProfile
-                  - iam:CreatePolicy
-                  - iam:CreatePolicyVersion
-                  - iam:CreateRole
-                  - iam:CreateUser
-                  - iam:DeleteGroup
-                  - iam:DeleteGroupPolicy
-                  - iam:DeleteInstanceProfile
-                  - iam:DeletePolicy
-                  - iam:DeletePolicyVersion
-                  - iam:DeleteRole
-                  - iam:DeleteRolePermissionsBoundary
-                  - iam:DeleteRolePolicy
-                  - iam:DeleteUser
-                  - iam:DeleteUserPermissionsBoundary
-                  - iam:DeleteUserPolicy
-                  - iam:DetachGroupPolicy
-                  - iam:DetachRolePolicy
-                  - iam:DetachUserPolicy
-                  - iam:PutGroupPolicy
-                  - iam:PutRolePermissionsBoundary
-                  - iam:PutRolePolicy
-                  - iam:PutUserPermissionsBoundary
-                  - iam:PutUserPolicy
-                  - iam:RemoveRoleFromInstanceProfile
-                  - iam:SetDefaultPolicyVersion
-                  - iam:TagPolicy
-                  - iam:TagRole
-                  - iam:UntagPolicy
-                  - iam:UntagRole
-                  - iam:UpdateAssumeRolePolicy
-                  - iam:UpdateRole
-                  - iam:UpdateRoleDescription
+                - iam:AddRoleToInstanceProfile
+                - iam:AttachGroupPolicy
+                - iam:AttachRolePolicy
+                - iam:AttachUserPolicy
+                - iam:CreateGroup
+                - iam:CreateInstanceProfile
+                - iam:CreatePolicy
+                - iam:CreatePolicyVersion
+                - iam:CreateRole
+                - iam:CreateUser
+                - iam:DeleteGroup
+                - iam:DeleteGroupPolicy
+                - iam:DeleteInstanceProfile
+                - iam:DeletePolicy
+                - iam:DeletePolicyVersion
+                - iam:DeleteRole
+                - iam:DeleteRolePermissionsBoundary
+                - iam:DeleteRolePolicy
+                - iam:DeleteUser
+                - iam:DeleteUserPermissionsBoundary
+                - iam:DeleteUserPolicy
+                - iam:DetachGroupPolicy
+                - iam:DetachRolePolicy
+                - iam:DetachUserPolicy
+                - iam:PutGroupPolicy
+                - iam:PutRolePermissionsBoundary
+                - iam:PutRolePolicy
+                - iam:PutUserPermissionsBoundary
+                - iam:PutUserPolicy
+                - iam:RemoveRoleFromInstanceProfile
+                - iam:SetDefaultPolicyVersion
+                - iam:TagPolicy
+                - iam:TagRole
+                - iam:UntagPolicy
+                - iam:UntagRole
+                - iam:UpdateAssumeRolePolicy
+                - iam:UpdateRole
+                - iam:UpdateRoleDescription
                 Resource: '*'
               - Sid: DenyFoundationDeletion
                 Effect: Deny
@@ -1349,6 +1546,8 @@ Resources:
           Value: !Ref Owner
         - Key: purpose
           Value: generation-orchestration
+        - Key: propagation-backend
+          Value: !Ref PropagationBackend
 
   AgentInstanceProfile:
     Type: AWS::IAM::InstanceProfile

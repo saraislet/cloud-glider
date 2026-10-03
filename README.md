@@ -177,3 +177,5 @@ the safety contract pass in the sandbox account.
 
 See `docs/propagation-agent.md` for the state machine, record shapes, failure
 classification, and first-trial procedure.
+
+Direct EC2 propagation is available as an explicit offline transition. See [the EC2 runbook](docs/ec2-propagation.md) and decision 0017. Existing CloudFormation cycles retain their current behavior.

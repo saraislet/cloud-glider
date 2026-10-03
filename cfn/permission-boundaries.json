@@ -25,6 +25,19 @@
     "AllowedSecurityGroupId": {
       "Type": "AWS::EC2::SecurityGroup::Id",
       "Description": "Existing no-inbound security group used by generation instances."
+    },
+    "AllowedLaunchTemplateId": {
+      "Type": "String",
+      "Default": "lt-00000000000000000",
+      "AllowedPattern": "^lt-[0-9a-f]{17}$"
+    },
+    "PropagationBackend": {
+      "Type": "String",
+      "Default": "cloudformation",
+      "AllowedValues": [
+        "cloudformation",
+        "ec2"
+      ]
     }
   },
   "Rules": {
@@ -55,295 +68,647 @@
         },
         "Description": "Security-administered Cloud Glider agent permissions ceiling; grants no access.",
         "PolicyDocument": {
-          "Version": "2012-10-17",
-          "Statement": [
+          "Fn::If": [
+            "DirectEc2Backend",
             {
-              "Effect": "Allow",
-              "Action": "dynamodb:GetItem",
-              "Resource": {
-                "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-state"
-              }
-            },
-            {
-              "Effect": "Allow",
-              "Action": [
-                "dynamodb:ConditionCheckItem",
-                "dynamodb:PutItem",
-                "dynamodb:UpdateItem"
-              ],
-              "Resource": {
-                "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-state"
-              },
-              "Condition": {
-                "ForAllValues:StringLike": {
-                  "dynamodb:LeadingKeys": [
-                    "CURRENT",
-                    "LOCK",
-                    "AUDIT#PROPAGATION"
-                  ]
-                }
-              }
-            },
-            {
-              "Effect": "Allow",
-              "Action": "dynamodb:ConditionCheckItem",
-              "Resource": {
-                "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-state"
-              },
-              "Condition": {
-                "ForAllValues:StringEquals": {
-                  "dynamodb:LeadingKeys": [
-                    "HOLD",
-                    "CONTROL",
-                    "BOOTSTRAP"
-                  ]
-                }
-              }
-            },
-            {
-              "Effect": "Allow",
-              "Action": "dynamodb:DeleteItem",
-              "Resource": {
-                "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-state"
-              },
-              "Condition": {
-                "ForAllValues:StringEquals": {
-                  "dynamodb:LeadingKeys": [
-                    "LOCK"
-                  ]
-                }
-              }
-            },
-            {
-              "Effect": "Allow",
-              "Action": [
-                "cloudformation:CreateChangeSet",
-                "cloudformation:CreateStack"
-              ],
-              "Resource": [
+              "Version": "2012-10-17",
+              "Statement": [
                 {
-                  "Fn::Sub": "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/cloud-glider-${Environment}-gen-*/*"
+                  "Effect": "Allow",
+                  "Action": "dynamodb:GetItem",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-state"
+                  }
                 },
                 {
-                  "Fn::Sub": "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:changeSet/cloud-glider-${Environment}-gen-*/*"
+                  "Effect": "Allow",
+                  "Action": [
+                    "dynamodb:ConditionCheckItem",
+                    "dynamodb:PutItem",
+                    "dynamodb:UpdateItem"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-state"
+                  },
+                  "Condition": {
+                    "ForAllValues:StringLike": {
+                      "dynamodb:LeadingKeys": [
+                        "CURRENT",
+                        "LOCK",
+                        "AUDIT#PROPAGATION"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "dynamodb:ConditionCheckItem",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-state"
+                  },
+                  "Condition": {
+                    "ForAllValues:StringEquals": {
+                      "dynamodb:LeadingKeys": [
+                        "HOLD",
+                        "CONTROL",
+                        "BOOTSTRAP"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "dynamodb:DeleteItem",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-state"
+                  },
+                  "Condition": {
+                    "ForAllValues:StringEquals": {
+                      "dynamodb:LeadingKeys": [
+                        "LOCK"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetObjectVersion",
+                    "s3:GetObjectVersionAttributes"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::cloud-glider-${Environment}-${AWS::AccountId}-${AWS::Region}-artifacts/generation/*"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetBucketLocation",
+                    "s3:GetBucketVersioning"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::cloud-glider-${Environment}-${AWS::AccountId}-${AWS::Region}-artifacts"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "s3:ListBucket",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::cloud-glider-${Environment}-${AWS::AccountId}-${AWS::Region}-artifacts"
+                  },
+                  "Condition": {
+                    "StringLike": {
+                      "s3:prefix": "generation/*"
+                    }
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/cloud-glider/${Environment}/operations/agent:log-stream:*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/cloud-glider/${Environment}/audit/propagation:log-stream:*"
+                    }
+                  ]
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "cloudwatch:PutMetricData",
+                  "Resource": "*",
+                  "Condition": {
+                    "StringEquals": {
+                      "cloudwatch:namespace": "CloudGlider"
+                    }
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "ec2:DescribeAccountAttributes",
+                    "ec2:DescribeInstances",
+                    "ec2:DescribeInstanceStatus",
+                    "ec2:DescribeInstanceTypeOfferings",
+                    "servicequotas:GetServiceQuota",
+                    "servicequotas:ListServiceQuotas",
+                    "ec2:DescribeLaunchTemplateVersions",
+                    "ec2:DescribeImages",
+                    "ec2:DescribeSubnets",
+                    "ec2:DescribeInstanceTypes"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "lambda:InvokeFunction",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:cloud-glider-${Environment}-emergency-hold"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "dynamodb:GetItem",
+                    "dynamodb:PutItem",
+                    "dynamodb:UpdateItem",
+                    "dynamodb:ConditionCheckItem"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-generations"
+                  },
+                  "Condition": {
+                    "ForAllValues:StringLike": {
+                      "dynamodb:LeadingKeys": [
+                        "GEN#*"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "ec2:RunInstances",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:launch-template/${AllowedLaunchTemplateId}"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "ec2:RunInstances",
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}::image/${AllowedImageId}"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:subnet/${AllowedSubnetId}"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:security-group/${AllowedSecurityGroupId}"
+                    }
+                  ],
+                  "Condition": {
+                    "ArnEquals": {
+                      "ec2:LaunchTemplate": {
+                        "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:launch-template/${AllowedLaunchTemplateId}"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "ec2:RunInstances",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*"
+                  },
+                  "Condition": {
+                    "ArnEquals": {
+                      "ec2:LaunchTemplate": {
+                        "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:launch-template/${AllowedLaunchTemplateId}"
+                      }
+                    },
+                    "StringEquals": {
+                      "ec2:InstanceType": "t4g.micro",
+                      "ec2:MetadataHttpTokens": "required",
+                      "ec2:InstanceProfile": {
+                        "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:instance-profile/cloud-glider-${Environment}-agent"
+                      },
+                      "aws:RequestTag/project": "cloud-glider",
+                      "aws:RequestTag/environment": {
+                        "Ref": "Environment"
+                      },
+                      "aws:RequestTag/purpose": "generation-compute"
+                    }
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "ec2:RunInstances",
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:volume/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:network-interface/*"
+                    }
+                  ],
+                  "Condition": {
+                    "ArnEquals": {
+                      "ec2:LaunchTemplate": {
+                        "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:launch-template/${AllowedLaunchTemplateId}"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "ec2:CreateTags",
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:volume/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:network-interface/*"
+                    }
+                  ],
+                  "Condition": {
+                    "StringEquals": {
+                      "ec2:CreateAction": "RunInstances",
+                      "aws:RequestTag/project": "cloud-glider",
+                      "aws:RequestTag/environment": {
+                        "Ref": "Environment"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "ec2:TerminateInstances",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*"
+                  },
+                  "Condition": {
+                    "StringEquals": {
+                      "ec2:ResourceTag/project": "cloud-glider",
+                      "ec2:ResourceTag/environment": {
+                        "Ref": "Environment"
+                      },
+                      "ec2:ResourceTag/purpose": "generation-compute"
+                    }
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "iam:PassRole",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider-${Environment}-agent"
+                  },
+                  "Condition": {
+                    "StringEquals": {
+                      "iam:PassedToService": "ec2.amazonaws.com"
+                    }
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "cloudwatch:PutMetricAlarm",
+                    "cloudwatch:DeleteAlarms"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:cloud-glider-${Environment}-gen-*-status-check"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "cloudwatch:DescribeAlarms",
+                  "Resource": "*"
+                },
+                {
+                  "Effect": "Deny",
+                  "Action": [
+                    "ec2:CreateLaunchTemplate",
+                    "ec2:CreateLaunchTemplateVersion",
+                    "ec2:ModifyLaunchTemplate",
+                    "ec2:DeleteLaunchTemplate",
+                    "ec2:DeleteLaunchTemplateVersions"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Effect": "Deny",
+                  "Action": "ec2:RunInstances",
+                  "NotResource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:launch-template/*"
+                  },
+                  "Condition": {
+                    "ArnNotEqualsIfExists": {
+                      "ec2:LaunchTemplate": {
+                        "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:launch-template/${AllowedLaunchTemplateId}"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Effect": "Deny",
+                  "Action": "ec2:RunInstances",
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}::image/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:subnet/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:security-group/*"
+                    }
+                  ],
+                  "Condition": {
+                    "BoolIfExists": {
+                      "ec2:IsLaunchTemplateResource": false
+                    }
+                  }
                 }
-              ],
-              "Condition": {
-                "StringEquals": {
-                  "cloudformation:RoleARN": {
+              ]
+            },
+            {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": "dynamodb:GetItem",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-state"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "dynamodb:ConditionCheckItem",
+                    "dynamodb:PutItem",
+                    "dynamodb:UpdateItem"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-state"
+                  },
+                  "Condition": {
+                    "ForAllValues:StringLike": {
+                      "dynamodb:LeadingKeys": [
+                        "CURRENT",
+                        "LOCK",
+                        "AUDIT#PROPAGATION"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "dynamodb:ConditionCheckItem",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-state"
+                  },
+                  "Condition": {
+                    "ForAllValues:StringEquals": {
+                      "dynamodb:LeadingKeys": [
+                        "HOLD",
+                        "CONTROL",
+                        "BOOTSTRAP"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "dynamodb:DeleteItem",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-state"
+                  },
+                  "Condition": {
+                    "ForAllValues:StringEquals": {
+                      "dynamodb:LeadingKeys": [
+                        "LOCK"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "cloudformation:CreateChangeSet",
+                    "cloudformation:CreateStack"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/cloud-glider-${Environment}-gen-*/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:changeSet/cloud-glider-${Environment}-gen-*/*"
+                    }
+                  ],
+                  "Condition": {
+                    "StringEquals": {
+                      "cloudformation:RoleARN": {
+                        "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider-${Environment}-generation-cfn"
+                      },
+                      "cloudformation:TemplateUrl": {
+                        "Ref": "ApprovedGenerationTemplateUrl"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "cloudformation:DeleteStack",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/cloud-glider-${Environment}-gen-*/*"
+                  },
+                  "Condition": {
+                    "StringEquals": {
+                      "cloudformation:RoleARN": {
+                        "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider-${Environment}-generation-cfn"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "cloudformation:DeleteChangeSet",
+                    "cloudformation:ExecuteChangeSet"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/cloud-glider-${Environment}-gen-*/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:changeSet/cloud-glider-${Environment}-gen-*/*"
+                    }
+                  ]
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "cloudformation:DescribeChangeSet",
+                    "cloudformation:DescribeStackEvents",
+                    "cloudformation:DescribeStackResource",
+                    "cloudformation:DescribeStackResources",
+                    "cloudformation:DescribeStacks",
+                    "cloudformation:GetTemplate",
+                    "cloudformation:ListStackResources"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/cloud-glider-${Environment}-gen-*/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:changeSet/cloud-glider-${Environment}-gen-*/*"
+                    }
+                  ]
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "iam:PassRole",
+                  "Resource": {
                     "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider-${Environment}-generation-cfn"
                   },
-                  "cloudformation:TemplateUrl": {
-                    "Ref": "ApprovedGenerationTemplateUrl"
+                  "Condition": {
+                    "StringEquals": {
+                      "iam:PassedToService": "cloudformation.amazonaws.com"
+                    }
                   }
-                }
-              }
-            },
-            {
-              "Effect": "Allow",
-              "Action": "cloudformation:DeleteStack",
-              "Resource": {
-                "Fn::Sub": "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/cloud-glider-${Environment}-gen-*/*"
-              },
-              "Condition": {
-                "StringEquals": {
-                  "cloudformation:RoleARN": {
-                    "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider-${Environment}-generation-cfn"
-                  }
-                }
-              }
-            },
-            {
-              "Effect": "Allow",
-              "Action": [
-                "cloudformation:DeleteChangeSet",
-                "cloudformation:ExecuteChangeSet"
-              ],
-              "Resource": [
-                {
-                  "Fn::Sub": "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/cloud-glider-${Environment}-gen-*/*"
                 },
                 {
-                  "Fn::Sub": "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:changeSet/cloud-glider-${Environment}-gen-*/*"
-                }
-              ]
-            },
-            {
-              "Effect": "Allow",
-              "Action": [
-                "cloudformation:DescribeChangeSet",
-                "cloudformation:DescribeStackEvents",
-                "cloudformation:DescribeStackResource",
-                "cloudformation:DescribeStackResources",
-                "cloudformation:DescribeStacks",
-                "cloudformation:GetTemplate",
-                "cloudformation:ListStackResources"
-              ],
-              "Resource": [
-                {
-                  "Fn::Sub": "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/cloud-glider-${Environment}-gen-*/*"
-                },
-                {
-                  "Fn::Sub": "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:changeSet/cloud-glider-${Environment}-gen-*/*"
-                }
-              ]
-            },
-            {
-              "Effect": "Allow",
-              "Action": "iam:PassRole",
-              "Resource": {
-                "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider-${Environment}-generation-cfn"
-              },
-              "Condition": {
-                "StringEquals": {
-                  "iam:PassedToService": "cloudformation.amazonaws.com"
-                }
-              }
-            },
-            {
-              "Effect": "Allow",
-              "Action": [
-                "s3:GetObjectVersion",
-                "s3:GetObjectVersionAttributes"
-              ],
-              "Resource": {
-                "Fn::Sub": "arn:${AWS::Partition}:s3:::cloud-glider-${Environment}-${AWS::AccountId}-${AWS::Region}-artifacts/generation/*"
-              }
-            },
-            {
-              "Effect": "Allow",
-              "Action": [
-                "s3:GetBucketLocation",
-                "s3:GetBucketVersioning"
-              ],
-              "Resource": {
-                "Fn::Sub": "arn:${AWS::Partition}:s3:::cloud-glider-${Environment}-${AWS::AccountId}-${AWS::Region}-artifacts"
-              }
-            },
-            {
-              "Effect": "Allow",
-              "Action": "s3:ListBucket",
-              "Resource": {
-                "Fn::Sub": "arn:${AWS::Partition}:s3:::cloud-glider-${Environment}-${AWS::AccountId}-${AWS::Region}-artifacts"
-              },
-              "Condition": {
-                "StringLike": {
-                  "s3:prefix": "generation/*"
-                }
-              }
-            },
-            {
-              "Effect": "Allow",
-              "Action": [
-                "logs:CreateLogStream",
-                "logs:PutLogEvents"
-              ],
-              "Resource": [
-                {
-                  "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/cloud-glider/${Environment}/operations/agent:log-stream:*"
-                },
-                {
-                  "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/cloud-glider/${Environment}/audit/propagation:log-stream:*"
-                }
-              ]
-            },
-            {
-              "Effect": "Allow",
-              "Action": "cloudwatch:PutMetricData",
-              "Resource": "*",
-              "Condition": {
-                "StringEquals": {
-                  "cloudwatch:namespace": "CloudGlider"
-                }
-              }
-            },
-            {
-              "Effect": "Allow",
-              "Action": [
-                "ec2:DescribeAccountAttributes",
-                "ec2:DescribeInstances",
-                "ec2:DescribeInstanceStatus",
-                "ec2:DescribeInstanceTypeOfferings",
-                "servicequotas:GetServiceQuota",
-                "servicequotas:ListServiceQuotas"
-              ],
-              "Resource": "*"
-            },
-            {
-              "Effect": "Allow",
-              "Action": "lambda:InvokeFunction",
-              "Resource": {
-                "Fn::Sub": "arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:cloud-glider-${Environment}-emergency-hold"
-              }
-            },
-            {
-              "Sid": "DenyUnapprovedTemplate",
-              "Effect": "Deny",
-              "Action": [
-                "cloudformation:CreateStack",
-                "cloudformation:CreateChangeSet"
-              ],
-              "Resource": "*",
-              "Condition": {
-                "StringNotEqualsIfExists": {
-                  "cloudformation:TemplateUrl": {
-                    "Ref": "ApprovedGenerationTemplateUrl"
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetObjectVersion",
+                    "s3:GetObjectVersionAttributes"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::cloud-glider-${Environment}-${AWS::AccountId}-${AWS::Region}-artifacts/generation/*"
                   }
-                }
-              }
-            },
-            {
-              "Sid": "DenyOperatorRecordMutation",
-              "Effect": "Deny",
-              "Action": [
-                "dynamodb:PutItem",
-                "dynamodb:UpdateItem",
-                "dynamodb:DeleteItem",
-                "dynamodb:BatchWriteItem",
-                "dynamodb:PartiQLInsert",
-                "dynamodb:PartiQLUpdate",
-                "dynamodb:PartiQLDelete"
-              ],
-              "Resource": {
-                "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-state"
-              },
-              "Condition": {
-                "ForAnyValue:StringEquals": {
-                  "dynamodb:LeadingKeys": [
-                    "CONTROL",
-                    "HOLD",
-                    "BOOTSTRAP"
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetBucketLocation",
+                    "s3:GetBucketVersioning"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::cloud-glider-${Environment}-${AWS::AccountId}-${AWS::Region}-artifacts"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "s3:ListBucket",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::cloud-glider-${Environment}-${AWS::AccountId}-${AWS::Region}-artifacts"
+                  },
+                  "Condition": {
+                    "StringLike": {
+                      "s3:prefix": "generation/*"
+                    }
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/cloud-glider/${Environment}/operations/agent:log-stream:*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/cloud-glider/${Environment}/audit/propagation:log-stream:*"
+                    }
                   ]
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "cloudwatch:PutMetricData",
+                  "Resource": "*",
+                  "Condition": {
+                    "StringEquals": {
+                      "cloudwatch:namespace": "CloudGlider"
+                    }
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "ec2:DescribeAccountAttributes",
+                    "ec2:DescribeInstances",
+                    "ec2:DescribeInstanceStatus",
+                    "ec2:DescribeInstanceTypeOfferings",
+                    "servicequotas:GetServiceQuota",
+                    "servicequotas:ListServiceQuotas"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "lambda:InvokeFunction",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:cloud-glider-${Environment}-emergency-hold"
+                  }
+                },
+                {
+                  "Sid": "DenyUnapprovedTemplate",
+                  "Effect": "Deny",
+                  "Action": [
+                    "cloudformation:CreateStack",
+                    "cloudformation:CreateChangeSet"
+                  ],
+                  "Resource": "*",
+                  "Condition": {
+                    "StringNotEqualsIfExists": {
+                      "cloudformation:TemplateUrl": {
+                        "Ref": "ApprovedGenerationTemplateUrl"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Sid": "DenyOperatorRecordMutation",
+                  "Effect": "Deny",
+                  "Action": [
+                    "dynamodb:PutItem",
+                    "dynamodb:UpdateItem",
+                    "dynamodb:DeleteItem",
+                    "dynamodb:BatchWriteItem",
+                    "dynamodb:PartiQLInsert",
+                    "dynamodb:PartiQLUpdate",
+                    "dynamodb:PartiQLDelete"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-state"
+                  },
+                  "Condition": {
+                    "ForAnyValue:StringEquals": {
+                      "dynamodb:LeadingKeys": [
+                        "CONTROL",
+                        "HOLD",
+                        "BOOTSTRAP"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "Sid": "DenyDirectCompute",
+                  "Effect": "Deny",
+                  "Action": [
+                    "ec2:RunInstances",
+                    "ec2:TerminateInstances",
+                    "sts:AssumeRole*"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "dynamodb:GetItem",
+                    "dynamodb:PutItem",
+                    "dynamodb:UpdateItem"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-generations"
+                  },
+                  "Condition": {
+                    "ForAllValues:StringLike": {
+                      "dynamodb:LeadingKeys": [
+                        "GEN#*"
+                      ]
+                    }
+                  }
                 }
-              }
-            },
-            {
-              "Sid": "DenyDirectCompute",
-              "Effect": "Deny",
-              "Action": [
-                "ec2:RunInstances",
-                "ec2:TerminateInstances",
-                "sts:AssumeRole*"
-              ],
-              "Resource": "*"
-            },
-            {
-              "Effect": "Allow",
-              "Action": [
-                "dynamodb:GetItem",
-                "dynamodb:PutItem",
-                "dynamodb:UpdateItem"
-              ],
-              "Resource": {
-                "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-generations"
-              },
-              "Condition": {
-                "ForAllValues:StringLike": {
-                  "dynamodb:LeadingKeys": [
-                    "GEN#*"
-                  ]
-                }
-              }
+              ]
             }
           ]
         }
@@ -482,6 +847,17 @@
                   "iam:PassedToService": "ec2.amazonaws.com"
                 }
               }
+            },
+            {
+              "Sid": "UseApprovedSeedLaunchTemplate",
+              "Effect": "Allow",
+              "Action": [
+                "ec2:RunInstances",
+                "ec2:DescribeLaunchTemplateVersions"
+              ],
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:launch-template/${AllowedLaunchTemplateId}"
+              }
             }
           ]
         }
@@ -594,291 +970,590 @@
         },
         "Description": "Security-administered Cloud Glider bootstrap permissions ceiling; grants no access.",
         "PolicyDocument": {
-          "Version": "2012-10-17",
-          "Statement": [
+          "Fn::If": [
+            "DirectEc2Backend",
             {
-              "Effect": "Allow",
-              "Action": [
-                "dynamodb:DescribeStream",
-                "dynamodb:GetRecords",
-                "dynamodb:GetShardIterator",
-                "dynamodb:ListStreams"
-              ],
-              "Resource": {
-                "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-state/stream/*"
-              }
-            },
-            {
-              "Effect": "Allow",
-              "Action": "dynamodb:GetItem",
-              "Resource": {
-                "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-state"
-              },
-              "Condition": {
-                "ForAllValues:StringEquals": {
-                  "dynamodb:LeadingKeys": [
-                    "CONTROL",
-                    "CURRENT",
-                    "HOLD",
-                    "BOOTSTRAP",
-                    "LOCK"
-                  ]
-                }
-              }
-            },
-            {
-              "Effect": "Allow",
-              "Action": "dynamodb:UpdateItem",
-              "Resource": {
-                "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-state"
-              },
-              "Condition": {
-                "ForAllValues:StringEquals": {
-                  "dynamodb:LeadingKeys": [
-                    "BOOTSTRAP"
-                  ]
-                }
-              }
-            },
-            {
-              "Effect": "Allow",
-              "Action": "cloudformation:DescribeStacks",
-              "Resource": {
-                "Fn::Sub": "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/cloud-glider-${Environment}-gen-000000/*"
-              }
-            },
-            {
-              "Effect": "Allow",
-              "Action": "cloudformation:CreateStack",
-              "Resource": {
-                "Fn::Sub": "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/cloud-glider-${Environment}-gen-000000/*"
-              },
-              "Condition": {
-                "StringEquals": {
-                  "cloudformation:TemplateUrl": {
-                    "Ref": "ApprovedGenerationTemplateUrl"
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "dynamodb:DescribeStream",
+                    "dynamodb:GetRecords",
+                    "dynamodb:GetShardIterator",
+                    "dynamodb:ListStreams"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-state/stream/*"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "dynamodb:GetItem",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-state"
                   },
-                  "cloudformation:RoleARN": {
-                    "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider-${Environment}-generation-cfn"
+                  "Condition": {
+                    "ForAllValues:StringEquals": {
+                      "dynamodb:LeadingKeys": [
+                        "CONTROL",
+                        "CURRENT",
+                        "HOLD",
+                        "BOOTSTRAP",
+                        "LOCK"
+                      ]
+                    }
                   }
-                }
-              }
-            },
-            {
-              "Effect": "Allow",
-              "Action": "iam:PassRole",
-              "Resource": {
-                "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider-${Environment}-generation-cfn"
-              },
-              "Condition": {
-                "StringEquals": {
-                  "iam:PassedToService": "cloudformation.amazonaws.com"
-                }
-              }
-            },
-            {
-              "Effect": "Allow",
-              "Action": "s3:GetObjectVersion",
-              "Resource": {
-                "Fn::Sub": "arn:${AWS::Partition}:s3:::cloud-glider-${Environment}-${AWS::AccountId}-${AWS::Region}-artifacts/generation/*"
-              }
-            },
-            {
-              "Effect": "Allow",
-              "Action": [
-                "ec2:DescribeInstances",
-                "ec2:DescribeImages",
-                "ec2:DescribeVolumes",
-                "ec2:DescribeAddresses",
-                "ec2:DescribeSnapshots"
-              ],
-              "Resource": "*"
-            },
-            {
-              "Effect": "Allow",
-              "Action": [
-                "logs:CreateLogStream",
-                "logs:PutLogEvents"
-              ],
-              "Resource": {
-                "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/cloud-glider-${Environment}-bootstrap:*"
-              }
-            },
-            {
-              "Effect": "Allow",
-              "Action": "sns:Publish",
-              "Resource": {
-                "Fn::Sub": "arn:${AWS::Partition}:sns:${AWS::Region}:${AWS::AccountId}:cloud-glider-${Environment}-operational-alerts"
-              }
-            },
-            {
-              "Sid": "DenyUnapprovedTemplate",
-              "Effect": "Deny",
-              "Action": [
-                "cloudformation:CreateStack",
-                "cloudformation:CreateChangeSet"
-              ],
-              "Resource": "*",
-              "Condition": {
-                "StringNotEqualsIfExists": {
-                  "cloudformation:TemplateUrl": {
-                    "Ref": "ApprovedGenerationTemplateUrl"
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "dynamodb:UpdateItem",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-state"
+                  },
+                  "Condition": {
+                    "ForAllValues:StringEquals": {
+                      "dynamodb:LeadingKeys": [
+                        "BOOTSTRAP"
+                      ]
+                    }
                   }
-                }
-              }
-            },
-            {
-              "Sid": "UpdateOperatorRequestsAndFeedback",
-              "Effect": "Allow",
-              "Action": "dynamodb:UpdateItem",
-              "Resource": {
-                "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-state"
-              },
-              "Condition": {
-                "ForAllValues:StringEquals": {
-                  "dynamodb:LeadingKeys": [
-                    "CONTROL"
-                  ]
-                }
-              }
-            },
-            {
-              "Sid": "CleanupStateRead",
-              "Effect": "Allow",
-              "Action": "dynamodb:Scan",
-              "Resource": {
-                "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-generations"
-              }
-            },
-            {
-              "Sid": "LifecycleConditions",
-              "Effect": "Allow",
-              "Action": "dynamodb:ConditionCheckItem",
-              "Resource": {
-                "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-state"
-              },
-              "Condition": {
-                "ForAllValues:StringEquals": {
-                  "dynamodb:LeadingKeys": [
-                    "CONTROL",
-                    "CURRENT",
-                    "HOLD",
-                    "BOOTSTRAP",
-                    "LOCK"
-                  ]
-                }
-              }
-            },
-            {
-              "Sid": "ResetOnlyLifecycleState",
-              "Effect": "Allow",
-              "Action": "dynamodb:PutItem",
-              "Resource": {
-                "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-state"
-              },
-              "Condition": {
-                "ForAllValues:StringLike": {
-                  "dynamodb:LeadingKeys": [
-                    "BOOTSTRAP",
-                    "CURRENT",
-                    "LOCK"
-                  ]
-                }
-              }
-            },
-            {
-              "Sid": "DeleteOnlyObsoleteGenerationStateAndLocks",
-              "Effect": "Allow",
-              "Action": "dynamodb:DeleteItem",
-              "Resource": {
-                "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-state"
-              },
-              "Condition": {
-                "ForAllValues:StringLike": {
-                  "dynamodb:LeadingKeys": [
-                    "LOCK"
-                  ]
-                }
-              }
-            },
-            {
-              "Sid": "ListGenerationInventory",
-              "Effect": "Allow",
-              "Action": "cloudformation:ListStacks",
-              "Resource": "*"
-            },
-            {
-              "Sid": "DeleteOnlyGenerationStacks",
-              "Effect": "Allow",
-              "Action": "cloudformation:DeleteStack",
-              "Resource": {
-                "Fn::Sub": "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/cloud-glider-${Environment}-gen-*/*"
-              },
-              "Condition": {
-                "StringEquals": {
-                  "cloudformation:RoleARN": {
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "cloudformation:DescribeStacks",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/cloud-glider-${Environment}-gen-000000/*"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "cloudformation:CreateStack",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/cloud-glider-${Environment}-gen-000000/*"
+                  },
+                  "Condition": {
+                    "StringEquals": {
+                      "cloudformation:TemplateUrl": {
+                        "Ref": "ApprovedGenerationTemplateUrl"
+                      },
+                      "cloudformation:RoleARN": {
+                        "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider-${Environment}-generation-cfn"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "iam:PassRole",
+                  "Resource": {
                     "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider-${Environment}-generation-cfn"
                   },
-                  "aws:ResourceTag/project": "cloud-glider",
-                  "aws:ResourceTag/environment": {
-                    "Ref": "Environment"
+                  "Condition": {
+                    "StringEquals": {
+                      "iam:PassedToService": "cloudformation.amazonaws.com"
+                    }
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "s3:GetObjectVersion",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::cloud-glider-${Environment}-${AWS::AccountId}-${AWS::Region}-artifacts/generation/*"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "ec2:DescribeInstances",
+                    "ec2:DescribeImages",
+                    "ec2:DescribeVolumes",
+                    "ec2:DescribeAddresses",
+                    "ec2:DescribeSnapshots",
+                    "ec2:DescribeLaunchTemplateVersions"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/cloud-glider-${Environment}-bootstrap:*"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "sns:Publish",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:sns:${AWS::Region}:${AWS::AccountId}:cloud-glider-${Environment}-operational-alerts"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "dynamodb:UpdateItem",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-state"
                   },
-                  "aws:ResourceTag/purpose": "generation-stack"
+                  "Condition": {
+                    "ForAllValues:StringEquals": {
+                      "dynamodb:LeadingKeys": [
+                        "CONTROL"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "dynamodb:Scan",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-generations"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "dynamodb:ConditionCheckItem",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-state"
+                  },
+                  "Condition": {
+                    "ForAllValues:StringEquals": {
+                      "dynamodb:LeadingKeys": [
+                        "CONTROL",
+                        "CURRENT",
+                        "HOLD",
+                        "BOOTSTRAP",
+                        "LOCK"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "dynamodb:PutItem",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-state"
+                  },
+                  "Condition": {
+                    "ForAllValues:StringLike": {
+                      "dynamodb:LeadingKeys": [
+                        "BOOTSTRAP",
+                        "CURRENT",
+                        "LOCK"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "dynamodb:DeleteItem",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-state"
+                  },
+                  "Condition": {
+                    "ForAllValues:StringLike": {
+                      "dynamodb:LeadingKeys": [
+                        "LOCK"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "cloudformation:ListStacks",
+                  "Resource": "*"
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "cloudformation:DeleteStack",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/cloud-glider-${Environment}-gen-*/*"
+                  },
+                  "Condition": {
+                    "StringEquals": {
+                      "cloudformation:RoleARN": {
+                        "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider-${Environment}-generation-cfn"
+                      },
+                      "aws:ResourceTag/project": "cloud-glider",
+                      "aws:ResourceTag/environment": {
+                        "Ref": "Environment"
+                      },
+                      "aws:ResourceTag/purpose": "generation-stack"
+                    }
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "cloudformation:DescribeStacks",
+                    "cloudformation:ListStackResources"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/cloud-glider-${Environment}-gen-*/*"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "dynamodb:GetItem",
+                    "dynamodb:PutItem",
+                    "dynamodb:DeleteItem"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-generations"
+                  },
+                  "Condition": {
+                    "ForAllValues:StringLike": {
+                      "dynamodb:LeadingKeys": [
+                        "GEN#*"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "scheduler:CreateSchedule",
+                    "scheduler:GetSchedule",
+                    "scheduler:DeleteSchedule"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:scheduler:${AWS::Region}:${AWS::AccountId}:schedule/cloud-glider-${Environment}-cleanup/cleanup-*"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "iam:PassRole",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider-${Environment}-cleanup-retry"
+                  },
+                  "Condition": {
+                    "StringEquals": {
+                      "iam:PassedToService": "scheduler.amazonaws.com"
+                    }
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "ec2:TerminateInstances",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*"
+                  },
+                  "Condition": {
+                    "StringEquals": {
+                      "ec2:ResourceTag/project": "cloud-glider",
+                      "ec2:ResourceTag/environment": {
+                        "Ref": "Environment"
+                      },
+                      "ec2:ResourceTag/purpose": "generation-compute",
+                      "ec2:ResourceTag/propagation-backend": "ec2"
+                    }
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "cloudwatch:DeleteAlarms",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:cloud-glider-${Environment}-gen-*-status-check"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "cloudwatch:DescribeAlarms",
+                  "Resource": "*"
                 }
-              }
+              ]
             },
             {
-              "Sid": "InspectGenerationStacks",
-              "Effect": "Allow",
-              "Action": [
-                "cloudformation:DescribeStacks",
-                "cloudformation:ListStackResources"
-              ],
-              "Resource": {
-                "Fn::Sub": "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/cloud-glider-${Environment}-gen-*/*"
-              }
-            },
-            {
-              "Sid": "ManageGenerationState",
-              "Effect": "Allow",
-              "Action": [
-                "dynamodb:GetItem",
-                "dynamodb:PutItem",
-                "dynamodb:DeleteItem"
-              ],
-              "Resource": {
-                "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-generations"
-              },
-              "Condition": {
-                "ForAllValues:StringLike": {
-                  "dynamodb:LeadingKeys": [
-                    "GEN#*"
-                  ]
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "dynamodb:DescribeStream",
+                    "dynamodb:GetRecords",
+                    "dynamodb:GetShardIterator",
+                    "dynamodb:ListStreams"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-state/stream/*"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "dynamodb:GetItem",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-state"
+                  },
+                  "Condition": {
+                    "ForAllValues:StringEquals": {
+                      "dynamodb:LeadingKeys": [
+                        "CONTROL",
+                        "CURRENT",
+                        "HOLD",
+                        "BOOTSTRAP",
+                        "LOCK"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "dynamodb:UpdateItem",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-state"
+                  },
+                  "Condition": {
+                    "ForAllValues:StringEquals": {
+                      "dynamodb:LeadingKeys": [
+                        "BOOTSTRAP"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "cloudformation:DescribeStacks",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/cloud-glider-${Environment}-gen-000000/*"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "cloudformation:CreateStack",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/cloud-glider-${Environment}-gen-000000/*"
+                  },
+                  "Condition": {
+                    "StringEquals": {
+                      "cloudformation:TemplateUrl": {
+                        "Ref": "ApprovedGenerationTemplateUrl"
+                      },
+                      "cloudformation:RoleARN": {
+                        "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider-${Environment}-generation-cfn"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "iam:PassRole",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider-${Environment}-generation-cfn"
+                  },
+                  "Condition": {
+                    "StringEquals": {
+                      "iam:PassedToService": "cloudformation.amazonaws.com"
+                    }
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "s3:GetObjectVersion",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::cloud-glider-${Environment}-${AWS::AccountId}-${AWS::Region}-artifacts/generation/*"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "ec2:DescribeInstances",
+                    "ec2:DescribeImages",
+                    "ec2:DescribeVolumes",
+                    "ec2:DescribeAddresses",
+                    "ec2:DescribeSnapshots"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/cloud-glider-${Environment}-bootstrap:*"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "sns:Publish",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:sns:${AWS::Region}:${AWS::AccountId}:cloud-glider-${Environment}-operational-alerts"
+                  }
+                },
+                {
+                  "Sid": "DenyUnapprovedTemplate",
+                  "Effect": "Deny",
+                  "Action": [
+                    "cloudformation:CreateStack",
+                    "cloudformation:CreateChangeSet"
+                  ],
+                  "Resource": "*",
+                  "Condition": {
+                    "StringNotEqualsIfExists": {
+                      "cloudformation:TemplateUrl": {
+                        "Ref": "ApprovedGenerationTemplateUrl"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Sid": "UpdateOperatorRequestsAndFeedback",
+                  "Effect": "Allow",
+                  "Action": "dynamodb:UpdateItem",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-state"
+                  },
+                  "Condition": {
+                    "ForAllValues:StringEquals": {
+                      "dynamodb:LeadingKeys": [
+                        "CONTROL"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "Sid": "CleanupStateRead",
+                  "Effect": "Allow",
+                  "Action": "dynamodb:Scan",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-generations"
+                  }
+                },
+                {
+                  "Sid": "LifecycleConditions",
+                  "Effect": "Allow",
+                  "Action": "dynamodb:ConditionCheckItem",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-state"
+                  },
+                  "Condition": {
+                    "ForAllValues:StringEquals": {
+                      "dynamodb:LeadingKeys": [
+                        "CONTROL",
+                        "CURRENT",
+                        "HOLD",
+                        "BOOTSTRAP",
+                        "LOCK"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "Sid": "ResetOnlyLifecycleState",
+                  "Effect": "Allow",
+                  "Action": "dynamodb:PutItem",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-state"
+                  },
+                  "Condition": {
+                    "ForAllValues:StringLike": {
+                      "dynamodb:LeadingKeys": [
+                        "BOOTSTRAP",
+                        "CURRENT",
+                        "LOCK"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "Sid": "DeleteOnlyObsoleteGenerationStateAndLocks",
+                  "Effect": "Allow",
+                  "Action": "dynamodb:DeleteItem",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-state"
+                  },
+                  "Condition": {
+                    "ForAllValues:StringLike": {
+                      "dynamodb:LeadingKeys": [
+                        "LOCK"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "Sid": "ListGenerationInventory",
+                  "Effect": "Allow",
+                  "Action": "cloudformation:ListStacks",
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DeleteOnlyGenerationStacks",
+                  "Effect": "Allow",
+                  "Action": "cloudformation:DeleteStack",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/cloud-glider-${Environment}-gen-*/*"
+                  },
+                  "Condition": {
+                    "StringEquals": {
+                      "cloudformation:RoleARN": {
+                        "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider-${Environment}-generation-cfn"
+                      },
+                      "aws:ResourceTag/project": "cloud-glider",
+                      "aws:ResourceTag/environment": {
+                        "Ref": "Environment"
+                      },
+                      "aws:ResourceTag/purpose": "generation-stack"
+                    }
+                  }
+                },
+                {
+                  "Sid": "InspectGenerationStacks",
+                  "Effect": "Allow",
+                  "Action": [
+                    "cloudformation:DescribeStacks",
+                    "cloudformation:ListStackResources"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/cloud-glider-${Environment}-gen-*/*"
+                  }
+                },
+                {
+                  "Sid": "ManageGenerationState",
+                  "Effect": "Allow",
+                  "Action": [
+                    "dynamodb:GetItem",
+                    "dynamodb:PutItem",
+                    "dynamodb:DeleteItem"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-generations"
+                  },
+                  "Condition": {
+                    "ForAllValues:StringLike": {
+                      "dynamodb:LeadingKeys": [
+                        "GEN#*"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "scheduler:CreateSchedule",
+                    "scheduler:GetSchedule",
+                    "scheduler:DeleteSchedule"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:scheduler:${AWS::Region}:${AWS::AccountId}:schedule/cloud-glider-${Environment}-cleanup/cleanup-*"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "iam:PassRole",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider-${Environment}-cleanup-retry"
+                  },
+                  "Condition": {
+                    "StringEquals": {
+                      "iam:PassedToService": "scheduler.amazonaws.com"
+                    }
+                  }
                 }
-              }
-            },
-            {
-              "Effect": "Allow",
-              "Action": [
-                "scheduler:CreateSchedule",
-                "scheduler:GetSchedule",
-                "scheduler:DeleteSchedule"
-              ],
-              "Resource": {
-                "Fn::Sub": "arn:${AWS::Partition}:scheduler:${AWS::Region}:${AWS::AccountId}:schedule/cloud-glider-${Environment}-cleanup/cleanup-*"
-              }
-            },
-            {
-              "Effect": "Allow",
-              "Action": "iam:PassRole",
-              "Resource": {
-                "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider-${Environment}-cleanup-retry"
-              },
-              "Condition": {
-                "StringEquals": {
-                  "iam:PassedToService": "scheduler.amazonaws.com"
-                }
-              }
+              ]
             }
           ]
         }
@@ -1355,6 +2030,16 @@
       "Value": {
         "Ref": "CleanupRetryBoundary"
       }
+    }
+  },
+  "Conditions": {
+    "DirectEc2Backend": {
+      "Fn::Equals": [
+        {
+          "Ref": "PropagationBackend"
+        },
+        "ec2"
+      ]
     }
   }
 }
