@@ -40,16 +40,22 @@
     "i-00d11cfef1a190c0b",
     "i-0dc1a60cfb5f2308e"
   ],
-  "deployment_status": "BLOCKED_BY_SECURITY_ADMIN_PERMISSIONS",
+  "deployment_status": "DEPLOYED_PAUSED",
   "propagation_enabled": false,
   "bootstrap_requested": false,
-  "missing_permissions": [
-    "iam:CreatePolicyVersion",
-    "iam:DeletePolicyVersion"
-  ],
-  "boundary_change_set": "current-minimal-ami-release",
-  "runtime_change_sets_prepared": true,
+  "boundary_change_set": "browser-current-minimal-ami",
+  "runtime_change_sets_prepared": false,
   "observed_propagation_test": false,
-  "boundary_stack_status": "UPDATE_ROLLBACK_COMPLETE",
-  "effective_boundary_policies_unchanged": true
+  "boundary_stack_status": "UPDATE_COMPLETE",
+  "effective_boundary_policies_unchanged": false,
+  "stack_statuses": {
+    "cloud-glider-sandbox-boundaries": "UPDATE_COMPLETE",
+    "cloud-glider-sandbox": "UPDATE_COMPLETE",
+    "cloud-glider-sandbox-bootstrap": "UPDATE_COMPLETE"
+  },
+  "request_id": "1",
+  "control_sha256": "e2b6a9089f28e6e0c6e2016f6ac0f41da449161516e3dc40459d5d9a7cf04be0",
+  "deployed_at": "2026-10-03T07:14:41.711633+00:00",
+  "deployed_by": "arn:aws:iam::482268323955:root",
+  "pull_request_url": "https://github.com/saraislet/cloud-glider/pull/7"
 }

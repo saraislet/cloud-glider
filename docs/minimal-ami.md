@@ -55,22 +55,25 @@ CloudFormation, with no attached volumes remaining. All 212 tests passed.
 A live propagation/handoff run has not been performed with this image.
 
 The exact archive, generation template and bootstrap template were uploaded,
-version-pinned, downloaded and verified. Change sets were prepared for the
-boundary, foundation and bootstrap stacks. Boundary execution was denied:
-GliderManager lacks `iam:CreatePolicyVersion` and `iam:DeletePolicyVersion`.
-The effective policies were verified to exactly match the previous rendered
-CloudFormation documents. Rollback was continued with only those unchanged
-failed policy resources skipped. No runtime-stack update or control-record
-release transaction was applied. Propagation and bootstrap remain disabled.
+version-pinned, downloaded and verified. The initial CLI deployment was denied
+because GliderManager lacks policy-version administration; its failed boundary
+update was rolled back with the effective policies unchanged. The operator then
+authorized deployment through the signed-in AWS browser session.
 
-An approved security administrator must complete the boundary release. Inspect
-stack status and effective policy documents first, then create a fresh boundary
-change set using the receipt's exact AMI and versioned generation URL. The only
-policy changes are substitution of that image ARN and exact template URL; keep
-all actions, principals and resource patterns unchanged. After UPDATE_COMPLETE,
-review and execute the prepared foundation/bootstrap changes, then conditionally
-update the approved CONTROL tuple and READY request fingerprint while all
-provisioning remains idle. Do not enable propagation as part of release recovery.
+The boundary, foundation and bootstrap stacks all reached UPDATE_COMPLETE.
+The reviewed IAM changes substitute only the exact image ARN and immutable
+generation template URL, preserving actions, principals and resource patterns.
+Browser verification confirmed the deployed Lambda configuration uses the new
+image, baked delivery, 2 GiB root and separate generation table.
+
+A conditional DynamoDB transaction updated the approved artifact tuple and READY
+request fingerprint, retained the previous control/request in the release audit,
+and preserved request ID 1, CURRENT=UNINITIALIZED, max_generation=2 and
+max_live_generations=3. It required exact prior records, absent hold/leases and
+idle provisioning. Independent verification confirmed the fingerprint matches
+`scripts/request_bootstrap.py`. Propagation and bootstrap remain disabled, and
+no generation was launched. Use the approved start operation only when ready to
+observe a bounded handoff test.
 
 ## Legacy release actually deployed on October 2, 2026
 
