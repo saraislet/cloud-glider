@@ -14,7 +14,8 @@ through generation `2`.
 ## Project goals
 
 - Safely replace EC2 generations without retiring generation `N` until
-  generation `N+1` is healthy and `N+2` has passed its continuation preflight.
+  the real generation `N+1` passes approved identity, health, fresh control,
+  and conditional ownership checks.
 - Keep propagation operator-controlled through durable DynamoDB state and an
   emergency hold mechanism.
 - Make lifecycle operations idempotent, observable, and safe to retry after
@@ -178,4 +179,8 @@ the safety contract pass in the sandbox account.
 See `docs/propagation-agent.md` for the state machine, record shapes, failure
 classification, and first-trial procedure.
 
-Direct EC2 propagation is available as an explicit offline transition. See [the EC2 runbook](docs/ec2-propagation.md) and decision 0017. Existing CloudFormation cycles retain their current behavior.
+Minimal AMI propagation supports baked startup and 2 GiB roots. See the
+[release reconciliation](docs/minimal-ami.md) for current-contract compatibility
+and the separate historical deployed release.
+
+Direct EC2 propagation is available as an explicit offline transition. See [the EC2 runbook](docs/ec2-propagation.md) and decision 0019. Existing CloudFormation cycles retain their current behavior.

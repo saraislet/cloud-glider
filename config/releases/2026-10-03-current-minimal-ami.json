@@ -1,0 +1,61 @@
+{
+  "image_id": "ami-081b2ebbf3d760365",
+  "snapshot_id": "snap-0ad13fad7806f969d",
+  "source_commit": "932096b584a275940b296e91fe49ebb58d692375",
+  "smoke": {
+    "result": "CLOUD_GLIDER_AMI_SMOKE_PASS",
+    "free_bytes": 632647680,
+    "agent_sha256": "8eca700706dc2cd719f3a5414d746f6e455e9d583d4f3e2e0a771b2cff19b43c",
+    "python": "3.12.3"
+  },
+  "artifacts": {
+    "agent": {
+      "bucket": "cloud-glider-sandbox-482268323955-us-west-2-artifacts",
+      "key": "generation/minimal-ami-8eca700706dc2cd719f3a5414d746f6e455e9d583d4f3e2e0a771b2cff19b43c-agent.tar.gz",
+      "version_id": "iGcsyBq_uqz7od8pBWa2PtcYzYmdTxsn",
+      "sha256": "8eca700706dc2cd719f3a5414d746f6e455e9d583d4f3e2e0a771b2cff19b43c"
+    },
+    "generation": {
+      "bucket": "cloud-glider-sandbox-482268323955-us-west-2-artifacts",
+      "key": "generation/minimal-ami-2a8c5a89591624638b1a9fa6209d205ee3a4f5ed6bd2b7855e7a37f6da20848f-generation.yaml",
+      "version_id": "kfqREHW7xqwCaBIAyr9DOFBA.s3Pdd_t",
+      "sha256": "2a8c5a89591624638b1a9fa6209d205ee3a4f5ed6bd2b7855e7a37f6da20848f"
+    },
+    "bootstrap": {
+      "bucket": "cloud-glider-sandbox-482268323955-us-west-2-artifacts",
+      "key": "bootstrap/minimal-ami-a59ef357ada53d9745ce993fa0a44c4316ee7c2382a8c3278a3b97d875368594.yaml",
+      "version_id": "FMAzCiAseVc_JVmwewOAy0pT2ay32NVA",
+      "sha256": "a59ef357ada53d9745ce993fa0a44c4316ee7c2382a8c3278a3b97d875368594"
+    }
+  },
+  "template_url": "https://cloud-glider-sandbox-482268323955-us-west-2-artifacts.s3.us-west-2.amazonaws.com/generation/minimal-ami-2a8c5a89591624638b1a9fa6209d205ee3a4f5ed6bd2b7855e7a37f6da20848f-generation.yaml?versionId=kfqREHW7xqwCaBIAyr9DOFBA.s3Pdd_t",
+  "region": "us-west-2",
+  "account_id": "482268323955",
+  "repository": "saraislet/cloud-glider",
+  "root_volume_gib": 2,
+  "agent_delivery_mode": "baked",
+  "metadata_checks_passed": true,
+  "tests_passed": 212,
+  "smoke_instances_terminated": [
+    "i-00d11cfef1a190c0b",
+    "i-0dc1a60cfb5f2308e"
+  ],
+  "deployment_status": "DEPLOYED_PAUSED",
+  "propagation_enabled": false,
+  "bootstrap_requested": false,
+  "boundary_change_set": "browser-current-minimal-ami",
+  "runtime_change_sets_prepared": false,
+  "observed_propagation_test": false,
+  "boundary_stack_status": "UPDATE_COMPLETE",
+  "effective_boundary_policies_unchanged": false,
+  "stack_statuses": {
+    "cloud-glider-sandbox-boundaries": "UPDATE_COMPLETE",
+    "cloud-glider-sandbox": "UPDATE_COMPLETE",
+    "cloud-glider-sandbox-bootstrap": "UPDATE_COMPLETE"
+  },
+  "request_id": "1",
+  "control_sha256": "e2b6a9089f28e6e0c6e2016f6ac0f41da449161516e3dc40459d5d9a7cf04be0",
+  "deployed_at": "2026-10-03T07:14:41.711633+00:00",
+  "deployed_by": "arn:aws:iam::482268323955:root",
+  "pull_request_url": "https://github.com/saraislet/cloud-glider/pull/7"
+}

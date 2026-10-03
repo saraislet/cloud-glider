@@ -1,0 +1,17 @@
+--- a/builder/ebssurrogate/step_register_ami.go
++++ b/builder/ebssurrogate/step_register_ami.go
+@@ -90,6 +90,14 @@
+ 	if s.TpmSupport != "" {
+ 		registerOpts.TpmSupport = ec2types.TpmSupportValues(s.TpmSupport)
+ 	}
++	// Send final image tags atomically so RegisterImage request-tag policies apply.
++	tags, err := awscommon.TagMap(config.AMITags).EC2Tags(config.ctx, awsConfig.Region, state)
++	if err != nil {
++		state.Put("error", fmt.Errorf("Error preparing AMI registration tags: %w", err))
++		ui.Error(state.Get("error").(error).Error())
++		return multistep.ActionHalt
++	}
++	registerOpts.TagSpecifications = tags.TagSpecifications(ec2types.ResourceTypeImage)
+ 	registerResp, err := ec2Client.RegisterImage(ctx, registerOpts)
+ 	if err != nil {
+ 		state.Put("error", fmt.Errorf("Error registering AMI: %s", err))

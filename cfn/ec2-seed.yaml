@@ -100,15 +100,18 @@ Parameters:
     Type: String
     AllowedPattern: '^arn:[a-z0-9-]+:sns:us-west-2:[0-9]{12}:cloud-glider-[a-z][a-z0-9-]{1,15}-operational-alerts$'
     Description: Foundation SNS topic ARN for generation health notifications.
+  AgentDeliveryMode:
+    Type: String
+    Default: baked
+    AllowedValues: [baked]
   RootDeviceName:
     Type: String
-    Default: /dev/xvda
-    AllowedValues: [/dev/xvda, /dev/sda1]
+    Default: /dev/sda1
+    AllowedValues: [/dev/sda1]
   RootVolumeGiB:
     Type: Number
-    Default: 8
-    MinValue: 8
-    MaxValue: 16
+    Default: 2
+    AllowedValues: [2]
 
 Rules:
   SandboxRegionIsUsWest2:
@@ -144,6 +147,7 @@ Resources:
         PropagationAuditLogGroupName: !Ref PropagationAuditLogGroupName
         AgentOperationsLogGroupName: !Ref AgentOperationsLogGroupName
         EmergencyHoldFunctionName: !Ref EmergencyHoldFunctionName
+        AgentDeliveryMode: !Ref AgentDeliveryMode
         RootDeviceName: !Ref RootDeviceName
         RootVolumeGiB: !Ref RootVolumeGiB
     Properties:

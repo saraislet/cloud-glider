@@ -56,7 +56,7 @@ GENERATION_PARAMETER_NAMES = {
     "AgentArtifactVersionId", "AgentArtifactSha256", "BootstrapVersion", "TemplateVersion",
     "TemplateBucket", "TemplateKey", "TemplateS3VersionId", "TemplateSha256", "TemplateBuildId",
     "PropagationAuditLogGroupName", "AgentOperationsLogGroupName", "EmergencyHoldFunctionName",
-    "OperationalAlertsTopicArn", "RootDeviceName", "RootVolumeGiB",
+    "OperationalAlertsTopicArn", "RootDeviceName", "RootVolumeGiB", "AgentDeliveryMode",
 }
 
 
@@ -145,9 +145,6 @@ class Gateway(Protocol):
     def reconcile_submission(self, specification: dict[str, Any], stack: dict[str, Any]) -> None: ...
     def read_generation_state(self, generation: str) -> dict[str, Any] | None: ...
     def check_capacity(self, max_live_generations: int) -> None: ...
-    def create_preflight(self, specification: dict[str, Any]) -> str: ...
-    def describe_change_set(self, change_set_id: str) -> dict[str, Any]: ...
-    def discard_preflight(self, change_set_id: str, stack_name: str, role_arn: str) -> None: ...
     def handoff(self, expected: dict[str, Any], successor: dict[str, Any], audit: dict[str, Any]) -> bool: ...
     def delete_stack(self, stack_id: str, role_arn: str, token: str) -> None: ...
     def invoke_hold(self, generation: str, error_code: str, correlation_id: str) -> None: ...
@@ -215,6 +212,7 @@ class Agent:
             raise TransientFailure("cleanup fences agent activity")
         if control["max_live_generations"] != 3:
             raise SafetyViolation("LIVE_GENERATION_LIMIT_INVALID", "absolute maximum must remain 3")
+        # Legacy persisted identifier; decision 0018 removes preview creation.
         if control["concurrency_model"] != "PREFLIGHT_THEN_RETIRE":
             raise SafetyViolation("CONCURRENCY_MODEL_INVALID", "unsupported concurrency model")
         if control["approved_region"] != "us-west-2" or self.config.stack_id.split(":")[3] != "us-west-2":
@@ -477,42 +475,26 @@ class Agent:
         )
         return 0 <= now - heartbeat_at <= freshness
 
-    def continuation_preflight(self, control: dict[str, Any], successor_spec: dict[str, Any], successor_stack_id: str) -> None:
-        successor_number = int(successor_spec["generation"])
-        if successor_number >= int(control["max_generation"]):
-            self.log("continuation_boundary_reached", successor_generation=successor_spec["generation"])
-            return
-        self.gateway.check_capacity(int(control["max_live_generations"]))
-        next_number = successor_number + 1
-        token = stable_token("handoff", successor_stack_id, f"{next_number:06d}", control["template_sha256"])
-        fresh = self._fresh_enabled_control()  # mandatory last read before CreateChangeSet
-        if self._control_identity(fresh) != self._control_identity(control):
-            raise TransientFailure("approved identity changed during cycle")
-        specification = self._stack_specification(fresh, next_number, successor_stack_id, token)
-        specification["change_set_name"] = stable_token("cg-preflight", successor_stack_id, f"{next_number:06d}")
-        change_set_id = self.gateway.create_preflight(specification)
-        try:
-            deadline = self.clock() + int(control["readiness_timeout_seconds"])
-            while self.clock() <= deadline:
-                self._renew(control)
-                result = self.gateway.describe_change_set(change_set_id)
-                if result.get("Status") == "CREATE_COMPLETE":
-                    return
-                if result.get("Status") == "FAILED":
-                    raise TransientFailure(f"continuation change set failed: {result.get('StatusReason', 'unknown')}")
-                self.sleep(int(control["readiness_poll_seconds"]))
-            raise TransientFailure("continuation change set timed out")
-        finally:
-            self.gateway.discard_preflight(change_set_id, specification["stack_name"], specification["role_arn"])
-
     @staticmethod
     def _control_identity(control: dict[str, Any]) -> tuple[Any, ...]:
         return tuple(control[key] for key in sorted(REQUIRED_CONTROL_FIELDS))
 
-    def conditional_handoff(self, control: dict[str, Any], successor_spec: dict[str, Any], stack_id: str, state: dict[str, Any]) -> None:
+    def conditional_handoff(self, control: dict[str, Any], successor_spec: dict[str, Any], stack_id: str) -> None:
         fresh = self._fresh_enabled_control()
         if self._control_identity(fresh) != self._control_identity(control):
             raise TransientFailure("control changed before handoff")
+        stack = self.gateway.describe_stack(stack_id)
+        if (not stack or stack.get("StackId") != stack_id
+                or stack.get("StackStatus") != "CREATE_COMPLETE"
+                or stack.get("Parameters") != successor_spec["parameters"]
+                or stack.get("RoleARN") != successor_spec["role_arn"]):
+            raise SafetyViolation("SUCCESSOR_RECONCILIATION_MISMATCH", "successor identity changed before handoff")
+        instance_id = self.gateway.stack_instance_id(stack_id)
+        state = self.gateway.read_generation_state(successor_spec["generation"])
+        if not state or not self._eligible_heartbeat(
+            state, fresh, successor_spec, stack_id, instance_id, int(self.clock())
+        ):
+            raise TransientFailure("successor health changed before handoff; predecessor preserved")
         expected = {
             **self._identity(),
             "lease_owner": self.lease_owner,
@@ -559,9 +541,8 @@ class Agent:
             if not self.is_current_owner():
                 return "OWNERSHIP_CHANGED"
             specification, stack_id = self.provision_successor(control)
-            state = self.wait_for_healthy_successor(control, specification, stack_id)
-            self.continuation_preflight(control, specification, stack_id)
-            self.conditional_handoff(control, specification, stack_id, state)
+            self.wait_for_healthy_successor(control, specification, stack_id)
+            self.conditional_handoff(control, specification, stack_id)
             assert self._own_stack is not None
             delete_token = stable_token("cg-retire", self.config.stack_id, stack_id)
             self.gateway.delete_stack(self.config.stack_id, self._own_stack["RoleARN"], delete_token)

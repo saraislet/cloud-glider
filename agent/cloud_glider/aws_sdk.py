@@ -72,7 +72,7 @@ def _ddb_item(values: dict[str, Any]) -> dict[str, Any]:
 
 
 class AwsSdkGateway:
-    def __init__(self, config: AgentConfig, *, session=None):
+    def __init__(self, config: AgentConfig, *, session=None, services=None):
         self.config = config
         self.instance_id = _imds("meta-data/instance-id")
         document = json.loads(_imds("dynamic/instance-identity/document"))
@@ -93,12 +93,15 @@ class AwsSdkGateway:
                 service, region_name=self.region, config=client_config
             )
             for service in (
-                "dynamodb",
-                "cloudformation",
-                "ec2",
-                "service-quotas",
-                "s3",
-                "lambda",
+                services
+                or (
+                    "dynamodb",
+                    "cloudformation",
+                    "ec2",
+                    "service-quotas",
+                    "s3",
+                    "lambda",
+                )
             )
         }
 
@@ -599,53 +602,6 @@ class AwsSdkGateway:
         if quota_value < (live + 1) * 2:
             raise TransientFailure(
                 "standard-instance vCPU quota has insufficient headroom"
-            )
-
-    def create_preflight(self, specification: dict[str, Any]) -> str:
-        token = self._begin_provisioning(specification)
-        result = self._call(
-            "cloudformation",
-            "create_change_set",
-            StackName=specification["stack_name"],
-            ChangeSetName=specification["change_set_name"],
-            ChangeSetType="CREATE",
-            TemplateURL=self._template_url(specification),
-            Parameters=self._parameters(specification),
-            RoleARN=specification["role_arn"],
-            ClientToken=specification["client_token"],
-            Description="Cloud Glider unexecuted continuation preflight",
-            Tags=self._tags(specification),
-        )
-        self._record_submission(specification, result["StackId"])
-        self._end_provisioning(token)
-        return result["Id"]
-
-    def describe_change_set(self, change_set_id: str) -> dict[str, Any]:
-        return self._call(
-            "cloudformation", "describe_change_set", ChangeSetName=change_set_id
-        )
-
-    def discard_preflight(
-        self, change_set_id: str, stack_name: str, role_arn: str
-    ) -> None:
-        self._call(
-            "cloudformation",
-            "delete_change_set",
-            ChangeSetName=change_set_id,
-            allow_failure=True,
-        )
-        stack = self.describe_stack(stack_name)
-        if (
-            stack
-            and stack.get("Parameters", {}).get("RequestId") == self.config.request_id
-            and stack.get("StackStatus") == "REVIEW_IN_PROGRESS"
-        ):
-            self._call(
-                "cloudformation",
-                "delete_stack",
-                StackName=stack["StackId"],
-                RoleARN=role_arn,
-                allow_failure=True,
             )
 
     def handoff(

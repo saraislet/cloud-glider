@@ -6,10 +6,10 @@ This runbook applies only to explicitly initialized `ec2` cycles in the `cloud-g
 
 1. Stop the existing cycle using the CONTROL `stop_requested` switch. Use the existing operator cleanup procedure to complete cleanup. Confirm BOOTSTRAP/REQUEST cleanup is COMPLETE, CURRENT is UNINITIALIZED, no provisioning marker exists, and there are no live generation instances. Do not change backend in a live cycle.
 2. Review runtime IAM changes in foundation and permission-boundaries, including `PropagationBackend=ec2` and the exact `AllowedLaunchTemplateId`. Runtime roles cannot update their own permissions. Existing optional Organizations policies block direct EC2 and agent PassRole to EC2; a security administrator must review replacements before using this backend under those policies. Existing deployment roles/workflows are unchanged and may also require separately authorized updates to manage the persistent launch-template stack. Do not bypass a denied deployment.
-3. Bake the approved arm64 AMI with the SDK versions in `agent/requirements.txt`. Build the agent with `scripts/build_agent_artifact.py`, publish it and `cfn/ec2-seed.yaml` as immutable versioned artifacts, and record their hashes and version IDs. The seed is the versioned generation template pinned in CONTROL.
+3. Build a new private 2 GiB ARM64 image from this integrated source using `ami/ubuntu-minimal.pkr.hcl`, preserving `/dev/sda1`, the venv, disabled service and integrity manifest. Bake the SDK versions in `agent/requirements.txt`. Cold-boot testing must report both `CLOUD_GLIDER_AMI_SMOKE_PASS` and `EC2_BAKED_CONTRACT_PASS`; the isolated test has no instance profile or propagation configuration. Build the agent with `scripts/build_agent_artifact.py`, publish it and `cfn/ec2-seed.yaml` as immutable versioned artifacts, and record their hashes and version IDs. The seed is the versioned generation template pinned in CONTROL.
 4. Deploy `cfn/launch-template.yaml` through the approved operator path. Its parameters include the generation table and all static seed/agent artifact pins. Obtain the exact template ID and numeric version. Describe that exact version, hash only `LaunchTemplateData` using compact sorted JSON (`json.dumps(data, sort_keys=True, separators=(',', ':'))`, UTF-8, SHA-256), and retain the reviewed response. Never pin `$Latest` or `$Default`.
 5. Review the generated initializer transaction with `--propagation-backend ec2 --approved-account-id ACCOUNT --launch-template-id ID --launch-template-version NUMBER --launch-template-sha256 HASH` in addition to the existing required artifact arguments. Initialization is conditional and cannot overwrite an existing CONTROL. For an existing cleaned environment, an approved offline migration must preserve lifecycle schema 2 and the operator interface while applying equivalent pins; do not rerun the initializer with unconditional writes. Keep propagation disabled until ready to observe the cycle, and set a small max_generation.
-6. Configure bootstrap parameters for the approved seed and template inputs, including the existing profile, subnet and image. CONTROL supplies LaunchTemplateId and LaunchTemplateVersion automatically for EC2. Bootstrap checks the template digest and static artifact pins before provisioning. Use the existing CONTROL start switch to bootstrap the seed and observe readiness, handoff, predecessor termination and the terminal generation.
+6. Configure bootstrap parameters for the approved seed and template inputs, including the existing profile, subnet and new baked image (`AgentDeliveryMode=baked`, `RootDeviceName=/dev/sda1`, `RootVolumeGiB=2`). CONTROL supplies LaunchTemplateId and LaunchTemplateVersion automatically for EC2. Bootstrap checks the template digest and static artifact pins before provisioning. Use the existing CONTROL start switch to bootstrap the seed and observe readiness, handoff, predecessor termination and the terminal generation.
 
 ## Stop, cleanup and recovery
 
@@ -24,3 +24,27 @@ Status-check alarms provide corroborating telemetry. They do not authorize retir
 ## Validation limits
 
 Local tests cover disabled propagation, HOLD, duplicate and ambiguous submission, readiness/handoff failures, changed controls, cycle fencing, typed SDK requests and direct cleanup ownership failures. CloudFormation linting checks the source templates. No AWS resources were deployed or mutated as part of this implementation. A supervised sandbox test remains necessary to validate live IAM, boot readiness, actual capacity and cleanup.
+
+## Performance evidence
+
+The last successful baked CloudFormation baseline (decision 0018, receipt
+`2026-10-03-preflight-removal-minimal-ami.json`) reached initial ownership in
+50.662s and averaged 39.481s per recorded ownership interval (38.555–42.458s).
+Its ten-generation duration was 405.991s; sampled live peak was three.
+This release removes successor stack creation/deletion and the unused
+CloudFormation SDK client from the direct path. Baked startup performs no
+artifact download, package install, extraction or unit replacement. These are
+plausible latency savings, not measured propagation improvements. Confirmed
+predecessor termination is deliberately serialized before another launch,
+which may offset gains compared with the overlapping CloudFormation baseline.
+
+The agent emits `phase_timing` records with UTC start/end timestamps, monotonic
+duration, request/generation/instance/correlation identity and PASSED, DEFERRED
+or FAILED outcome for startup identity, successor submission/readiness,
+continuation dry run, conditional handoff and predecessor retirement attempts.
+Preserve retry records; retirement attempt timings do not themselves measure
+total EC2 termination time across retries. Cold-boot smoke establishes image
+compatibility, not propagation or live IAM correctness. A separately authorized
+bounded benchmark must record real RunInstances/TerminateInstances event times,
+authoritative heartbeat readiness and conditional handoff times, consistent
+hop boundaries, controls, live counts and retries before comparing latency.

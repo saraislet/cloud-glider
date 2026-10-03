@@ -1,0 +1,14 @@
+--- a/common/ssm/session.go
++++ b/common/ssm/session.go
+@@ -94,7 +94,10 @@
+ // AWS session-manager-plugin. Session cannot be resumed after termination.
+ func (s Session) terminateSession(ctx context.Context, sessionID string, ui packersdk.Ui) {
+ 	log.Printf("ssm: Terminating PortForwarding session %q", sessionID)
+-	_, err := s.SvcClient.TerminateSession(ctx, &ssm.TerminateSessionInput{SessionId: aws.String(sessionID)})
++	// Cleanup must survive build cancellation, but must not wait indefinitely.
++	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
++	defer cancel()
++	_, err := s.SvcClient.TerminateSession(cleanupCtx, &ssm.TerminateSessionInput{SessionId: aws.String(sessionID)})
+ 	if err != nil {
+ 		ui.Error(fmt.Sprintf("Error terminating SSM Session %q, this does not affect the built AMI. Please terminate the session manually: %s", sessionID, err))
+ 	}

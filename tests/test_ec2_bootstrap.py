@@ -11,6 +11,9 @@ from test_ec2_sdk import template_data
 class Ec2BootstrapTests(unittest.TestCase):
     def setUp(self):
         self.params = dict(
+            AgentDeliveryMode="baked",
+            RootDeviceName="/dev/sda1",
+            RootVolumeGiB="2",
             ApprovedImageId="ami-approved",
             AgentInstanceProfileName="cloud-glider-sandbox-agent",
             GenerationTableName="cloud-glider-sandbox-generations",
@@ -26,6 +29,7 @@ class Ec2BootstrapTests(unittest.TestCase):
         )
         raw = dict(
             propagation_backend="ec2",
+            agent_delivery_mode="baked",
             generation_table_name=self.params["GenerationTableName"],
             template_sha256=self.params["TemplateSha256"],
             template_s3_version_id="seed-version",
@@ -52,6 +56,17 @@ class Ec2BootstrapTests(unittest.TestCase):
             },
         )
         self.ec2 = Mock()
+        self.ec2.describe_images.return_value = {
+            "Images": [
+                {
+                    "Tags": [
+                        {"Key": "project", "Value": "cloud-glider"},
+                        {"Key": "purpose", "Value": "agent-image"},
+                        {"Key": "agent-sha256", "Value": "b" * 64},
+                    ]
+                }
+            ]
+        }
         self.ec2.describe_launch_template_versions.return_value = {
             "LaunchTemplateVersions": [
                 {

@@ -23,25 +23,19 @@ generation is below `max_generation`. It then:
 2. strongly rereads operator control and verifies the versioned template digest;
 3. creates or reconciles the deterministic successor stack;
 4. waits for `CREATE_COMPLETE` and distinct eligible heartbeats;
-5. checks live-generation headroom, regional `t4g.micro` offering, and vCPU quota;
-6. creates and discards an unexecuted `CREATE` change set for the next hop;
-7. atomically transfers `CURRENT/GLOBAL` after one more fresh control check; and
-8. submits predecessor stack deletion through CloudFormation.
+5. rereads control and the real successor's stack identity/configuration and health;
+6. atomically transfers `CURRENT/GLOBAL` with control, hold, and lease conditions; and
+7. submits predecessor stack deletion through CloudFormation.
 
-The predecessor is never deleted before step 7 succeeds. No code path executes
-the continuation change set.
-
-## Approved overlapping handoff design
-
-[Decision 0005](decisions/0005-overlapping-handoff.md) allows N deletion and
-N+2 creation to overlap after healthy N+1 passes continuation and owns CURRENT.
-The existing DeleteStack call is asynchronous, so some overlap is already
-possible. [Decision 0006](decisions/0006-preflight-during-successor-boot.md) also
-permits unexecuted N+2 preflight during N+1 boot, joining both successful results
-before handoff. The runtime still performs those waits sequentially; the
-required health refresh, durable retirement reconciliation, and
-conservative capacity accounting are not all implemented. Do not interpret
-this design approval as a completed runtime release. AMI baking is separate.
+Capacity, regional offering, and quota checks remain before actual successor
+creation. No disposable N+2 change set or placeholder is created. Each new owner
+validates its own actual successor on the next cycle. The predecessor survives
+missing, unhealthy, or mismatched successor evidence and failed handoff.
+See [decision 0018](decisions/0018-remove-continuation-preflight.md), which
+supersedes the continuation and preview overlap requirements in decisions 0005
+and 0006. Asynchronous predecessor deletion may still overlap next creation;
+the existing conservative capacity gate remains. Durable retirement recovery
+and stronger in-flight accounting remain separate design work.
 
 ## DynamoDB records
 
@@ -56,7 +50,7 @@ Control and coordination stay in `cloud-glider-{environment}-state`; generation 
   conditional on the original stack and instance and cannot overwrite `ERROR`.
 - `LOCK/PROPAGATION`: expiring owner token used to serialize propagation.
 - `LOCK/PROVISIONING`: non-expiring submission marker; cleanup waits for a reconciled outcome.
-- Generation table `GEN#.../RESOURCE#<stack ARN>`: exact submitted stack inventory, including preflights.
+- Generation table `GEN#.../RESOURCE#<stack ARN>`: exact submitted stack inventory, including legacy preview stacks for cleanup.
 - `HOLD/ACTIVE`: append-only incident stop created only by the dedicated Lambda.
 - `AUDIT#PROPAGATION/LATEST_HANDOFF`, `LATEST_HOLD`, `LATEST_INITIALIZATION`, `LATEST_BOOTSTRAP`, `LATEST_MIGRATION`: latest event per action.
 - `AUDIT#RECOVERY/LATEST`: latest hold-clear result. These fixed keys replace expanding event history.
@@ -70,7 +64,7 @@ is corroborating telemetry and never a readiness gate.
 An ordinary cycle reads control/hold once, reads CURRENT once, and writes one
 heartbeat. The CURRENT snapshot is shared only within that cycle's initial
 heartbeat and ownership decision. Ownership is reread after lease acquisition;
-fresh control reads before provisioning, preflight, and handoff remain intact.
+fresh control reads before provisioning and handoff remain intact.
 
 Candidates and active owners use the configured heartbeat interval. A current
 owner blocked by disabled propagation or emergency hold sleeps for at least
@@ -172,4 +166,22 @@ marker transactionally with lifecycle/HOLD checks. Heartbeats, CURRENT claims,
 leases, and handoffs are fenced by the same cycle. Normal stop keeps instances
 running; only explicit cleanup authorizes generation deletion without handoff.
 
-Direct EC2 propagation is available as an explicit offline transition. See [the EC2 runbook](ec2-propagation.md) and decision 0017. Existing CloudFormation cycles retain their current behavior.
+## Minimal baked AMI
+
+Use `AgentDeliveryMode=baked`, `/dev/sda1` and a 2 GiB root only with an image
+containing the current lifecycle agent. The previously deployed minimal image
+predates the current request/table contract. Follow the [reconciliation and
+release runbook](minimal-ami.md) before a coordinated image/controller release.
+
+## Applying the agent update
+
+Existing baked AMIs contain the old agent. Build a new immutable agent artifact
+and rebuild the private ARM64 minimal AMI from this source using the AMI build
+runbook. Validate baked delivery and the 2 GiB root; publish the new approved
+image/template and agent version/digest through the existing operator release
+path. Verify the release fingerprint and all runtime stacks before bootstrap.
+Keep propagation disabled and the existing hold until cleanup is independently
+verified and an operator explicitly approves the next observed run. Updating
+source alone does not update a baked AMI. This change performs no AWS deployment.
+
+Direct EC2 propagation is available as an explicit offline transition. See [the EC2 runbook](ec2-propagation.md) and decision 0019. Existing CloudFormation cycles retain their current behavior.

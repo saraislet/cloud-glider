@@ -49,6 +49,11 @@ Parameters:
   GenerationTableName:
     Type: String
     AllowedPattern: '^cloud-glider-[a-z][a-z0-9-]{1,15}-generations$'
+  AgentDeliveryMode:
+    Type: String
+    Default: s3
+    AllowedValues: [s3, baked]
+    Description: Baked mode requires a matching approved Cloud Glider image release.
   AgentArtifactBucket:
     Type: String
   AgentArtifactKey:
@@ -101,10 +106,17 @@ Parameters:
   RootVolumeGiB:
     Type: Number
     Default: 8
-    MinValue: 8
-    MaxValue: 16
+    AllowedValues: [2, 4, 8, 16]
 
 Rules:
+  SmallRootRequiresBakedImage:
+    Assertions:
+      - Assert:
+          Fn::Or:
+            - !Equals [!Ref AgentDeliveryMode, baked]
+            - !Equals [!Ref RootVolumeGiB, '8']
+            - !Equals [!Ref RootVolumeGiB, '16']
+        AssertDescription: Roots below 8 GiB require an approved custom baked AMI.
   SandboxRegionIsUsWest2:
     Assertions:
       - Assert: !Equals [!Ref 'AWS::Region', us-west-2]
@@ -200,36 +212,42 @@ Resources:
           }
           JSON
           chmod 0640 /etc/cloud-glider/bootstrap.json
-          aws s3api get-object \
-            --bucket '${AgentArtifactBucket}' \
-            --key '${AgentArtifactKey}' \
-            --version-id '${AgentArtifactVersionId}' \
-            /opt/cloud-glider/agent.tar.gz
-          echo '${AgentArtifactSha256}  /opt/cloud-glider/agent.tar.gz' | sha256sum -c -
-          tar -xzf /opt/cloud-glider/agent.tar.gz -C /opt/cloud-glider
-          test -x /opt/cloud-glider/bin/cloud-glider
-          cat >/etc/systemd/system/cloud-glider.service <<'UNIT'
-          [Unit]
-          Description=Cloud Glider propagation agent
-          After=network-online.target
-          Wants=network-online.target
+          if [ '${AgentDeliveryMode}' = baked ]; then
+            test -f /etc/cloud-glider/image.json
+            /usr/bin/python3 /usr/local/lib/cloud-glider/verify_image.py --config /etc/cloud-glider/bootstrap.json
+          else
+            test ! -e /etc/cloud-glider/image.json
+            aws s3api get-object \
+              --bucket '${AgentArtifactBucket}' \
+              --key '${AgentArtifactKey}' \
+              --version-id '${AgentArtifactVersionId}' \
+              /opt/cloud-glider/agent.tar.gz
+            echo '${AgentArtifactSha256}  /opt/cloud-glider/agent.tar.gz' | sha256sum -c -
+            tar -xzf /opt/cloud-glider/agent.tar.gz -C /opt/cloud-glider
+            test -x /opt/cloud-glider/bin/cloud-glider
+            cat >/etc/systemd/system/cloud-glider.service <<'UNIT'
+            [Unit]
+            Description=Cloud Glider propagation agent
+            After=network-online.target
+            Wants=network-online.target
 
-          [Service]
-          Type=simple
-          ExecStart=/opt/cloud-glider/bin/cloud-glider --config /etc/cloud-glider/bootstrap.json
-          Restart=on-failure
-          RestartSec=15
-          Environment=PYTHONUNBUFFERED=1
-          User=root
-          NoNewPrivileges=true
-          PrivateTmp=true
-          ProtectHome=true
-          ProtectSystem=strict
-          ReadWritePaths=/var/lib/cloud-glider
+            [Service]
+            Type=simple
+            ExecStart=/opt/cloud-glider/bin/cloud-glider --config /etc/cloud-glider/bootstrap.json
+            Restart=on-failure
+            RestartSec=15
+            Environment=PYTHONUNBUFFERED=1
+            User=root
+            NoNewPrivileges=true
+            PrivateTmp=true
+            ProtectHome=true
+            ProtectSystem=strict
+            ReadWritePaths=/var/lib/cloud-glider
 
-          [Install]
-          WantedBy=multi-user.target
+            [Install]
+            WantedBy=multi-user.target
           UNIT
+          fi
           install -d -m 0750 /var/lib/cloud-glider
           systemctl daemon-reload
           systemctl enable --now cloud-glider.service

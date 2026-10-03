@@ -1,0 +1,17 @@
+#!/bin/bash
+set -euo pipefail
+curl --fail --retry 3 --location \
+  'https://s3.us-west-2.amazonaws.com/amazon-ssm-us-west-2/${version}/debian_arm64/amazon-ssm-agent.deb' \
+  --output /tmp/cloud-glider-ssm.deb
+echo '${sha256}  /tmp/cloud-glider-ssm.deb' | sha256sum -c -
+# Only one SSM installation may own the builder session channel.
+# Remove the Snap package before installing the verified, pinned deb.
+if command -v snap >/dev/null 2>&1; then
+  snap wait system seed.loaded
+  if snap list amazon-ssm-agent >/dev/null 2>&1; then
+    snap remove amazon-ssm-agent
+  fi
+fi
+dpkg -i /tmp/cloud-glider-ssm.deb
+systemctl enable --now amazon-ssm-agent
+rm /tmp/cloud-glider-ssm.deb

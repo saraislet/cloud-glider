@@ -18,17 +18,16 @@ def _filter(value):
 
 class Ec2SdkGateway(AwsSdkGateway):
     def __init__(self, config, *, session=None):
-        super().__init__(config, session=session)
-        self._clients["cloudwatch"] = (
-            session or boto3.Session(region_name=self.region)
-        ).client(
-            "cloudwatch",
-            region_name=self.region,
-            config=Config(
-                connect_timeout=2,
-                read_timeout=5,
-                max_pool_connections=10,
-                retries={"mode": "standard", "total_max_attempts": 1},
+        super().__init__(
+            config,
+            session=session,
+            services=(
+                "dynamodb",
+                "ec2",
+                "service-quotas",
+                "s3",
+                "lambda",
+                "cloudwatch",
             ),
         )
         self._template_data = None
@@ -178,10 +177,11 @@ class Ec2SdkGateway(AwsSdkGateway):
             or (len(networks[0].get("Groups", [])) != 1)
             or (profile != {"Name": profile_name})
             or (len(disks) != 1)
+            or (disks[0].get("DeviceName") != "/dev/sda1")
             or (disks[0].get("Ebs", {}).get("Encrypted") is not True)
             or (disks[0]["Ebs"].get("DeleteOnTermination") is not True)
             or (disks[0]["Ebs"].get("VolumeType") != "gp3")
-            or (not 8 <= disks[0]["Ebs"].get("VolumeSize", 0) <= 16)
+            or (disks[0]["Ebs"].get("VolumeSize") != 2)
             or data.get("InstanceMarketOptions")
             or data.get("DisableApiTermination")
             or data.get("Monitoring", {}).get("Enabled", False)
@@ -200,6 +200,16 @@ class Ec2SdkGateway(AwsSdkGateway):
             or (image[0].get("RootDeviceName") != disks[0]["DeviceName"])
         ):
             raise TransientFailure("approved AMI unavailable or differs from template")
+        tags = {t["Key"]: t["Value"] for t in image[0].get("Tags", [])}
+        if (
+            tags.get("project") != "cloud-glider"
+            or tags.get("purpose") != "agent-image"
+            or tags.get("agent-sha256") != control["agent_artifact_sha256"]
+        ):
+            raise SafetyViolation(
+                "BAKED_IMAGE_IDENTITY_MISMATCH",
+                "AMI does not contain the approved agent",
+            )
         self._template_data = data
 
     def verify_instance(self, instance: dict, specification: dict) -> None:

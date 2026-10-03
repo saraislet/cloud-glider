@@ -41,12 +41,12 @@ def template_data():
         ],
         "BlockDeviceMappings": [
             {
-                "DeviceName": "/dev/xvda",
+                "DeviceName": "/dev/sda1",
                 "Ebs": {
                     "Encrypted": True,
                     "DeleteOnTermination": True,
                     "VolumeType": "gp3",
-                    "VolumeSize": 8,
+                    "VolumeSize": 2,
                 },
             }
         ],
@@ -73,6 +73,7 @@ class Ec2SdkTests(unittest.TestCase):
                 ),
             )
         self.addCleanup(self.g.close)
+        self.assertNotIn("cloudformation", self.g._clients)
         self.spec = Agent(self.cfg, FakeGateway(self.cfg, FakeClock()))._specification(
             control(), 1, self.cfg.instance_id, "token"
         )
@@ -243,10 +244,15 @@ class Ec2SdkTests(unittest.TestCase):
             {
                 "Images": [
                     {
+                        "Tags": [
+                            {"Key": "project", "Value": "cloud-glider"},
+                            {"Key": "purpose", "Value": "agent-image"},
+                            {"Key": "agent-sha256", "Value": "b" * 64},
+                        ],
                         "Architecture": "arm64",
                         "State": "available",
                         "RootDeviceType": "ebs",
-                        "RootDeviceName": "/dev/xvda",
+                        "RootDeviceName": "/dev/sda1",
                     }
                 ]
             },

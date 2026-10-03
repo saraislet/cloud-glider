@@ -1,0 +1,379 @@
+{
+  "image_id": "ami-0be3b7fd3c68a61f6",
+  "snapshot_id": "snap-00925dc8f83f6339b",
+  "source_commit": "ee59e7d206c003634ff4329833c7fc724a16dfa6",
+  "artifacts": {
+    "agent": {
+      "bucket": "cloud-glider-sandbox-482268323955-us-west-2-artifacts",
+      "key": "generation/preflight-removal-63ac10d5da88143c66967f41156b00954c5a2274a03fd63a696f3af063c98838-cloud-glider-agent.tar.gz",
+      "version_id": "FzqG1vs1kGSq_5TOdMFAuOv0rpRbIg2s",
+      "sha256": "63ac10d5da88143c66967f41156b00954c5a2274a03fd63a696f3af063c98838"
+    },
+    "generation": {
+      "bucket": "cloud-glider-sandbox-482268323955-us-west-2-artifacts",
+      "key": "generation/preflight-removal-2a8c5a89591624638b1a9fa6209d205ee3a4f5ed6bd2b7855e7a37f6da20848f-generation.yaml",
+      "version_id": "tSivVjIjurzAzHwckUz_pC35cihBnXkj",
+      "sha256": "2a8c5a89591624638b1a9fa6209d205ee3a4f5ed6bd2b7855e7a37f6da20848f"
+    },
+    "bootstrap": {
+      "bucket": "cloud-glider-sandbox-482268323955-us-west-2-artifacts",
+      "key": "bootstrap/preflight-removal-a59ef357ada53d9745ce993fa0a44c4316ee7c2382a8c3278a3b97d875368594-bootstrap.yaml",
+      "version_id": "9VhhqKsAbiVwA0DdRWyXpAkpz6TlO3T3",
+      "sha256": "a59ef357ada53d9745ce993fa0a44c4316ee7c2382a8c3278a3b97d875368594"
+    }
+  },
+  "template_url": "https://cloud-glider-sandbox-482268323955-us-west-2-artifacts.s3.us-west-2.amazonaws.com/generation/preflight-removal-2a8c5a89591624638b1a9fa6209d205ee3a4f5ed6bd2b7855e7a37f6da20848f-generation.yaml?versionId=tSivVjIjurzAzHwckUz_pC35cihBnXkj",
+  "region": "us-west-2",
+  "account_id": "482268323955",
+  "repository": "saraislet/cloud-glider",
+  "root_volume_gib": 2,
+  "agent_delivery_mode": "baked",
+  "metadata_checks_passed": true,
+  "source_pull_request": "https://github.com/saraislet/cloud-glider/pull/9",
+  "build_duration_seconds": 857,
+  "packer_run_uuid": "3c397871-2ead-9814-d986-04cd60be4885",
+  "smoke": {
+    "result": "CLOUD_GLIDER_AMI_SMOKE_PASS",
+    "free_bytes": 632659968,
+    "agent_sha256": "63ac10d5da88143c66967f41156b00954c5a2274a03fd63a696f3af063c98838",
+    "python": "3.12.3",
+    "instance_id": "i-0e4a2b370ce47c260",
+    "stack_deleted": true
+  },
+  "build_instance_terminated": "i-0026738babf1549e2",
+  "tests_passed": 211,
+  "deployment_status": "DEPLOYED_BENCHMARK_PASSED_CLEANED",
+  "stack_statuses": {
+    "cloud-glider-sandbox-boundaries": "UPDATE_COMPLETE",
+    "cloud-glider-sandbox": "UPDATE_COMPLETE",
+    "cloud-glider-sandbox-bootstrap": "UPDATE_COMPLETE"
+  },
+  "hold_recovery_event_id": "7c80be22-6399-4c03-89bf-2a408d2a6fcf",
+  "control_sha256": "40ae7be8f245e079bcf86b5796adffbf33ba8e699d08d5f62cbbc3902574d695",
+  "final_state": {
+    "verified": true,
+    "statuses": {
+      "cloud-glider-sandbox-boundaries": "UPDATE_COMPLETE",
+      "cloud-glider-sandbox": "UPDATE_COMPLETE",
+      "cloud-glider-sandbox-bootstrap": "UPDATE_COMPLETE"
+    },
+    "request_id": "3",
+    "max_generation": 2,
+    "live_instances": 0,
+    "live_generation_stacks": 0,
+    "attached_volumes": 0,
+    "propagation_enabled": false,
+    "hold": false,
+    "fingerprint": "40ae7be8f245e079bcf86b5796adffbf33ba8e699d08d5f62cbbc3902574d695"
+  },
+  "benchmark": {
+    "result": "PASS",
+    "generations": 10,
+    "handoffs": 9,
+    "initial_startup_seconds": 50.662,
+    "total_first_creation_to_final_ownership_seconds": 405.991,
+    "handoff_intervals_seconds": [
+      39.719,
+      38.938,
+      39.986,
+      39.3,
+      42.458,
+      38.555,
+      39.093,
+      38.636,
+      38.644
+    ],
+    "mean_handoff_interval_seconds": 39.481,
+    "peak_observed_live_generations": 3,
+    "hold_seen_during_run": false,
+    "rows": [
+      {
+        "generation": 0,
+        "stack_id": "arn:aws:cloudformation:us-west-2:482268323955:stack/cloud-glider-sandbox-gen-000000/f6889f10-bf00-11f1-b5b2-02d574ccb33f",
+        "instance_id": "i-0d1f9f72ea61e34d0",
+        "created_at": "2026-10-03 08:03:48.353000+00:00",
+        "owned_at": "2026-10-03T08:04:39.015Z",
+        "creation_to_ownership_seconds": 50.662,
+        "handoff_interval_seconds": null
+      },
+      {
+        "generation": 1,
+        "stack_id": "arn:aws:cloudformation:us-west-2:482268323955:stack/cloud-glider-sandbox-gen-000001/14e94360-bf01-11f1-8a82-0a20db3b96af",
+        "instance_id": "i-0f68e2e4fb3dd7f1d",
+        "created_at": "2026-10-03 08:04:39.294000+00:00",
+        "owned_at": "2026-10-03T08:05:18.734Z",
+        "creation_to_ownership_seconds": 39.44,
+        "handoff_interval_seconds": 39.719
+      },
+      {
+        "generation": 2,
+        "stack_id": "arn:aws:cloudformation:us-west-2:482268323955:stack/cloud-glider-sandbox-gen-000002/2ec9b6c0-bf01-11f1-8ad6-0232ad8fd72d",
+        "instance_id": "i-0dfeb2165d92c2b08",
+        "created_at": "2026-10-03 08:05:22.691000+00:00",
+        "owned_at": "2026-10-03T08:05:57.672Z",
+        "creation_to_ownership_seconds": 34.981,
+        "handoff_interval_seconds": 38.938
+      },
+      {
+        "generation": 3,
+        "stack_id": "arn:aws:cloudformation:us-west-2:482268323955:stack/cloud-glider-sandbox-gen-000003/4694deb0-bf01-11f1-9334-0affda4d9d57",
+        "instance_id": "i-0bcfe829e2ae75a02",
+        "created_at": "2026-10-03 08:06:02.634000+00:00",
+        "owned_at": "2026-10-03T08:06:37.658Z",
+        "creation_to_ownership_seconds": 35.024,
+        "handoff_interval_seconds": 39.986
+      },
+      {
+        "generation": 4,
+        "stack_id": "arn:aws:cloudformation:us-west-2:482268323955:stack/cloud-glider-sandbox-gen-000004/5e0bf330-bf01-11f1-bb1b-069b1f207dfb",
+        "instance_id": "i-0a9e8e406dd374e59",
+        "created_at": "2026-10-03 08:06:42.002000+00:00",
+        "owned_at": "2026-10-03T08:07:16.958Z",
+        "creation_to_ownership_seconds": 34.956,
+        "handoff_interval_seconds": 39.3
+      },
+      {
+        "generation": 5,
+        "stack_id": "arn:aws:cloudformation:us-west-2:482268323955:stack/cloud-glider-sandbox-gen-000005/761bc540-bf01-11f1-a5b0-067c841664d9",
+        "instance_id": "i-01197edfb37ae69a8",
+        "created_at": "2026-10-03 08:07:22.365000+00:00",
+        "owned_at": "2026-10-03T08:07:59.416Z",
+        "creation_to_ownership_seconds": 37.051,
+        "handoff_interval_seconds": 42.458
+      },
+      {
+        "generation": 6,
+        "stack_id": "arn:aws:cloudformation:us-west-2:482268323955:stack/cloud-glider-sandbox-gen-000006/8e54ca30-bf01-11f1-817a-02ff1ccbb937",
+        "instance_id": "i-01cc4ba447707f62c",
+        "created_at": "2026-10-03 08:08:03.007000+00:00",
+        "owned_at": "2026-10-03T08:08:37.971Z",
+        "creation_to_ownership_seconds": 34.964,
+        "handoff_interval_seconds": 38.555
+      },
+      {
+        "generation": 7,
+        "stack_id": "arn:aws:cloudformation:us-west-2:482268323955:stack/cloud-glider-sandbox-gen-000007/a5a4a7a0-bf01-11f1-bf57-023b1d53931f",
+        "instance_id": "i-090a7e1e661a94245",
+        "created_at": "2026-10-03 08:08:42.113000+00:00",
+        "owned_at": "2026-10-03T08:09:17.064Z",
+        "creation_to_ownership_seconds": 34.951,
+        "handoff_interval_seconds": 39.093
+      },
+      {
+        "generation": 8,
+        "stack_id": "arn:aws:cloudformation:us-west-2:482268323955:stack/cloud-glider-sandbox-gen-000008/bca99960-bf01-11f1-817a-0293401f7925",
+        "instance_id": "i-0bf8f7e1bc33f5240",
+        "created_at": "2026-10-03 08:09:20.727000+00:00",
+        "owned_at": "2026-10-03T08:09:55.700Z",
+        "creation_to_ownership_seconds": 34.973,
+        "handoff_interval_seconds": 38.636
+      },
+      {
+        "generation": 9,
+        "stack_id": "arn:aws:cloudformation:us-west-2:482268323955:stack/cloud-glider-sandbox-gen-000009/d3a98210-bf01-11f1-bf94-0afff922f5a1",
+        "instance_id": "i-058747cf0cc04dbd0",
+        "created_at": "2026-10-03 08:09:59.314000+00:00",
+        "owned_at": "2026-10-03T08:10:34.344Z",
+        "creation_to_ownership_seconds": 35.03,
+        "handoff_interval_seconds": 38.644
+      }
+    ],
+    "request_id": "2",
+    "measurement": "CreationTime and CURRENT.updated_at; EC2 live sampling approximately every 3.3 seconds including pending and shutting-down; peak is observed, not a continuous census."
+  },
+  "evidence_manifest": [
+    {
+      "file": "all-instances-final.json",
+      "sha256": "3e80b151c92f37a680730e8f89f80c25e1fbb9174dfd8832acca1cecd02afad7"
+    },
+    {
+      "file": "ami-build-manifest.json",
+      "sha256": "ecb2be410708112fb885a92daaab53074d03b5ec238cfd785d76ceebe3539946"
+    },
+    {
+      "file": "benchmark-events-000000.json",
+      "sha256": "4d0c7b6c13da23af0cc0322e89c125b003da900c0e4be2c4b9a61875356081f9"
+    },
+    {
+      "file": "benchmark-events-000001.json",
+      "sha256": "b7dddae0bb5291cc4c0334c93be7d1c39792099b4b0e81286d69191fef56d3a9"
+    },
+    {
+      "file": "benchmark-events-000002.json",
+      "sha256": "53fee73ac6ca9cd933b268ddb819f1cdaf37b8b899d24e332cb63b8f3eb29f01"
+    },
+    {
+      "file": "benchmark-events-000003.json",
+      "sha256": "a0fcda23771597ecb905d7392e5645c24622dd637cc8d3c5a6b441acf581ffad"
+    },
+    {
+      "file": "benchmark-events-000004.json",
+      "sha256": "fe3da7846f68e9b49e97e28f2cdc7595c2ec9a714aeb37b4021ed33bd26aedf6"
+    },
+    {
+      "file": "benchmark-events-000005.json",
+      "sha256": "ad18390e963ebf6ce4bfeaf02860ffa5e76ae78ffad59175a1e60ca3d186fb78"
+    },
+    {
+      "file": "benchmark-events-000006.json",
+      "sha256": "113688f3e340ac4b196860894368d864ccfac28a25c87c9177a23bb4c26b7a80"
+    },
+    {
+      "file": "benchmark-events-000007.json",
+      "sha256": "2e18780d5bead5660394108935524ebf62ca99a114a44cf4e06dbcd3aceda74d"
+    },
+    {
+      "file": "benchmark-events-000008.json",
+      "sha256": "1750f7590cc8bb4feb92ef1b1a4ffa785124807a3d44119f0361ebed38fd3563"
+    },
+    {
+      "file": "benchmark-events-000009.json",
+      "sha256": "1f44eeb3ebd2bc531631618bb95b03713f87339907fb7e06b2352bc0bc3b4eb5"
+    },
+    {
+      "file": "benchmark-result.json",
+      "sha256": "d2259cab6be44c0e499f4711028b88963acd70e8d0f48a4aedd705d6bfacc73b"
+    },
+    {
+      "file": "benchmark-stack-000000.json",
+      "sha256": "a6e94be5124557dfe7e64d4b19f2010ef77d239173e29b36da80c44495c0f335"
+    },
+    {
+      "file": "benchmark-stack-000001.json",
+      "sha256": "bb4196c17774b9dad7d6312e43eb07bb3d7a07d59a0ac38f01582798df48b18a"
+    },
+    {
+      "file": "benchmark-stack-000002.json",
+      "sha256": "afb16d8f8a4de453ab6b30bc449b0ef860fbf2ee4069816716bbe6f61c5abfad"
+    },
+    {
+      "file": "benchmark-stack-000003.json",
+      "sha256": "fb427ac220b64dc6d02d48dacef077ced6402fb32ec6d3bfa13b76b460d795ad"
+    },
+    {
+      "file": "benchmark-stack-000004.json",
+      "sha256": "c22ecfb3541a47da9f67b85850ab46c7193aeba5463a0d71736b262af95fb6fd"
+    },
+    {
+      "file": "benchmark-stack-000005.json",
+      "sha256": "636504dc41dd5485f550a5f1b37b8056e2014932d1fcb2ce8c738bcd2c0b8f70"
+    },
+    {
+      "file": "benchmark-stack-000006.json",
+      "sha256": "97119d09f5c738160a4ebbc813528fad8b9ffa0326cab8ae74939519f478940e"
+    },
+    {
+      "file": "benchmark-stack-000007.json",
+      "sha256": "7d16e880fbf8a521b027ad57985a1134f902a85cb75d7104fbbc30399aecde3f"
+    },
+    {
+      "file": "benchmark-stack-000008.json",
+      "sha256": "0d405734362b5a47a85b627e931a5e613aa99994a4db05a63f83a338645b745b"
+    },
+    {
+      "file": "benchmark-stack-000009.json",
+      "sha256": "b6d70aa1c09e1f84b09954a7c5bf98b3012143e8590ab2a2cce94748df31a846"
+    },
+    {
+      "file": "benchmark-state-000000.json",
+      "sha256": "b2f4046b5ab473fc290f1b35cef1e5eae3b273a591def633ddf98f6cb0662aba"
+    },
+    {
+      "file": "benchmark-state-000001.json",
+      "sha256": "8a16c07aa05be0aebdc240708d2722e12e9ed014feb7a1da06b58e274ee964ea"
+    },
+    {
+      "file": "benchmark-state-000002.json",
+      "sha256": "2d56a551ba52ef6521b3e97fedece9e13069f92714e375c2432c4fd5390e8302"
+    },
+    {
+      "file": "benchmark-state-000003.json",
+      "sha256": "2079389de0814d795f103b4e2dd791d8c7b68bacccafae55e648d006cd4ac0fd"
+    },
+    {
+      "file": "benchmark-state-000004.json",
+      "sha256": "9d1a58723115903362b07eaeb2f38a4d507b93791b54591fef20f6b46aef6f3a"
+    },
+    {
+      "file": "benchmark-state-000005.json",
+      "sha256": "6a3202f9a0abaab3e078a00bcdb485ce5dac1e8ea7b3622badb192bba3911eb2"
+    },
+    {
+      "file": "benchmark-state-000006.json",
+      "sha256": "cdce7be372fe50d32fcfacf81a0001d2a71d434a8fc9c78f04584ab92043b9ca"
+    },
+    {
+      "file": "benchmark-state-000007.json",
+      "sha256": "b9696f920bb6091004a90c547a59dc85f87c1566b5eef782da4cbbd6cd0ef874"
+    },
+    {
+      "file": "benchmark-state-000008.json",
+      "sha256": "a4de33c42e168f3e8491324c2580ca72da70b42737d7baf04ec485df3fb8804d"
+    },
+    {
+      "file": "benchmark-state-000009.json",
+      "sha256": "b297a08295b93c55d242563a1ed7d114b5c1952077eb27159f6b521db64f1b2c"
+    },
+    {
+      "file": "cloud-glider-sandbox-bootstrap-deployed.json",
+      "sha256": "15e1dc73ed36f47a4ee491dd6309b102c2b8c2c1cabb7219d9e8ba7fb9ad952a"
+    },
+    {
+      "file": "cloud-glider-sandbox-boundaries-deployed.json",
+      "sha256": "efe42b4706af323df2e15d0cdfbc4e3bb7cb2eecac8d800e1dfce3cf854ecc7d"
+    },
+    {
+      "file": "cloud-glider-sandbox-deployed.json",
+      "sha256": "fe0fd1b56297ebf2602f14e75ace1f69a4bd6be06c2f997361b13abb1d5e0e3a"
+    },
+    {
+      "file": "control-before.json",
+      "sha256": "c72b9cb54b6ddf0822a62add5ed6ef9a120bacf1351895e2fe399ace415ae311"
+    },
+    {
+      "file": "control-cleanup.json",
+      "sha256": "52ecd530433d3161bf03bb2ab37a6df8c03a38c1452958b8345e7a1e2f1230bb"
+    },
+    {
+      "file": "control-released.json",
+      "sha256": "720a603767c749723bc8df1be9f845735fabfa182f7701f2c9843e3c8d2e604c"
+    },
+    {
+      "file": "final-state.json",
+      "sha256": "a01b5e265174385dc9654ca5b22646b48d1323209039ebea22b9961887f3c9a6"
+    },
+    {
+      "file": "final-verification.json",
+      "sha256": "33a22a658935496257dd60a95c90512caa0e083153ddf1ef803579d9d6442088"
+    },
+    {
+      "file": "hold-before.json",
+      "sha256": "c9627522c349f5cf98f7eaf3dc83b24ea2c088136555a615ce5a1eb48f603974"
+    },
+    {
+      "file": "metadata-validation.json",
+      "sha256": "27fc1d12b9881c05b4f3e5f450cc1b767ece3ebf39ff4dee3f21947ad05b0f82"
+    },
+    {
+      "file": "request-before.json",
+      "sha256": "23a8af0e6be5c40257c0a79874d7b44bda44e2b826eb81ff31b7ba1a676218cc"
+    },
+    {
+      "file": "request-cleanup.json",
+      "sha256": "13dc73cc3fe1762dfb805cffc8eee414b694e8ccc9fb8e7774f2149d8534ee9c"
+    },
+    {
+      "file": "request-released.json",
+      "sha256": "f3f89b8ad732b72c318f6656fa4928b4106d0254dab7053e20c71d44201634ec"
+    },
+    {
+      "file": "benchmark-samples.jsonl",
+      "sha256": "223cdc13f7dc8b2bc2a28e58c2fb5f1d18418428ca2a507acb3d7db13ee3d7e9"
+    },
+    {
+      "file": "packer-build.log",
+      "sha256": "0e9a6f31eb0b9d5c647191a47fc0ea3d64ebb6f0db8b9ea0b98e47298b5e16f5"
+    }
+  ],
+  "local_evidence_directory": "/Users/saraislet/.codex/worktrees/c0fa/cloud-glider/.artifacts/ami"
+}

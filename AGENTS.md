@@ -12,7 +12,7 @@
 
 ### Architecture and lifecycle invariants
 
-- The operator-approved EC2 backend in `docs/decisions/0017-direct-ec2-propagation.md` supersedes the CloudFormation-only rules below for explicitly selected EC2 cycles. CloudFormation retains the control plane, persistent launch template and seed; successor agents use direct EC2 APIs with a pinned numeric launch-template version and digest, cycle-fenced DynamoDB state, and EC2 dry-run continuation. Retirement is serialized for EC2 cycles. Legacy CloudFormation cycles retain the rules below. Never switch a live cycle's backend.
+- The operator-approved EC2 backend in `docs/decisions/0019-direct-ec2-propagation.md` supersedes the CloudFormation-only rules below for explicitly selected EC2 cycles. CloudFormation retains the control plane, persistent launch template and seed; successor agents use direct EC2 APIs with a pinned numeric launch-template version and digest, cycle-fenced DynamoDB state, and EC2 dry-run continuation. Retirement is serialized for EC2 cycles. Legacy CloudFormation cycles retain the rules below. Never switch a live cycle's backend.
 
 - Manage generation creation and deletion through **CloudFormation**. Prefer declarative changes over direct AWS resource mutations.
 - A generation template creates one EC2 generation. A small Python agent on that generation coordinates propagation.
@@ -21,11 +21,8 @@
 - Read DynamoDB again immediately before provisioning. If `propagation_enabled` is false or `emergency_hold` is true, do not create another generation.
 - Disabling propagation must stop new generations without disrupting already-running instances.
 - Wait for `N+1` to pass explicit health validation before considering retirement of `N`.
-- Do not retire `N` until `N+1` is healthy and the continuation check for `N+2` passes.
-- For the first pass, the continuation check is an unexecuted CloudFormation **CREATE change set** for `N+2`, a fresh DynamoDB control check, and basic quota and capacity checks.
-- The unexecuted `N+2` continuation preflight may overlap `N+1` boot once its exact approved stack identity is known. Join successful readiness and preflight results, then revalidate health, control, identity, ownership, and capacity before handoff or retirement. See `docs/decisions/0006-preflight-during-successor-boot.md`.
-- Provision a live `N+2` during the continuation check only when stronger proof is explicitly required.
-- Prefer two or fewer live generations. After healthy `N+1` passes continuation and conditionally takes ownership, CloudFormation deletion of `N` may overlap creation of `N+2`. Three may exist temporarily during this overlap or next-hop proof; four are never allowed. Count retiring generations until termination is confirmed and reconcile in-flight creation before admitting more work. See `docs/decisions/0005-overlapping-handoff.md`.
+- Do not retire `N` until real `N+1` has passed approved identity/configuration and explicit health validation, fresh control checks, and conditional ownership transfer. No separate N+2 continuation change set is required. See `docs/decisions/0018-remove-continuation-preflight.md`.
+- Prefer two or fewer live generations. CloudFormation deletion of `N` may overlap creation of `N+2` after handoff. Three may exist temporarily; four are never allowed. Count retiring generations until termination is confirmed and reconcile in-flight creation before admitting more work.
 - Lifecycle operations must be idempotent, deterministic, and safe to retry after partial failure.
 
 ### Health and readiness
@@ -33,11 +30,11 @@
 - Never treat EC2 `running` state as proof that a generation is healthy.
 - Authoritative readiness must verify the expected generation and approved template, current control state, and valid handoff ownership in addition to workload health.
 - Treat EC2 Application Status Checks as corroborating telemetry and an alert signal, not as the authoritative readiness or retirement gate.
-- Preserve the predecessor whenever health, identity, ownership, control state, or continuation results are missing or ambiguous.
+- Preserve the predecessor whenever health, identity, ownership, control state, or successor validation are missing or ambiguous.
 
 ### IAM and AWS safety
 
-- For EC2 cycles, the agent may launch only through the approved template and terminate only verified Glider generations; it may pass only its existing agent role to EC2. Runtime IAM and template mutation remain prohibited. See decision 0017 for the explicitly approved change to the legacy rules below.
+- For EC2 cycles, the agent may launch only through the approved template and terminate only verified Glider generations; it may pass only its existing agent role to EC2. Runtime IAM and template mutation remain prohibited. See decision 0019 for the explicitly approved change to the legacy rules below.
 
 - `CloudGliderAgentRole` may read and update only Cloud Glider DynamoDB records and operate only approved CloudFormation generation stacks.
 - The agent may pass only the designated CloudFormation service role. Restrict `iam:PassRole` to that role and the CloudFormation service.

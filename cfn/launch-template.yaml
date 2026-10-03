@@ -80,13 +80,12 @@ Parameters:
     AllowedPattern: '^arn:[a-z0-9-]+:sns:us-west-2:[0-9]{12}:cloud-glider-[a-z][a-z0-9-]{1,15}-operational-alerts$'
   RootDeviceName:
     Type: String
-    Default: /dev/xvda
-    AllowedValues: [/dev/xvda, /dev/sda1]
+    Default: /dev/sda1
+    AllowedValues: [/dev/sda1]
   RootVolumeGiB:
     Type: Number
-    Default: 8
-    MinValue: 8
-    MaxValue: 16
+    Default: 2
+    AllowedValues: [2]
 
 Rules:
   SandboxRegionIsUsWest2:
@@ -170,6 +169,7 @@ Resources:
             cat >/etc/cloud-glider/bootstrap.json <<'JSON'
             {
               "propagation_backend": "ec2",
+              "agent_delivery_mode": "baked",
               "generation_table_name": "${GenerationTableName}",
               "environment": "${Environment}",
               "owner": "${Owner}",
@@ -192,38 +192,10 @@ Resources:
             }
             JSON
             chmod 0640 /etc/cloud-glider/bootstrap.json
-            aws s3api get-object \
-              --bucket '${AgentArtifactBucket}' \
-              --key '${AgentArtifactKey}' \
-              --version-id '${AgentArtifactVersionId}' \
-              /opt/cloud-glider/agent.tar.gz
-            echo '${AgentArtifactSha256}  /opt/cloud-glider/agent.tar.gz' | sha256sum -c -
-            tar -xzf /opt/cloud-glider/agent.tar.gz -C /opt/cloud-glider
-            test -x /opt/cloud-glider/bin/cloud-glider
-            cat >/etc/systemd/system/cloud-glider.service <<'UNIT'
-            [Unit]
-            Description=Cloud Glider propagation agent
-            After=network-online.target
-            Wants=network-online.target
-
-            [Service]
-            Type=simple
-            ExecStart=/opt/cloud-glider/bin/cloud-glider --config /etc/cloud-glider/bootstrap.json
-            Restart=on-failure
-            RestartSec=15
-            Environment=PYTHONUNBUFFERED=1
-            User=root
-            NoNewPrivileges=true
-            PrivateTmp=true
-            ProtectHome=true
-            ProtectSystem=strict
-            ReadWritePaths=/var/lib/cloud-glider
-
-            [Install]
-            WantedBy=multi-user.target
-            UNIT
+            test -f /etc/cloud-glider/image.json
+            test -x /opt/cloud-glider/venv/bin/python
+            /usr/bin/python3 /usr/local/lib/cloud-glider/verify_image.py --config /etc/cloud-glider/bootstrap.json
             install -d -m 0750 /var/lib/cloud-glider
-            systemctl daemon-reload
             systemctl enable --now cloud-glider.service
 
 Outputs:

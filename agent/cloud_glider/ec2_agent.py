@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+from contextlib import contextmanager
 import hashlib
 import json
 import re
@@ -82,6 +83,7 @@ class Ec2AgentConfig:
     propagation_audit_log_group: str
     agent_operations_log_group: str
     operational_alerts_topic_arn: str
+    agent_delivery_mode: str = "baked"
 
     @classmethod
     def load(cls, path: str | Path) -> "Ec2AgentConfig":
@@ -98,6 +100,8 @@ class Ec2AgentConfig:
         return config
 
     def validate(self) -> None:
+        if self.agent_delivery_mode != "baked":
+            raise ValueError("EC2 propagation requires an approved baked image")
         if self.generation_table_name != f"cloud-glider-{self.environment}-generations":
             raise ValueError("unexpected generation table")
         if not re.fullmatch(r"[1-9][0-9]{0,17}", self.request_id):
@@ -155,7 +159,9 @@ class Ec2Agent:
         clock: Callable = time.time,
         sleep: Callable = time.sleep,
         logger: Callable = print,
+        timing_clock: Callable = time.monotonic,
     ):
+        self.timing_clock = timing_clock
         self.config, self.gateway = config, gateway
         self.clock, self.sleep, self.logger = clock, sleep, logger
         self.correlation_id = str(uuid.uuid4())
@@ -174,6 +180,7 @@ class Ec2Agent:
                     "timestamp": utc_now(),
                     "event": event,
                     "environment": self.config.environment,
+                    "request_id": self.config.request_id,
                     "generation": self.config.generation,
                     "instance_id": self.gateway.instance_id,
                     "correlation_id": self.correlation_id,
@@ -713,6 +720,27 @@ class Ec2Agent:
             )
         self.gateway.mark_retirement_completed(current)
 
+    @contextmanager
+    def phase(self, name: str):
+        started_at, started = utc_now(), self.timing_clock()
+        outcome = "PASSED"
+        try:
+            yield
+        except TransientFailure:
+            outcome = "DEFERRED"
+            raise
+        except Exception:
+            outcome = "FAILED"
+            raise
+        finally:
+            self.log(
+                "phase_timing",
+                phase=name,
+                started_at=started_at,
+                duration_seconds=round(self.timing_clock() - started, 6),
+                outcome=outcome,
+            )
+
     def cycle(self) -> str:
         self._poll_seconds = 5
         control, hold = self.gateway.read_control_and_hold()
@@ -736,13 +764,18 @@ class Ec2Agent:
         try:
             if not self.is_current_owner():
                 return "OWNERSHIP_CHANGED"
-            self.retire_predecessor(control, current)
+            with self.phase("predecessor_retirement"):
+                self.retire_predecessor(control, current)
             if self.generation_number >= int(control["max_generation"]):
                 return "MAX_GENERATION_REACHED"
-            spec, instance_id = self.provision_successor(control)
-            state = self.wait_for_healthy_successor(control, spec, instance_id)
-            self.continuation_preflight(control, spec, instance_id)
-            self.conditional_handoff(control, spec, instance_id, state)
+            with self.phase("successor_submission"):
+                spec, instance_id = self.provision_successor(control)
+            with self.phase("successor_readiness"):
+                state = self.wait_for_healthy_successor(control, spec, instance_id)
+            with self.phase("continuation_dry_run"):
+                self.continuation_preflight(control, spec, instance_id)
+            with self.phase("conditional_handoff"):
+                self.conditional_handoff(control, spec, instance_id, state)
             return "HANDOFF_COMPLETE"
         finally:
             try:
@@ -752,7 +785,8 @@ class Ec2Agent:
 
     def run(self) -> int:
         try:
-            self.verify_self()
+            with self.phase("startup_identity_validation"):
+                self.verify_self()
             self.ensure_bootstrap_ownership()
             previous = None
             while True:

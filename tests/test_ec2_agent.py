@@ -276,6 +276,29 @@ class AgentTests(unittest.TestCase):
         gateway.calls.clear()
         return agent, gateway, clock
 
+    def test_phase_timing_keeps_success_deferred_and_failure_distinct(self):
+        import json
+
+        a, _, _ = self.setup_agent()
+        records = []
+        a.logger = lambda raw: records.append(json.loads(raw))
+        for error, expected in (
+            (None, "PASSED"),
+            (TransientFailure("wait"), "DEFERRED"),
+            (SafetyViolation("TEST", "conflict"), "FAILED"),
+        ):
+            ticks = iter([10.0, 12.5])
+            a.timing_clock = lambda: next(ticks)
+            try:
+                with a.phase("fixture"):
+                    if error:
+                        raise error
+            except (TransientFailure, SafetyViolation) as exc:
+                self.assertIs(exc, error)
+            self.assertEqual(records[-1]["outcome"], expected)
+            self.assertEqual(records[-1]["duration_seconds"], 2.5)
+            self.assertEqual(records[-1]["request_id"], a.config.request_id)
+
     def test_disabled_or_hold_preserves_instances(self):
         for enabled, hold in ((False, False), (True, True), (False, True)):
             a, g, _ = self.setup_agent()

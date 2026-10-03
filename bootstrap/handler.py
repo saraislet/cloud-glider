@@ -117,6 +117,8 @@ def verify_artifacts(s3, control, env):
 
 def verify_ec2_template(ec2, control, params):
     require(control.get('approved_account_id') == {'S': params['OperationalAlertsTopicArn'].split(':')[4]}, 'Approved account mismatch')
+    require(params.get('AgentDeliveryMode') == 'baked' and str(params.get('RootVolumeGiB')) == '2'
+        and params.get('RootDeviceName') == '/dev/sda1', 'EC2 requires the baked 2 GiB image')
     template_id = control['launch_template_id']['S']
     version = control['launch_template_version']['S']
     require(re.fullmatch('lt-[0-9a-f]{17}', template_id) and re.fullmatch('[1-9][0-9]*', version), 'Invalid launch template pin')
@@ -136,11 +138,22 @@ def verify_ec2_template(ec2, control, params):
         and networks[0].get('Groups') == [params['SecurityGroupId']]
         and networks[0].get('AssociatePublicIpAddress') is True
         and networks[0].get('DeleteOnTermination') is True, 'Launch template network mismatch')
+    disks = data.get('BlockDeviceMappings', [])
+    require(len(disks) == 1 and disks[0].get('DeviceName') == '/dev/sda1'
+        and disks[0].get('Ebs', {}).get('VolumeSize') == 2
+        and disks[0]['Ebs'].get('Encrypted') is True
+        and disks[0]['Ebs'].get('DeleteOnTermination') is True
+        and disks[0]['Ebs'].get('VolumeType') == 'gp3', 'Launch template root mismatch')
+    images = ec2.describe_images(ImageIds=[params['ApprovedImageId']])['Images']
+    require(len(images) == 1, 'Approved baked image missing')
+    tags = {t['Key']: t['Value'] for t in images[0].get('Tags', [])}
+    require(tags.get('project') == 'cloud-glider' and tags.get('purpose') == 'agent-image'
+        and tags.get('agent-sha256') == params['AgentArtifactSha256'], 'Baked image artifact mismatch')
     # Static bootstrap pins must agree with the versioned seed and artifact.
     import base64
     userdata = base64.b64decode(data['UserData']).decode()
     raw = json.loads(userdata.split("<<'JSON'", 1)[1].split('JSON', 1)[0])
-    require(raw.get('propagation_backend') == 'ec2' and raw.get('generation_table_name') == params['GenerationTableName'], 'Launch template backend mismatch')
+    require(raw.get('propagation_backend') == 'ec2' and raw.get('agent_delivery_mode') == 'baked' and raw.get('generation_table_name') == params['GenerationTableName'], 'Launch template backend mismatch')
     for field, param in {'template_sha256': 'TemplateSha256', 'template_s3_version_id': 'TemplateS3VersionId',
             'agent_artifact_sha256': 'AgentArtifactSha256', 'agent_artifact_version_id': 'AgentArtifactVersionId',
             'bootstrap_version': 'BootstrapVersion', 'template_version': 'TemplateVersion'}.items():
