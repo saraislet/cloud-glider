@@ -23,7 +23,7 @@ Status-check alarms provide corroborating telemetry. They do not authorize retir
 
 ## Validation limits
 
-Local tests cover disabled propagation, HOLD, duplicate and ambiguous submission, readiness/handoff failures, changed controls, cycle fencing, typed SDK requests and direct cleanup ownership failures. CloudFormation linting checks the source templates. No AWS resources were deployed or mutated as part of this implementation. A supervised sandbox test remains necessary to validate live IAM, boot readiness, actual capacity and cleanup.
+Local tests cover disabled propagation, HOLD, duplicate and ambiguous submission, readiness/handoff failures, changed controls, cycle fencing, typed SDK requests and direct cleanup ownership failures. CloudFormation linting checks the source templates. The [EC2-integrated AMI receipt](../config/releases/2026-10-03-ec2-integrated-minimal-ami.json) records passing metadata and isolated cold-boot gates for the merged source. The temporary builder and smoke resources were cleaned up; no runtime stacks or propagation controls were changed. A supervised propagation test remains necessary to validate live IAM, authoritative readiness, actual capacity, handoff, retirement and cleanup.
 
 ## Performance evidence
 

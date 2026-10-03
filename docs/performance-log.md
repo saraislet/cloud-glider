@@ -5,6 +5,17 @@ chronological order, with newest run results and corrections first;
 keep raw operational evidence private. Use UTC timestamps and seconds, and
 write `not measured` for missing durations.
 
+## 2026-10-03 UTC — EC2-integrated candidate, isolated boot only
+
+The [candidate receipt](../config/releases/2026-10-03-ec2-integrated-minimal-ami.json)
+records an encrypted 2 GiB ARM64 image built from the merged EC2 backend source.
+Build duration: 686s. Metadata and isolated cold-boot contract checks passed;
+temporary resources were cleaned up. This is image compatibility evidence.
+Generation startup-to-readiness, ownership intervals, predecessor retirement
+and ten-generation propagation duration: **not measured**. Phase timing
+instrumentation is present for a later authorized run. No speedup is claimed
+against the 39.481s mean interval and 405.991s ten-generation baseline below.
+
 ## October 3: fixed baked image, ten generations
 
 The operator-authorized run from merged preflight-removal source completed

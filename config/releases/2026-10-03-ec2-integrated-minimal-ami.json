@@ -1,0 +1,132 @@
+{
+  "repository": "saraislet/cloud-glider",
+  "region": "us-west-2",
+  "account_id": "482268323955",
+  "image_id": "ami-01072534d8819af9f",
+  "snapshot_id": "snap-02226e5e1058469fb",
+  "source_commit": "e0273176d6ba2090bfa91a6cdf4a62a06d0ad5e3",
+  "merged_source_commit": "24212a52916ecc1f5a15f02f2fc45c1549c4ccd0",
+  "source_tree_matches_merged_main": true,
+  "source_pull_request": "https://github.com/saraislet/cloud-glider/pull/11",
+  "agent_sha256": "8015a49ed4a6bd96c2b770d6a2cb9c14c52433c67fa5725caefa3bb2bd66ff94",
+  "agent_delivery_mode": "baked",
+  "root_volume_gib": 2,
+  "architecture": "arm64",
+  "root_encrypted": true,
+  "source_ami": "ami-0476747aeb146ea00",
+  "build_duration_seconds": 686,
+  "packer_run_uuid": "c2089f96-a19e-593b-8beb-bd7392dfca6b",
+  "metadata_checks_passed": true,
+  "release_approved": false,
+  "deployment_status": "CANDIDATE_ISOLATED_SMOKE_PASSED_NOT_DEPLOYED",
+  "smoke": {
+    "result": "CLOUD_GLIDER_AMI_SMOKE_PASS",
+    "free_bytes": 632487936,
+    "agent_sha256": "8015a49ed4a6bd96c2b770d6a2cb9c14c52433c67fa5725caefa3bb2bd66ff94",
+    "python": "3.12.3",
+    "ec2_contract": "EC2_BAKED_CONTRACT_PASS",
+    "instance_id": "i-0d27cd79e08df0605",
+    "instance_type": "t4g.micro",
+    "instance_profile": null,
+    "stack_deleted": true,
+    "verification": "Explicit CloudFormation WaitCondition success payload; console API returned no output.",
+    "runtime_agent_started": false
+  },
+  "cleanup": {
+    "builder_instance_id": "i-03c7301d6cb46c808",
+    "builder_terminated": true,
+    "smoke_terminated": true,
+    "target_and_smoke_volumes_deleted": [
+      "vol-06b5cdabfa3305aea",
+      "vol-04ce354249d026deb"
+    ],
+    "attached_volumes": 0,
+    "temporary_keypair_deleted": true,
+    "active_builder_sessions": 0
+  },
+  "validation": {
+    "tests_passed": 256,
+    "cfn_lint": "PASS",
+    "repository_checks": "PASS",
+    "rendered_bootstrap": "PASS",
+    "failure_paths": "Includes disabled propagation, HOLD, duplicate/ambiguous submission, ambiguous readiness, failed handoff and failed baked image verification."
+  },
+  "final_state": {
+    "unchanged_from_before_build": true,
+    "request_id": "3",
+    "propagation_enabled": false,
+    "max_generation": 2,
+    "current_status": "UNINITIALIZED",
+    "hold_present": false,
+    "provisioning_lock_present": false,
+    "propagation_lock_present": false
+  },
+  "performance": {
+    "propagation_benchmark": "NOT_RUN",
+    "measured_speedup": null,
+    "baseline_mean_handoff_interval_seconds": 39.481,
+    "baseline_ten_generation_duration_seconds": 405.991,
+    "phase_timings_available": true
+  },
+  "remaining_work": [
+    "Review live deployment and Organizations policy compatibility.",
+    "Publish immutable artifact versions and review the offline EC2 activation pins.",
+    "Deploy matching image, Launch Template and runtime permissions with propagation disabled, only when authorized.",
+    "Run a separately authorized bounded propagation test and comparable benchmark."
+  ],
+  "evidence_manifest": [
+    {
+      "file": "ami-build-manifest.json",
+      "sha256": "e83740f5f793d8bf9283484f4f2dcfe6d67ab735ba325ce3bb02e7bf32efe6b9"
+    },
+    {
+      "file": "ec2-image-metadata.json",
+      "sha256": "0699b5ea61039375522655be121e56dce4111923c3954f56b332ddcf78ab17fa"
+    },
+    {
+      "file": "packer-build.log",
+      "sha256": "189f5834973ddb244cf187b0d8f019520127d118c77518da02831616a77ae85c"
+    },
+    {
+      "file": "smoke-status.json",
+      "sha256": "807c67953ca71f419a167c60ab66fe0276848d0b40031723f626808b62fd1626"
+    },
+    {
+      "file": "smoke-result.json",
+      "sha256": "665458263c9b40409ec2cc9113ab37a8c496ad012283739b37dab2b97539b480"
+    },
+    {
+      "file": "smoke-instance-before-cleanup.json",
+      "sha256": "236098bb4fa2a4be713ccfd3d37db77b575bf9db6019950758e1758a4fbc2f38"
+    },
+    {
+      "file": "smoke-cleanup-status.json",
+      "sha256": "9b6d4b05a51237c8cb8ccdf7cfbc72f8b00f010008c03c0af7732e28a6e5e723"
+    },
+    {
+      "file": "instances-final.json",
+      "sha256": "1438615aa15218c3b25a07c716353b44b1fb561ba4c90a0fb136cdffad427ab8"
+    },
+    {
+      "file": "attached-volumes-final.json",
+      "sha256": "5bb1ef67ec6cda7a24020d0c0ddfa919d96f348d36e16bd083f5960efd321a3e"
+    },
+    {
+      "file": "exact-volume-cleanup.json",
+      "sha256": "cb705ac63382180871632a923de3c8370c30b8a7da267ec9b8cb71a4944b378a"
+    },
+    {
+      "file": "builder-keypair-final.json",
+      "sha256": "42d563d9baca66af85867987a27fc575e964a63059d9d1cb8c12ca75558fbc80"
+    },
+    {
+      "file": "builder-sessions-final.json",
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+    },
+    {
+      "file": "state-after.json",
+      "sha256": "ad332ec07e29324f0484623ec56ab46a6800b5ee604f6f5c514ff1a2d9a067ea"
+    }
+  ],
+  "local_evidence_directory": "/Users/saraislet/Documents/src/glider-project/cloud-glider-ec2-reconcile/.artifacts/ami"
+}

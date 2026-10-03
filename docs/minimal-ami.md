@@ -151,3 +151,35 @@ leases, propagation/bootstrap disabled, cleanup COMPLETE, and fresh request 3.
 A conditional transaction restored max_generation=2, retained the absolute
 ceiling of three and updated the request fingerprint and benchmark audit. The
 verified image remains deployed but paused; no further deployment is needed.
+
+## EC2-integrated candidate: isolated verification
+
+[Candidate receipt](../config/releases/2026-10-03-ec2-integrated-minimal-ami.json)
+records private image `ami-01072534d8819af9f` and encrypted 2 GiB root snapshot
+`snap-02226e5e1058469fb`. It was built from `e027317`, whose source tree exactly
+matches merged EC2 backend commit `24212a5` (PR #11). The agent archive SHA-256
+is `8015a49ed4a6bd96c2b770d6a2cb9c14c52433c67fa5725caefa3bb2bd66ff94`.
+The existing build completed in 686s and was reused after confirming source
+equivalence; no additional build was necessary after the squash merge.
+
+Metadata checks passed. A fresh isolated `t4g.micro`, with no instance profile
+or propagation configuration, returned explicit `CLOUD_GLIDER_AMI_SMOKE_PASS`
+and `EC2_BAKED_CONTRACT_PASS` through its CloudFormation WaitCondition. It
+verified the baked archive, installed SDK request contract, disabled service,
+Python 3.12.3 and 632,487,936 free bytes after boot. The console API returned
+no output; the explicit WaitCondition payload is the retained boot evidence.
+All 256 tests passed, along with affected-template linting, repository checks
+and rendered-bootstrap verification.
+
+Both build and smoke instances were confirmed terminated, the smoke stack
+reached `DELETE_COMPLETE`, exact target and smoke root volumes were deleted,
+and no temporary key pair, active builder session or attached volume remained.
+The new AMI and root snapshot are retained as a private candidate. Lifecycle
+state stayed unchanged: request 3, propagation disabled, max_generation 2,
+CURRENT uninitialized, and no HOLD or provisioning/propagation lock.
+
+This candidate is **not deployed or operationally release-approved**. Live
+EC2 permissions, authoritative readiness, ownership transfer, retirement and
+cleanup still require a separately authorized runtime test. A comparable
+propagation benchmark has not run; no speedup is claimed. Follow the
+[offline EC2 activation runbook](ec2-propagation.md) before rollout.
