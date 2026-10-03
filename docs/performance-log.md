@@ -17,6 +17,40 @@ See the [release receipt](../config/releases/2026-10-03-preflight-removal-minima
 for exact source/image identities and per-generation timings. These measurements
 exclude build/deployment/cleanup; the earlier failed benchmark is historical.
 
+### Comparison with the October 2 successful run
+
+The previous full run launched 11 generations (0–10); this run launched 10
+(0–9). Match whole-run totals at generation 9, from generation 0 CloudFormation
+CreationTime to generation 9 conditional ownership transfer:
+
+| Measurement | October 2 successful run | New fixed baked-image run | Reduction |
+| --- | ---: | ---: | ---: |
+| Mean recorded ownership interval (9 intervals each) | 61.802889s | 39.481s | 36.1% |
+| Recorded ownership interval range | 53.053–71.962s | 38.555–42.458s | — |
+| Generation 0 creation → generation 9 ownership | 584.782s | 405.991s | 30.6% (178.791s saved) |
+
+The previous mean uses the nine recorded generation 1→2 through 9→10
+intervals in the October 2 table below. The new mean uses generation 0→1
+through 8→9 from the release receipt. These interval samples have different
+hop boundaries; the previous final interval also skipped its continuation
+preflight. The matched total is derived as 637.835s through generation 10
+minus its final 53.053s interval = 584.782s through generation 9. Totals exclude
+time before first stack creation, AMI build, deployment and final cleanup.
+Different image and source versions mean the improvement cannot be attributed
+solely to removing preflight. These are individual runs, not evidence of a
+repeated-run statistical improvement.
+
+The immediately preceding failed baked-image attempt launched only two
+generations and completed one handoff before the stranded-preview failure.
+Its reported creation-to-initial-ownership time was 39.1s and its single
+ownership interval was 42.4s. New startup was **slower**, at 50.662s versus
+39.1s; the new mean interval was 39.481s versus that one 42.4s observation.
+The failed-attempt figures are rounded operational observations supplied with
+that incident, not a complete benchmark receipt or a repeated sample. The
+completion distinction is ten launches, nine validated handoffs and no failures
+in the new run; the single failed-attempt handoff cannot establish a general
+speed improvement.
+
 ## 2026-10-02 UTC — Run through generation 10
 
 Run `perf-20261002-01`: sandbox, `us-west-2`, `t4g.micro`, ARM64 Amazon Linux
