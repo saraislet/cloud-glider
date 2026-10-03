@@ -19,6 +19,8 @@ SOURCE_FILES = (
     Path("cloud_glider/__init__.py"),
     Path("cloud_glider/agent.py"),
     Path("cloud_glider/aws_sdk.py"),
+    Path("cloud_glider/ec2_agent.py"),
+    Path("cloud_glider/ec2_sdk.py"),
     Path("requirements.txt"),
 )
 

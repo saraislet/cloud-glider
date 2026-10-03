@@ -182,3 +182,5 @@ classification, and first-trial procedure.
 Minimal AMI propagation supports baked startup and 2 GiB roots. See the
 [release reconciliation](docs/minimal-ami.md) for current-contract compatibility
 and the separate historical deployed release.
+
+Direct EC2 propagation is available as an explicit offline transition. See [the EC2 runbook](docs/ec2-propagation.md) and decision 0019. Existing CloudFormation cycles retain their current behavior.

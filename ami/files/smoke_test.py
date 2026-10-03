@@ -35,6 +35,27 @@ def verify_lifecycle_contract():
     assert {'RequestId', 'GenerationTableName', 'AgentDeliveryMode'} <= GENERATION_PARAMETER_NAMES, 'legacy generation parameter contract'
 
 
+def verify_ec2_contract():
+    import dataclasses
+    from botocore.session import Session
+    from botocore.validate import validate_parameters
+    from cloud_glider.ec2_agent import Ec2AgentConfig
+    from cloud_glider.ec2_sdk import Ec2SdkGateway
+    fields = {field.name for field in dataclasses.fields(Ec2AgentConfig)}
+    assert {'request_id', 'generation_table_name', 'predecessor_instance_id',
+            'launch_template_id', 'launch_template_version', 'agent_delivery_mode'} <= fields
+    assert Ec2AgentConfig.__dataclass_fields__['agent_delivery_mode'].default == 'baked'
+    spec = {'launch_template_id': 'lt-' + 'a' * 17, 'launch_template_version': '1',
+            'client_token': 'isolated-smoke-only', 'tags': {'project': 'cloud-glider'}}
+    request = Ec2SdkGateway._run_request(spec)
+    model = Session().get_service_model('ec2').operation_model('RunInstances')
+    validate_parameters(request, model.input_shape)
+    validate_parameters({**request, 'DryRun': True}, model.input_shape)
+    assert request['MinCount'] == request['MaxCount'] == 1
+    assert 'UserData' not in request and 'ImageId' not in request
+    return 'EC2_BAKED_CONTRACT_PASS'
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--expected-sha256', required=True)
@@ -47,6 +68,7 @@ def main():
     assert subprocess.run(['systemctl', 'is-enabled', '--quiet', 'cloud-glider']).returncode != 0
     verify_runtime()
     verify_lifecycle_contract()
+    ec2_result = verify_ec2_contract()
     # Evaluate the pinned SDK requirements in this interpreter without contacting AWS.
     from pip._vendor.packaging.requirements import Requirement
     for line in Path('/opt/cloud-glider/requirements.txt').read_text().splitlines():
@@ -61,7 +83,7 @@ def main():
     free = disk.f_bavail * disk.f_frsize
     assert free >= 384 * 1024**2, 'less than 384 MiB free after boot'
     print(json.dumps({'result': 'CLOUD_GLIDER_AMI_SMOKE_PASS', 'free_bytes': free,
-                      'agent_sha256': manifest['agent_sha256'], 'python': platform.python_version()}))
+                      'agent_sha256': manifest['agent_sha256'], 'python': platform.python_version(), 'ec2_contract': ec2_result}))
 
 
 if __name__ == '__main__':

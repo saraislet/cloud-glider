@@ -183,3 +183,5 @@ path. Verify the release fingerprint and all runtime stacks before bootstrap.
 Keep propagation disabled and the existing hold until cleanup is independently
 verified and an operator explicitly approves the next observed run. Updating
 source alone does not update a baked AMI. This change performs no AWS deployment.
+
+Direct EC2 propagation is available as an explicit offline transition. See [the EC2 runbook](ec2-propagation.md) and decision 0019. Existing CloudFormation cycles retain their current behavior.

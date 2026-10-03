@@ -72,7 +72,7 @@ def _ddb_item(values: dict[str, Any]) -> dict[str, Any]:
 
 
 class AwsSdkGateway:
-    def __init__(self, config: AgentConfig, *, session=None):
+    def __init__(self, config: AgentConfig, *, session=None, services=None):
         self.config = config
         self.instance_id = _imds("meta-data/instance-id")
         document = json.loads(_imds("dynamic/instance-identity/document"))
@@ -93,12 +93,15 @@ class AwsSdkGateway:
                 service, region_name=self.region, config=client_config
             )
             for service in (
-                "dynamodb",
-                "cloudformation",
-                "ec2",
-                "service-quotas",
-                "s3",
-                "lambda",
+                services
+                or (
+                    "dynamodb",
+                    "cloudformation",
+                    "ec2",
+                    "service-quotas",
+                    "s3",
+                    "lambda",
+                )
             )
         }
 

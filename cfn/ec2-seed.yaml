@@ -1,0 +1,223 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Operator seed instance from the persistent launch template; propagation uses direct EC2 APIs.
+
+Parameters:
+  LaunchTemplateId:
+    Type: String
+    AllowedPattern: '^lt-[0-9a-f]{17}$'
+  LaunchTemplateVersion:
+    Type: String
+    AllowedPattern: '^[1-9][0-9]*$'
+  Environment:
+    Type: String
+    Default: sandbox
+    AllowedPattern: '^[a-z][a-z0-9-]{1,15}$'
+  Owner:
+    Type: String
+    MinLength: 1
+    MaxLength: 64
+  RequestId:
+    Type: String
+    AllowedPattern: '^[1-9][0-9]{0,17}$'
+  Generation:
+    Type: String
+    AllowedPattern: '^[0-9]{6}$'
+  PredecessorStackId:
+    Type: String
+    Default: NONE
+    MaxLength: 1024
+  HandoffToken:
+    Type: String
+    Default: OPERATOR_BOOTSTRAP
+    MinLength: 1
+    MaxLength: 128
+  ApprovedImageId:
+    Type: AWS::EC2::Image::Id
+    Default: ami-08dd4258d4d19fe06
+  InstanceType:
+    Type: String
+    Default: t4g.micro
+    AllowedValues: [t4g.micro]
+  ImageArchitecture:
+    Type: String
+    Default: arm64
+    AllowedValues: [arm64]
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Default: subnet-0a00b98420d660d03
+  SecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+    Default: sg-0da9cdee2a98d8dc2
+  AgentInstanceProfileName:
+    Type: String
+  GenerationTableName:
+    Type: String
+    AllowedPattern: '^cloud-glider-[a-z][a-z0-9-]{1,15}-generations$'
+  StateTableName:
+    Type: String
+  AgentArtifactBucket:
+    Type: String
+  AgentArtifactKey:
+    Type: String
+    AllowedPattern: '^generation/.+$'
+  AgentArtifactVersionId:
+    Type: String
+    MinLength: 1
+  AgentArtifactSha256:
+    Type: String
+    AllowedPattern: '^[A-Fa-f0-9]{64}$'
+  BootstrapVersion:
+    Type: String
+    MinLength: 1
+    MaxLength: 128
+  TemplateVersion:
+    Type: String
+    MinLength: 1
+    MaxLength: 128
+  TemplateBucket:
+    Type: String
+    MinLength: 3
+  TemplateKey:
+    Type: String
+    AllowedPattern: '^generation/.+$'
+  TemplateS3VersionId:
+    Type: String
+    MinLength: 1
+  TemplateSha256:
+    Type: String
+    AllowedPattern: '^[A-Fa-f0-9]{64}$'
+  TemplateBuildId:
+    Type: String
+    MinLength: 7
+    MaxLength: 128
+  PropagationAuditLogGroupName:
+    Type: String
+  AgentOperationsLogGroupName:
+    Type: String
+  EmergencyHoldFunctionName:
+    Type: String
+  OperationalAlertsTopicArn:
+    Type: String
+    AllowedPattern: '^arn:[a-z0-9-]+:sns:us-west-2:[0-9]{12}:cloud-glider-[a-z][a-z0-9-]{1,15}-operational-alerts$'
+    Description: Foundation SNS topic ARN for generation health notifications.
+  AgentDeliveryMode:
+    Type: String
+    Default: baked
+    AllowedValues: [baked]
+  RootDeviceName:
+    Type: String
+    Default: /dev/sda1
+    AllowedValues: [/dev/sda1]
+  RootVolumeGiB:
+    Type: Number
+    Default: 2
+    AllowedValues: [2]
+
+Rules:
+  SandboxRegionIsUsWest2:
+    Assertions:
+      - Assert: !Equals [!Ref 'AWS::Region', us-west-2]
+        AssertDescription: Cloud Glider's initial sandbox is restricted to us-west-2.
+  SandboxArchitectureIsArm64:
+    Assertions:
+      - Assert: !Equals [!Ref ImageArchitecture, arm64]
+        AssertDescription: Cloud Glider's initial sandbox requires a prevalidated arm64 AMI.
+
+Resources:
+  GenerationInstance:
+    Type: AWS::EC2::Instance
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Metadata:
+      ApprovedSeedInputs:
+        ApprovedImageId: !Ref ApprovedImageId
+        InstanceType: !Ref InstanceType
+        SubnetId: !Ref SubnetId
+        SecurityGroupId: !Ref SecurityGroupId
+        AgentInstanceProfileName: !Ref AgentInstanceProfileName
+        GenerationTableName: !Ref GenerationTableName
+        StateTableName: !Ref StateTableName
+        AgentArtifactBucket: !Ref AgentArtifactBucket
+        AgentArtifactKey: !Ref AgentArtifactKey
+        AgentArtifactVersionId: !Ref AgentArtifactVersionId
+        AgentArtifactSha256: !Ref AgentArtifactSha256
+        TemplateBucket: !Ref TemplateBucket
+        TemplateKey: !Ref TemplateKey
+        TemplateS3VersionId: !Ref TemplateS3VersionId
+        PropagationAuditLogGroupName: !Ref PropagationAuditLogGroupName
+        AgentOperationsLogGroupName: !Ref AgentOperationsLogGroupName
+        EmergencyHoldFunctionName: !Ref EmergencyHoldFunctionName
+        AgentDeliveryMode: !Ref AgentDeliveryMode
+        RootDeviceName: !Ref RootDeviceName
+        RootVolumeGiB: !Ref RootVolumeGiB
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateId: !Ref LaunchTemplateId
+        Version: !Ref LaunchTemplateVersion
+      Tags:
+        - Key: bootstrap-request-id
+          Value: !Ref RequestId
+        - Key: propagation-backend
+          Value: ec2
+        - Key: predecessor-instance-id
+          Value: !Ref PredecessorStackId
+        - Key: handoff-token
+          Value: !Ref HandoffToken
+        - Key: Name
+          Value: !Sub 'cloud-glider-${Environment}-gen-${Generation}'
+        - Key: project
+          Value: cloud-glider
+        - Key: environment
+          Value: !Ref Environment
+        - Key: generation
+          Value: !Ref Generation
+        - Key: owner
+          Value: !Ref Owner
+        - Key: purpose
+          Value: generation-compute
+        - Key: template-version
+          Value: !Ref TemplateVersion
+        - Key: template-sha256
+          Value: !Ref TemplateSha256
+        - Key: template-build-id
+          Value: !Ref TemplateBuildId
+        - Key: bootstrap-version
+          Value: !Ref BootstrapVersion
+
+  GenerationStatusCheckAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'cloud-glider-${Environment}-gen-${Generation}-status-check'
+      AlarmDescription: !Sub 'Generation ${Generation} failed an EC2 system or instance status check.'
+      Namespace: AWS/EC2
+      MetricName: StatusCheckFailed
+      Dimensions:
+        - Name: InstanceId
+          Value: !Ref GenerationInstance
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 2
+      DatapointsToAlarm: 2
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: missing
+      AlarmActions:
+        - !Ref OperationalAlertsTopicArn
+
+Outputs:
+  InstanceId:
+    Value: !Ref GenerationInstance
+  RequestId:
+    Value: !Ref RequestId
+  Generation:
+    Value: !Ref Generation
+  StatusCheckAlarmName:
+    Value: !Ref GenerationStatusCheckAlarm
+  TemplateVersion:
+    Value: !Ref TemplateVersion
+  TemplateS3VersionId:
+    Value: !Ref TemplateS3VersionId
+  TemplateSha256:
+    Value: !Ref TemplateSha256
+  TemplateBuildId:
+    Value: !Ref TemplateBuildId

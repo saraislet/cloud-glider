@@ -1,0 +1,205 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Persistent, operator-managed Cloud Glider launch template; no agent may mutate it.
+
+Parameters:
+  Environment:
+    Type: String
+    Default: sandbox
+    AllowedPattern: '^[a-z][a-z0-9-]{1,15}$'
+  Owner:
+    Type: String
+    MinLength: 1
+    MaxLength: 64
+  ApprovedImageId:
+    Type: AWS::EC2::Image::Id
+    Default: ami-08dd4258d4d19fe06
+  InstanceType:
+    Type: String
+    Default: t4g.micro
+    AllowedValues: [t4g.micro]
+  ImageArchitecture:
+    Type: String
+    Default: arm64
+    AllowedValues: [arm64]
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Default: subnet-0a00b98420d660d03
+  SecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+    Default: sg-0da9cdee2a98d8dc2
+  AgentInstanceProfileName:
+    Type: String
+  GenerationTableName:
+    Type: String
+    AllowedPattern: '^cloud-glider-[a-z][a-z0-9-]{1,15}-generations$'
+  StateTableName:
+    Type: String
+  AgentArtifactBucket:
+    Type: String
+  AgentArtifactKey:
+    Type: String
+    AllowedPattern: '^generation/.+$'
+  AgentArtifactVersionId:
+    Type: String
+    MinLength: 1
+  AgentArtifactSha256:
+    Type: String
+    AllowedPattern: '^[A-Fa-f0-9]{64}$'
+  BootstrapVersion:
+    Type: String
+    MinLength: 1
+    MaxLength: 128
+  TemplateVersion:
+    Type: String
+    MinLength: 1
+    MaxLength: 128
+  TemplateBucket:
+    Type: String
+    MinLength: 3
+  TemplateKey:
+    Type: String
+    AllowedPattern: '^generation/.+$'
+  TemplateS3VersionId:
+    Type: String
+    MinLength: 1
+  TemplateSha256:
+    Type: String
+    AllowedPattern: '^[A-Fa-f0-9]{64}$'
+  TemplateBuildId:
+    Type: String
+    MinLength: 7
+    MaxLength: 128
+  PropagationAuditLogGroupName:
+    Type: String
+  AgentOperationsLogGroupName:
+    Type: String
+  EmergencyHoldFunctionName:
+    Type: String
+  OperationalAlertsTopicArn:
+    Type: String
+    AllowedPattern: '^arn:[a-z0-9-]+:sns:us-west-2:[0-9]{12}:cloud-glider-[a-z][a-z0-9-]{1,15}-operational-alerts$'
+  RootDeviceName:
+    Type: String
+    Default: /dev/sda1
+    AllowedValues: [/dev/sda1]
+  RootVolumeGiB:
+    Type: Number
+    Default: 2
+    AllowedValues: [2]
+
+Rules:
+  SandboxRegionIsUsWest2:
+    Assertions:
+      - Assert: !Equals [!Ref 'AWS::Region', us-west-2]
+        AssertDescription: Cloud Glider's initial sandbox is restricted to us-west-2.
+  SandboxArchitectureIsArm64:
+    Assertions:
+      - Assert: !Equals [!Ref ImageArchitecture, arm64]
+        AssertDescription: Cloud Glider's initial sandbox requires a prevalidated arm64 AMI.
+
+Resources:
+  GenerationLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Sub 'cloud-glider-${Environment}-generation'
+      VersionDescription: !Ref TemplateBuildId
+      TagSpecifications:
+        - ResourceType: launch-template
+          Tags:
+            - Key: project
+              Value: cloud-glider
+            - Key: environment
+              Value: !Ref Environment
+            - Key: owner
+              Value: !Ref Owner
+      LaunchTemplateData:
+        ImageId: !Ref ApprovedImageId
+        InstanceType: !Ref InstanceType
+        IamInstanceProfile:
+          Name: !Ref AgentInstanceProfileName
+        MetadataOptions:
+          HttpEndpoint: enabled
+          HttpPutResponseHopLimit: 1
+          HttpTokens: required
+          InstanceMetadataTags: enabled
+        # Basic monitoring retains free one-minute EC2 status-check metrics.
+        Monitoring:
+          Enabled: false
+        NetworkInterfaces:
+          - AssociatePublicIpAddress: true
+            DeleteOnTermination: true
+            DeviceIndex: 0
+            Groups:
+              - !Ref SecurityGroupId
+            SubnetId: !Ref SubnetId
+        BlockDeviceMappings:
+          - DeviceName: !Ref RootDeviceName
+            Ebs:
+              DeleteOnTermination: true
+              Encrypted: true
+              VolumeSize: !Ref RootVolumeGiB
+              VolumeType: gp3
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: project
+                Value: cloud-glider
+              - Key: environment
+                Value: !Ref Environment
+              - Key: owner
+                Value: !Ref Owner
+              - Key: purpose
+                Value: generation-compute
+          - ResourceType: volume
+            Tags:
+              - Key: project
+                Value: cloud-glider
+              - Key: environment
+                Value: !Ref Environment
+              - Key: owner
+                Value: !Ref Owner
+              - Key: purpose
+                Value: generation-compute
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            set -euo pipefail
+            test "$(uname -m)" = "aarch64"
+            install -d -m 0750 /etc/cloud-glider /opt/cloud-glider
+            cat >/etc/cloud-glider/bootstrap.json <<'JSON'
+            {
+              "propagation_backend": "ec2",
+              "agent_delivery_mode": "baked",
+              "generation_table_name": "${GenerationTableName}",
+              "environment": "${Environment}",
+              "owner": "${Owner}",
+              "operational_alerts_topic_arn": "${OperationalAlertsTopicArn}",
+              "state_table_name": "${StateTableName}",
+              "bootstrap_version": "${BootstrapVersion}",
+              "template_version": "${TemplateVersion}",
+              "template_bucket": "${TemplateBucket}",
+              "template_key": "${TemplateKey}",
+              "template_s3_version_id": "${TemplateS3VersionId}",
+              "template_sha256": "${TemplateSha256}",
+              "template_build_id": "${TemplateBuildId}",
+              "agent_artifact_bucket": "${AgentArtifactBucket}",
+              "agent_artifact_key": "${AgentArtifactKey}",
+              "agent_artifact_version_id": "${AgentArtifactVersionId}",
+              "agent_artifact_sha256": "${AgentArtifactSha256}",
+              "propagation_audit_log_group": "${PropagationAuditLogGroupName}",
+              "agent_operations_log_group": "${AgentOperationsLogGroupName}",
+              "emergency_hold_function_name": "${EmergencyHoldFunctionName}"
+            }
+            JSON
+            chmod 0640 /etc/cloud-glider/bootstrap.json
+            test -f /etc/cloud-glider/image.json
+            test -x /opt/cloud-glider/venv/bin/python
+            /usr/bin/python3 /usr/local/lib/cloud-glider/verify_image.py --config /etc/cloud-glider/bootstrap.json
+            install -d -m 0750 /var/lib/cloud-glider
+            systemctl enable --now cloud-glider.service
+
+Outputs:
+  LaunchTemplateId:
+    Value: !Ref GenerationLaunchTemplate
+  LaunchTemplateVersion:
+    Value: !GetAtt GenerationLaunchTemplate.LatestVersionNumber

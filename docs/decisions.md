@@ -91,3 +91,5 @@ budget is a planning target while billing alerts are deferred; verify current
 [Decision 0017](decisions/0017-baked-image-propagation-reconciliation.md) reconciles baked-image propagation with the current lifecycle contract and records the legacy deployment.
 
 - [Decision 0018](decisions/0018-remove-continuation-preflight.md) removes disposable continuation previews and gates handoff on the real successor.
+
+[Decision 0019](decisions/0019-direct-ec2-propagation.md) adds cycle-fenced direct EC2 successors and integrates the backend with the baked 2 GiB image. Building and isolated-testing the candidate does not deploy or enable propagation.
