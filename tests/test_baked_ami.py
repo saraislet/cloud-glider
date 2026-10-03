@@ -105,3 +105,43 @@ class ImageMetadataTests(unittest.TestCase):
             self.check()
 
 
+class BakedRuntimeTests(unittest.TestCase):
+    def setUp(self):
+        with patch.dict(sys.modules, {'verify_image': verifier}):
+            self.smoke = load('image_smoke', 'ami/files/smoke_test.py')
+        self.prefix = patch.object(self.smoke.sys, 'prefix', '/opt/cloud-glider/venv')
+        self.prefix.start()
+        self.addCleanup(self.prefix.stop)
+
+    def test_sdk_runtime_accepts_no_aws_executable(self):
+        with patch.object(self.smoke.shutil, 'which', side_effect=lambda name: None if name == 'aws' else '/usr/bin/'+name), patch.object(self.smoke.importlib, 'import_module') as imports:
+            self.smoke.verify_runtime()
+            self.assertEqual([call.args[0] for call in imports.call_args_list], ['boto3', 'botocore'])
+
+    def test_missing_sdk_fails_closed(self):
+        with patch.object(self.smoke.shutil, 'which', side_effect=lambda name: None if name == 'aws' else '/usr/bin/'+name), patch.object(self.smoke.importlib, 'import_module', side_effect=ModuleNotFoundError('boto3')):
+            with self.assertRaises(ModuleNotFoundError):
+                self.smoke.verify_runtime()
+
+    def test_cli_containing_image_rejected(self):
+        with patch.object(self.smoke.shutil, 'which', return_value='/usr/bin/tool'):
+            with self.assertRaisesRegex(AssertionError, 'AWS CLI unexpectedly'):
+                self.smoke.verify_runtime()
+
+    def test_wrong_python_environment_rejected(self):
+        with patch.object(self.smoke.sys, 'prefix', '/usr'), patch.object(self.smoke.shutil, 'which', side_effect=lambda name: None if name == 'aws' else '/usr/bin/'+name):
+            with self.assertRaisesRegex(AssertionError, 'agent venv'):
+                self.smoke.verify_runtime()
+
+    def test_installed_current_contract_passes(self):
+        self.smoke.verify_lifecycle_contract()
+
+    def test_legacy_image_contract_is_rejected(self):
+        import dataclasses
+        import types
+        legacy = types.SimpleNamespace(
+            AgentConfig=dataclasses.make_dataclass('LegacyConfig', [('environment', str)]),
+            GENERATION_PARAMETER_NAMES={'Generation'})
+        with patch.dict(sys.modules, {'cloud_glider.agent': legacy}):
+            with self.assertRaisesRegex(AssertionError, 'legacy agent configuration'):
+                self.smoke.verify_lifecycle_contract()
