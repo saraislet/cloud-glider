@@ -90,8 +90,10 @@ operations can finish. Missing or ambiguous evidence blocks additional work.
 - Readiness is polled every 2 seconds. The 10-minute successor wait includes
   stack creation; heartbeat acceptance begins only after `CREATE_COMPLETE`.
   Candidates retain their configured heartbeat cadence. Only a current owner
-  blocked by operator control, hold, or the generation boundary uses a minimum
-  60-second loop interval. Every provisioning and handoff gate still checks
+  blocked by operator control or hold uses a minimum
+  60-second loop interval. The current owner exits successfully at the generation
+  limit, including when propagation is disabled or held. Candidates continue
+  heartbeating until handoff makes them current. Every provisioning and handoff gate still checks
   fresh control and ownership; idle polling is not permission caching.
 - EC2 basic monitoring retains free one-minute status-check metrics. The
   separate status alarm remains corroborating telemetry, not a readiness gate.

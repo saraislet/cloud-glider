@@ -20,7 +20,7 @@ the first instance can immediately begin the bounded propagation cycle.
 
 ## Deploy the trigger before requesting bootstrap
 
-1. Confirm billing and operational notification delivery, cost limits, immutable
+1. Confirm cost limits, immutable
    artifact approvals, and initialized CONTROL/CURRENT records. A prepared READY
    record may exist, but its `bootstrap_requested` Boolean must remain false. Review the added runtime role, stream reads, alarm, Lambda/log costs,
    and eventual generation compute costs.
@@ -88,7 +88,8 @@ aws dynamodb update-item --region us-west-2 \
   --expression-attribute-values '{":ready":{"S":"READY"},":yes":{"BOOL":true},":no":{"BOOL":false}}'
 ```
 
-Confirm compute costs and notification prerequisites before toggling. Keep
+Confirm compute costs before toggling. Billing alerts and notification-delivery
+verification are deferred to V2. Keep
 `CONTROL/GLOBAL.propagation_enabled=false` for the initial inspection trial;
 bootstrap also supports it being true. CloudTrail records the operator toggle.
 Only MODIFY events whose old Boolean is false and new Boolean is true with READY
