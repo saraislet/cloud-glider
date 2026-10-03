@@ -144,6 +144,7 @@ class FakeGateway:
             "PredecessorStackId": self.cfg.predecessor_stack_id,
             "HandoffToken": self.cfg.handoff_token,
             "ApprovedImageId": "ami-approved",
+            "AgentDeliveryMode": "s3",
             "InstanceType": "t4g.micro",
             "ImageArchitecture": "arm64",
             "SubnetId": "subnet-approved",
@@ -283,6 +284,36 @@ class AgentTests(unittest.TestCase):
             agent.cycle()
         self.assertNotIn("heartbeat", gateway.calls)
         self.assertNotIn("create", gateway.calls)
+
+    def test_baked_image_parameters_survive_successor_and_continuation(self):
+        clock = FakeClock()
+        gateway = FakeGateway(config(), clock)
+        parameters = gateway.own_parameters()
+        parameters.update(AgentDeliveryMode="baked", ApprovedImageId="ami-minimal",
+                          RootDeviceName="/dev/sda1", RootVolumeGiB="2")
+        gateway.own_parameters = lambda: parameters
+        agent = self.make_agent(gateway, clock)
+        self.assertEqual(agent.cycle(), "HANDOFF_COMPLETE")
+        for generation in (2, 3):
+            successor = agent._successor_parameters(control(), generation, config().stack_id, "token")
+            for name in ("AgentDeliveryMode", "ApprovedImageId", "RootDeviceName", "RootVolumeGiB"):
+                self.assertEqual(successor[name], parameters[name])
+
+    def test_baked_mode_preserves_stop_and_hold_gates(self):
+        for approved, hold in ((control(propagation_enabled=False), False),
+                               (control(), True)):
+            with self.subTest(hold=hold):
+                clock = FakeClock()
+                gateway = FakeGateway(config(), clock, [approved])
+                parameters = gateway.own_parameters()
+                parameters.update(AgentDeliveryMode="baked", RootDeviceName="/dev/sda1",
+                                  RootVolumeGiB="2")
+                gateway.own_parameters = lambda: parameters
+                gateway.hold_active = hold
+                agent = self.make_agent(gateway, clock)
+                self.assertEqual(agent.cycle(), "STOPPED_BY_OPERATOR")
+                self.assertNotIn("create", gateway.calls)
+                self.assertNotIn("handoff", gateway.calls)
 
     def test_disabled_propagation_only_heartbeats(self):
         clock = FakeClock()

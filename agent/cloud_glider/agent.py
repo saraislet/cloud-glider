@@ -56,7 +56,7 @@ GENERATION_PARAMETER_NAMES = {
     "AgentArtifactVersionId", "AgentArtifactSha256", "BootstrapVersion", "TemplateVersion",
     "TemplateBucket", "TemplateKey", "TemplateS3VersionId", "TemplateSha256", "TemplateBuildId",
     "PropagationAuditLogGroupName", "AgentOperationsLogGroupName", "EmergencyHoldFunctionName",
-    "OperationalAlertsTopicArn", "RootDeviceName", "RootVolumeGiB",
+    "OperationalAlertsTopicArn", "RootDeviceName", "RootVolumeGiB", "AgentDeliveryMode",
 }
 
 

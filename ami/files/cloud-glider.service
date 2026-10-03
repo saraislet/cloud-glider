@@ -1,0 +1,22 @@
+[Unit]
+Description=Cloud Glider propagation agent
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/etc/cloud-glider/bootstrap.json
+
+[Service]
+Type=simple
+ExecStartPre=/usr/bin/python3 /usr/local/lib/cloud-glider/verify_image.py --config /etc/cloud-glider/bootstrap.json
+ExecStart=/opt/cloud-glider/venv/bin/python /opt/cloud-glider/bin/cloud-glider --config /etc/cloud-glider/bootstrap.json
+Restart=on-failure
+RestartSec=15
+Environment=PYTHONUNBUFFERED=1
+User=root
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/cloud-glider
+
+[Install]
+WantedBy=multi-user.target

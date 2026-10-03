@@ -1,0 +1,41 @@
+{
+  "released_on": "2026-10-02",
+  "account": "482268323955",
+  "region": "us-west-2",
+  "ami_id": "ami-027263770a87f2ce1",
+  "root_snapshot_id": "snap-08cdf2a78485cb36a",
+  "root_device": "/dev/sda1",
+  "root_volume_gib": 2,
+  "agent_delivery_mode": "baked",
+  "artifact_bucket": "cloud-glider-sandbox-482268323955-us-west-2-artifacts",
+  "agent": {
+    "key": "generation/minimal-ami-44a1ba87ff77-agent.tar.gz",
+    "version_id": "8_gI8_Z.ujUwVJV5xVs.EZoeadAQO3IY",
+    "sha256": "44a1ba87ff77acd4ca9a7d770bd4085e1fc43e50db3c6bf363a8f25ec8f81522"
+  },
+  "template": {
+    "key": "generation/minimal-ami-generation.yaml",
+    "version_id": "59fGR4pd_IJ_Yzj_bcZPGRLMZ4ZFkZVo",
+    "sha256": "bf804bf8c5512f56eaf48694011525b169f880ed9d49b4ab75bf53013ce8c93d",
+    "build_id": "minimal-ami-bf804bf8c5512f56"
+  },
+  "foundation_status": "UPDATE_COMPLETE",
+  "bootstrap_status": "UPDATE_COMPLETE",
+  "deleted_generation": "000010",
+  "deleted_instance_id": "i-0455d91ca047c2f27",
+  "propagation_enabled": false,
+  "max_generation": 2,
+  "current_status": "UNINITIALIZED",
+  "bootstrap_request_id": "7cc1f5b7-7238-4912-966e-ba24c95a295a",
+  "bootstrap_requested": false,
+  "bootstrap_status_record": "READY",
+  "release_audit_key": {
+    "PK": "AUDIT#PROPAGATION",
+    "SK": "EVENT#2026-10-03T02:17:36.214062+00:00#f1fb1550-29be-4c24-bd82-f8a2e07d1d9e"
+  },
+  "live_propagation_test": "not run",
+  "source_repository": "saraislet/glider",
+  "archive_source_repository": "saraislet/cloud-glider",
+  "lifecycle_contract": "legacy single-table without RequestId/GenerationTableName",
+  "compatible_with_current_main": false
+}

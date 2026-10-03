@@ -1,0 +1,11 @@
+{
+  "source_ami": "ami-0476747aeb146ea00",
+  "subnet_id": "REPLACE_WITH_EXISTING_GENERATION_SUBNET",
+  "security_group_id": "REPLACE_WITH_EXISTING_GENERATION_SECURITY_GROUP",
+  "builder_instance_profile": "cloud-glider-sandbox-image-builder",
+  "agent_artifact": "/ABSOLUTE/PATH/TO/cloud-glider-agent.tar.gz",
+  "agent_sha256": "REPLACE_WITH_AGENT_SHA256",
+  "source_commit": "REPLACE_WITH_FULL_COMMITTED_GIT_SHA",
+  "ssm_version": "REPLACE_WITH_PINNED_X.Y.Z.W",
+  "ssm_sha256": "REPLACE_WITH_VERIFIED_ARM64_DEB_SHA256"
+}

@@ -25,11 +25,27 @@ Parameters:
     Type: AWS::EC2::Subnet::Id
   AllowedSecurityGroupId:
     Type: AWS::EC2::SecurityGroup::Id
+  AgentDeliveryMode:
+    Type: String
+    Default: s3
+    AllowedValues: [s3, baked]
+  RootVolumeGiB:
+    Type: Number
+    Default: 8
+    AllowedValues: [2, 4, 8, 16]
   RootDeviceName:
     Type: String
     Default: /dev/xvda
     AllowedValues: [/dev/xvda, /dev/sda1]
 Rules:
+  SmallRootRequiresBakedImage:
+    Assertions:
+      - Assert:
+          Fn::Or:
+            - !Equals [!Ref AgentDeliveryMode, baked]
+            - !Equals [!Ref RootVolumeGiB, '8']
+            - !Equals [!Ref RootVolumeGiB, '16']
+        AssertDescription: Roots below 8 GiB require an approved custom baked AMI.
   SandboxRegionIsUsWest2:
     Assertions:
       - Assert: !Equals [!Ref 'AWS::Region', us-west-2]
@@ -216,7 +232,7 @@ Resources:
             "AgentOperationsLogGroupName":"/cloud-glider/${Environment}/operations/agent",
             "EmergencyHoldFunctionName":"cloud-glider-${Environment}-emergency-hold",
             "OperationalAlertsTopicArn":"arn:${AWS::Partition}:sns:${AWS::Region}:${AWS::AccountId}:cloud-glider-${Environment}-operational-alerts",
-            "RootDeviceName":"${RootDeviceName}","RootVolumeGiB":"8"}
+            "RootDeviceName":"${RootDeviceName}","RootVolumeGiB":"${RootVolumeGiB}","AgentDeliveryMode":"${AgentDeliveryMode}"}
       Tags:
         - {Key: project, Value: cloud-glider}
         - {Key: environment, Value: !Ref Environment}
