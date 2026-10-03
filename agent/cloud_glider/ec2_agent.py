@@ -167,7 +167,9 @@ class Ec2Agent:
         self.correlation_id = str(uuid.uuid4())
         self.lease_owner = f"{config.generation}:{gateway.instance_id}:{uuid.uuid4()}"
         self.heartbeat_sequence = 0
-        self._poll_seconds = 5
+        # Ownership observations are independent of health publication cadence.
+        self._poll_seconds = 1
+        self._last_heartbeat_at = None
 
     @property
     def generation_number(self) -> int:
@@ -741,12 +743,16 @@ class Ec2Agent:
             )
 
     def cycle(self) -> str:
-        self._poll_seconds = 5
+        self._poll_seconds = 1
         control, hold = self.gateway.read_control_and_hold()
         control = self._validated_control(control)
-        self._poll_seconds = int(control["heartbeat_interval_seconds"])
         current = self.gateway.read_current()
-        self.heartbeat(control, hold, current)
+        now = self.timing_clock()
+        if self._last_heartbeat_at is None or now - self._last_heartbeat_at >= int(
+            control["heartbeat_interval_seconds"]
+        ):
+            self.heartbeat(control, hold, current)
+            self._last_heartbeat_at = now
         if not self.is_current_owner(current):
             return "CANDIDATE"
         if hold or not control["propagation_enabled"]:
@@ -757,7 +763,7 @@ class Ec2Agent:
             self.lease_owner,
             self.config.generation,
             now,
-            now + max(60, self._poll_seconds * 4),
+            now + max(60, int(control["heartbeat_interval_seconds"]) * 4),
         ):
             return "LEASE_NOT_ACQUIRED"
         try:

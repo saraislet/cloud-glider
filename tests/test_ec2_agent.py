@@ -88,7 +88,7 @@ def control(**overrides):
         approved_architecture="arm64",
         approved_instance_types=["t4g.micro"],
         environment="sandbox",
-        readiness_poll_seconds=2,
+        readiness_poll_seconds=1,
         readiness_required_heartbeats=2,
         heartbeat_interval_seconds=5,
         readiness_timeout_seconds=30,
@@ -276,11 +276,59 @@ class AgentTests(unittest.TestCase):
         clock = FakeClock()
         gateway = FakeGateway(cfg, clock)
         agent = Agent(
-            cfg, gateway, clock=clock, sleep=clock.sleep, logger=lambda _: None
+            cfg,
+            gateway,
+            clock=clock,
+            sleep=clock.sleep,
+            logger=lambda _: None,
+            timing_clock=clock,
         )
         agent.verify_self()
         gateway.calls.clear()
         return agent, gateway, clock
+
+    def test_candidate_polls_each_second_but_heartbeats_remain_five_seconds_apart(self):
+        agent, gateway, clock = self.setup_agent()
+        gateway.current["instance_id"] = CHILD
+        for second in range(6):
+            self.assertEqual(agent.cycle(), "CANDIDATE")
+            self.assertEqual(agent._poll_seconds, 1)
+            clock.sleep(1)
+        self.assertEqual(gateway.calls.count("control"), 6)
+        self.assertEqual(gateway.calls.count("heartbeat"), 2)
+        self.assertEqual(agent.heartbeat_sequence, 2)
+
+    def test_readiness_polling_comparison_preserves_heartbeat_spacing(self):
+        for interval, expected in ((1, 5), (2, 6)):
+            with self.subTest(interval=interval):
+                agent, gateway, clock = self.setup_agent()
+                gateway.control["readiness_poll_seconds"] = interval
+                spec, identifier = agent.provision_successor(gateway.control)
+                gateway.calls.clear()
+                start = clock()
+                state = agent.wait_for_healthy_successor(
+                    gateway.control, spec, identifier
+                )
+                self.assertEqual(state["instance_id"], CHILD)
+                self.assertEqual(clock() - start, expected)
+                self.assertEqual(gateway.calls.count("renew"), gateway.reads)
+                self.assertEqual(gateway.calls.count("control"), gateway.reads)
+
+    def test_stop_on_ownership_transition_is_seen_between_heartbeats(self):
+        for hold in (False, True):
+            with self.subTest(hold=hold):
+                agent, gateway, clock = self.setup_agent()
+                current = dict(gateway.current)
+                gateway.current["instance_id"] = CHILD
+                self.assertEqual(agent.cycle(), "CANDIDATE")
+                clock.sleep(1)
+                gateway.current = current
+                gateway.hold_active = hold
+                gateway.control["propagation_enabled"] = hold
+                self.assertEqual(agent.cycle(), "STOPPED_BY_OPERATOR")
+                self.assertEqual(gateway.calls.count("heartbeat"), 1)
+                self.assertNotIn("acquire", gateway.calls)
+                self.assertFalse(gateway.created)
 
     def test_phase_timing_keeps_success_deferred_and_failure_distinct(self):
         import json
@@ -473,7 +521,12 @@ class AgentTests(unittest.TestCase):
         self.assertNotIn("handoff", g.calls)
         self.assertEqual(g.current["instance_id"], CHILD)
         restarted = Agent(
-            a.config, g, clock=clock, sleep=clock.sleep, logger=lambda _: None
+            a.config,
+            g,
+            clock=clock,
+            sleep=clock.sleep,
+            logger=lambda _: None,
+            timing_clock=clock,
         )
         with self.assertRaises(TransientFailure):
             restarted.cycle()

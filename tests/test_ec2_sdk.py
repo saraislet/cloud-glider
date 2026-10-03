@@ -99,21 +99,96 @@ class Ec2SdkTests(unittest.TestCase):
                 "predecessor_instance_id": parent,
             }
         )
-        self.g.describe_instance = Mock(
-            return_value={"State": {"Name": "shutting-down"}}
+        self.g.describe_instances_exact = Mock(
+            return_value={
+                identifier: {"State": {"Name": "shutting-down"}}
+                for identifier in (self.cfg.instance_id, parent)
+            }
         )
         with self.assertRaisesRegex(TransientFailure, "ceiling"):
             self.g.check_capacity(2)
-        self.assertEqual(self.g.describe_instance.call_count, 2)
+        self.g.describe_instances_exact.assert_called_once_with(
+            sorted([self.cfg.instance_id, parent])
+        )
         self.g._call.assert_not_called()
 
     def test_capacity_missing_exact_lookup_never_frees_slot(self):
         self.g._pages = Mock(return_value=[])
         self.g.read_current = Mock(return_value={"instance_id": self.cfg.instance_id})
-        self.g.describe_instance = Mock(return_value=None)
+        self.g.describe_instances_exact = Mock(
+            side_effect=TransientFailure("ambiguous")
+        )
         with self.assertRaisesRegex(TransientFailure, "ambiguous"):
             self.g.check_capacity(3)
         self.g._call.assert_not_called()
+
+    def test_capacity_skips_only_completed_predecessor_and_keeps_current(self):
+        parent = "i-" + "9" * 17
+        for predecessor in (parent, self.cfg.instance_id):
+            with self.subTest(predecessor=predecessor):
+                self.g._pages = Mock(return_value=[])
+                self.g.read_current = Mock(
+                    return_value={
+                        "instance_id": self.cfg.instance_id,
+                        "predecessor_instance_id": predecessor,
+                        "retirement_completed": True,
+                    }
+                )
+                self.g.describe_instances_exact = Mock(
+                    return_value={self.cfg.instance_id: {"State": {"Name": "running"}}}
+                )
+                with self.assertRaisesRegex(TransientFailure, "ceiling"):
+                    self.g.check_capacity(1)
+                self.g.describe_instances_exact.assert_called_once_with(
+                    [self.cfg.instance_id]
+                )
+
+    def test_exact_batch_uses_valid_sdk_request_and_propagates_errors(self):
+        with self.assertRaisesRegex(TransientFailure, "incomplete"):
+            self.g.describe_instances_exact([self.cfg.instance_id])
+        self.assertEqual(self.calls[-1][2], {"InstanceIds": [self.cfg.instance_id]})
+        self.g._call = Mock(return_value={"_returncode": 1, "_error": "lookup denied"})
+        with self.assertRaisesRegex(TransientFailure, "lookup denied"):
+            self.g.describe_instances_exact([self.cfg.instance_id])
+
+    def test_exact_batch_rejects_missing_duplicate_and_unexpected_instances(self):
+        identifiers = ["i-" + "1" * 17, "i-" + "2" * 17]
+        for returned in (
+            [identifiers[0]],
+            [identifiers[0]] * 2,
+            [identifiers[0], "i-" + "3" * 17],
+        ):
+            self.g._call = Mock(
+                return_value={
+                    "Reservations": [
+                        {
+                            "Instances": [
+                                {"InstanceId": identifier} for identifier in returned
+                            ]
+                        }
+                    ]
+                }
+            )
+            with self.assertRaisesRegex(TransientFailure, "incomplete"):
+                self.g.describe_instances_exact(identifiers)
+        self.g._call = Mock(
+            return_value={
+                "Reservations": [
+                    {
+                        "Instances": [
+                            {"InstanceId": identifier, "Tags": []}
+                            for identifier in reversed(identifiers)
+                        ]
+                    }
+                ]
+            }
+        )
+        self.assertEqual(
+            set(self.g.describe_instances_exact(identifiers)), set(identifiers)
+        )
+        self.g._call.assert_called_once_with(
+            "ec2", "describe_instances", allow_failure=True, InstanceIds=identifiers
+        )
 
     def test_claim_fences_cycle_stop_hold_and_both_tables_atomically(self):
         self.g.claim_submission(self.spec)

@@ -84,7 +84,8 @@ def build_transaction(args: argparse.Namespace, *, now: str, event_id: str) -> l
             raise ValueError("EC2 requires a positive numeric --launch-template-version")
         if not SHA256_RE.fullmatch(args.launch_template_sha256 or ""):
             raise ValueError("EC2 requires --launch-template-sha256")
-        control.update(propagation_backend=av_string("ec2"),
+        control.update(readiness_poll_seconds={"N": str(defaults["ec2_readiness_poll_seconds"])},
+            propagation_backend=av_string("ec2"),
             concurrency_model=av_string("EC2_DRY_RUN_THEN_RETIRE"),
             approved_account_id=av_string(args.approved_account_id),
             launch_template_id=av_string(args.launch_template_id),

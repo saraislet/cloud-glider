@@ -52,20 +52,23 @@ class Ec2SdkGateway(AwsSdkGateway):
         # Filtered EC2 inventory can lag. CURRENT and its durable retirement
         # target remain occupied unless an exact lookup proves termination.
         current = self.read_current()
-        for identifier in (
-            current.get("instance_id"),
-            current.get("predecessor_instance_id"),
-        ):
-            if not identifier or identifier == "NONE":
-                continue
-            if (
-                identifier == current.get("predecessor_instance_id")
-                and current.get("retirement_completed") is True
-            ):
-                continue
-            instance = self.describe_instance(identifier)
-            if not instance:
-                raise TransientFailure("capacity identity lookup is ambiguous")
+        identifiers = sorted(
+            {
+                identifier
+                for identifier in (
+                    current.get("instance_id"),
+                    current.get("predecessor_instance_id"),
+                )
+                if identifier
+                and identifier != "NONE"
+                and not (
+                    identifier == current.get("predecessor_instance_id")
+                    and current.get("retirement_completed") is True
+                    and identifier != current.get("instance_id")
+                )
+            }
+        )
+        for identifier, instance in self.describe_instances_exact(identifiers).items():
             if instance["State"]["Name"] != "terminated":
                 occupied.add(identifier)
         live = len(occupied)
@@ -132,17 +135,24 @@ class Ec2SdkGateway(AwsSdkGateway):
             raise TransientFailure("approved subnet lacks IP capacity")
 
     def describe_instance(self, instance_id: str) -> dict | None:
+        return self.describe_instances_exact([instance_id])[instance_id]
+
+    def describe_instances_exact(self, instance_ids: list[str]) -> dict[str, dict]:
+        identifiers = sorted(set(instance_ids))
+        if not identifiers:
+            return {}
         result = self._call(
-            "ec2", "describe_instances", allow_failure=True, InstanceIds=[instance_id]
+            "ec2", "describe_instances", allow_failure=True, InstanceIds=identifiers
         )
         if result.get("_returncode"):
             raise TransientFailure(result["_error"])
         instances = [
             i for r in result.get("Reservations", []) for i in r.get("Instances", [])
         ]
-        if len(instances) != 1 or instances[0]["InstanceId"] != instance_id:
+        returned = [i["InstanceId"] for i in instances]
+        if len(returned) != len(identifiers) or set(returned) != set(identifiers):
             raise TransientFailure("exact instance lookup was incomplete")
-        return self._instance(instances[0])
+        return {i["InstanceId"]: self._instance(i) for i in instances}
 
     @staticmethod
     def _instance(instance: dict) -> dict:

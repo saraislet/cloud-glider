@@ -72,3 +72,14 @@ measured overlap, nine handoffs, terminal retirement and full cleanup. Propagati
 is disabled at idle; the operator-selected max_generation is 10 and the absolute
 three-instance ceiling is retained. Future source changes require a matching
 archive/AMI, reviewed pins and an observed bounded test before claiming improvement.
+
+## Polling configuration review
+
+See the [source-only polling evaluation](ec2-polling-evaluation.md) for the
+one-second EC2 ownership loop, separately spaced heartbeats, operator-selected one-second
+readiness default, batched capacity identities and unchanged image
+verification. Review increased DynamoDB reads and lease-renewal writes before
+deployment. New EC2 CONTROL initialization selects one second; CloudFormation initialization
+retains two seconds. Existing CONTROL records require an approved configuration
+update during deployment; initialization cannot overwrite them. Heartbeat interval
+five seconds and two required healthy heartbeats remain unchanged.

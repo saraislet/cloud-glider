@@ -57,6 +57,20 @@ class InitializeControlTests(unittest.TestCase):
         self.assertEqual(control["agent_artifact_version_id"], {"S": "agent-version-1"})
         self.assertEqual(control["agent_artifact_sha256"], {"S": "b" * 64})
 
+    def test_ec2_initialization_uses_one_second_readiness_with_unchanged_health_gate(self):
+        transaction = initialize_control.build_transaction(
+            self.args(propagation_backend="ec2", approved_account_id="111122223333",
+                      launch_template_id="lt-" + "a" * 17, launch_template_version="1",
+                      launch_template_sha256="c" * 64),
+            now="2026-10-03T00:00:00.000Z", event_id="event-ec2",
+        )
+        control = transaction[0]["Put"]["Item"]
+        self.assertEqual(control["readiness_poll_seconds"], {"N": "1"})
+        self.assertEqual(control["heartbeat_interval_seconds"], {"N": "5"})
+        self.assertEqual(control["readiness_required_heartbeats"], {"N": "2"})
+        self.assertFalse(control["cycle_initialized"]["BOOL"])
+        self.assertFalse(control["start_requested"]["BOOL"])
+
     def test_initialization_does_not_create_a_hold(self):
         transaction = initialize_control.build_transaction(
             self.args(), now="2026-08-24T00:00:00.000Z", event_id="event-1"

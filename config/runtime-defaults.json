@@ -4,6 +4,7 @@
   "image_architecture": "arm64",
   "heartbeat_interval_seconds": 5,
   "readiness_poll_seconds": 2,
+  "ec2_readiness_poll_seconds": 1,
   "readiness_required_heartbeats": 2,
   "readiness_timeout_seconds": 600,
   "max_generation": 2,
