@@ -1,7 +1,7 @@
 # 0020: Bounded EC2 launch and retirement overlap
 
-Status: accepted for implementation at the operator's request; deployment and
-benchmark require separate authorization.
+Status: accepted at the operator's request; implemented and validated by a
+separately authorized deployment and bounded benchmark on October 3, 2026.
 
 Supersedes decision 0019's serialized launch rule for EC2. Decisions 0005/0006
 inform this overlap, but EC2 keeps its continuation DryRun and health gates.
@@ -29,5 +29,9 @@ recovery; this change does not introduce autonomous general cleanup.
 
 The serialized benchmark reported 544.8 seconds and 56.4 seconds mean ownership
 interval versus the earlier CloudFormation 405.991 and 39.481 seconds. Different
-releases and single trials cannot isolate backend causality. This implementation
-has no measured speedup; test a separately authorized release before claiming one.
+releases and single trials cannot isolate backend causality. The separately
+authorized release at `04bc90f` has now completed a
+ten-generation live test with sampled overlap, nine handoffs and full cleanup.
+See the [timing log](../performance-log.md) and
+[release receipt](../../config/releases/2026-10-03-ec2-overlap-minimal-ami.json)
+for the measured comparison and single-trial limits.

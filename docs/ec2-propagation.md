@@ -64,7 +64,11 @@ one retiring predecessor, current owner and candidate may coexist. Stop/HOLD
 blocks retries and handoff. Terminal generations wait for confirmed retirement.
 
 The integrated source includes the profile ARN correction merged in PR #12
-(`cabf646`). Build a new artifact and matching baked
-AMI, review all pins, and deploy only after separate operator authorization with
-the prior cycle cleaned and propagation disabled. Authorize a separate bounded
-benchmark to measure performance and slow-termination behavior.
+(`cabf646`). The separately authorized overlap release at `04bc90f` was baked,
+cold-boot tested, deployed and verified over generations 0–9. The
+[overlap receipt](../config/releases/2026-10-03-ec2-overlap-minimal-ami.json)
+records AMI `ami-0dd526b0623ff67a3`, Launch Template version 2 and its exact digest,
+measured overlap, nine handoffs, terminal retirement and full cleanup. Propagation
+is disabled at idle; the operator-selected max_generation is 10 and the absolute
+three-instance ceiling is retained. Future source changes require a matching
+archive/AMI, reviewed pins and an observed bounded test before claiming improvement.

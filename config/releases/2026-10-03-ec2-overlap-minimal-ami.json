@@ -1,0 +1,652 @@
+{
+  "repository": "saraislet/cloud-glider",
+  "region": "us-west-2",
+  "account_id": "482268323955",
+  "source_commit": "04bc90fb84e62ab2abe42d9dc792693deb633418",
+  "source_pull_request": "https://github.com/saraislet/cloud-glider/pull/13",
+  "image_id": "ami-0dd526b0623ff67a3",
+  "snapshot_id": "snap-011e5b3e4f10a0106",
+  "agent_sha256": "03d6d617574a4d82ec3cd5307eed69e42029562cc7fdff10c3df05ff11063203",
+  "agent_delivery_mode": "baked",
+  "root_volume_gib": 2,
+  "root_encrypted": true,
+  "architecture": "arm64",
+  "source_ami": "ami-0476747aeb146ea00",
+  "build_duration_seconds": 752,
+  "packer_run_uuid": "17ea37a4-630d-a2d8-9e08-c85b28b12ca1",
+  "metadata_checks_passed": true,
+  "release_approved": true,
+  "deployment_status": "DEPLOYED_TEN_GENERATION_OVERLAP_TEST_PASSED_CLEANED",
+  "smoke": {
+    "result": "CLOUD_GLIDER_AMI_SMOKE_PASS",
+    "free_bytes": 632483840,
+    "agent_sha256": "03d6d617574a4d82ec3cd5307eed69e42029562cc7fdff10c3df05ff11063203",
+    "python": "3.12.3",
+    "ec2_contract": "EC2_BAKED_CONTRACT_PASS",
+    "stack_deleted": true,
+    "instance_id": "i-0fcdcceafe42b17dd",
+    "instance_terminated": true,
+    "root_volumes_deleted": [
+      "vol-0aee72293125351dc"
+    ],
+    "instance_profile": null,
+    "verification": "Explicit CloudFormation WaitCondition success payload; no propagation configuration or agent role."
+  },
+  "build_cleanup": {
+    "builder_id": "i-07b2f166101aa1f61",
+    "terminated": true,
+    "deleted_volumes": [
+      "vol-0620a1187fb8c4916",
+      "vol-0587bb24e632378b5"
+    ],
+    "temporary_keypair_absent": true,
+    "active_builder_sessions": 0
+  },
+  "launch_template": {
+    "id": "lt-09e12d4ca882601db",
+    "version": 2,
+    "sha256": "13ee56cfa32d0ded2a83eb3c400033d8bdd5769aa467c57e76e08df5597d11de"
+  },
+  "artifacts": {
+    "agent": {
+      "bucket": "cloud-glider-sandbox-482268323955-us-west-2-artifacts",
+      "key": "generation/overlap-03d6d617574a4d82ec3cd5307eed69e42029562cc7fdff10c3df05ff11063203-cloud-glider-agent.tar.gz",
+      "version_id": "buINhMbhZ1vzVKOKgUGo5hbz5LsiGw7E",
+      "sha256": "03d6d617574a4d82ec3cd5307eed69e42029562cc7fdff10c3df05ff11063203"
+    },
+    "image": {
+      "image_id": "ami-0dd526b0623ff67a3",
+      "snapshot_id": "snap-011e5b3e4f10a0106",
+      "metadata_checks_passed": true
+    }
+  },
+  "validation": {
+    "tests_passed": 262,
+    "cfn_lint": "PASS",
+    "repository_checks": "PASS",
+    "rendered_bootstrap": "PASS",
+    "ci": "validate: PASS at baked source 04bc90f",
+    "failure_paths": "Disabled propagation, HOLD, duplicate and ambiguous submission, missing identity, failed handoff, retirement overlap, restart without duplicate launch, two-slot capacity and exact-lookup ambiguity."
+  },
+  "performance": {
+    "request_id": "5",
+    "seed_stack_creation_at": "2026-10-03 09:57:59.846000+00:00",
+    "seed_creation_to_initial_ownership_seconds": 36.192,
+    "observed_generations": 10,
+    "observed_handoffs": 9,
+    "mean_ownership_interval_seconds": 38.777,
+    "min_ownership_interval_seconds": 31.323,
+    "max_ownership_interval_seconds": 43.475,
+    "seed_creation_to_last_ownership_seconds": 385.187,
+    "hold_samples": 0,
+    "generations": [
+      {
+        "generation": 0,
+        "instance_id": "i-0080e686a1fc1dcc8",
+        "ownership_at": "2026-10-03T09:58:36.038Z",
+        "first_observed_healthy_heartbeat": {
+          "updated_at": "2026-10-03T09:58:36.093Z",
+          "sequence": 1,
+          "status": "CURRENT"
+        },
+        "launch_time": "2026-10-03 09:58:04+00:00",
+        "final_observed_instance_state": "terminated",
+        "launch_to_first_observed_healthy_heartbeat_seconds": 32.093
+      },
+      {
+        "generation": 1,
+        "instance_id": "i-061645ca65a25ec4b",
+        "ownership_at": "2026-10-03T09:59:07.361Z",
+        "first_observed_healthy_heartbeat": {
+          "updated_at": "2026-10-03T09:58:59.494Z",
+          "sequence": 1,
+          "status": "CANDIDATE"
+        },
+        "ownership_interval_seconds": 31.323,
+        "launch_time": "2026-10-03 09:58:38+00:00",
+        "final_observed_instance_state": "terminated",
+        "launch_to_first_observed_healthy_heartbeat_seconds": 21.494
+      },
+      {
+        "generation": 2,
+        "instance_id": "i-0eb0d2828cd634cb0",
+        "ownership_at": "2026-10-03T09:59:43.966Z",
+        "first_observed_healthy_heartbeat": {
+          "updated_at": "2026-10-03T09:59:36.928Z",
+          "sequence": 1,
+          "status": "CANDIDATE"
+        },
+        "retirement_completed_first_observed_at": "2026-10-03T10:00:21.296036+00:00",
+        "ownership_interval_seconds": 36.605,
+        "launch_time": "2026-10-03 09:59:12+00:00",
+        "final_observed_instance_state": "terminated",
+        "launch_to_first_observed_healthy_heartbeat_seconds": 24.928,
+        "ownership_to_first_observed_retirement_completed_seconds": 37.33
+      },
+      {
+        "generation": 3,
+        "instance_id": "i-090eed37f2337c67e",
+        "ownership_at": "2026-10-03T10:00:21.734Z",
+        "first_observed_healthy_heartbeat": {
+          "updated_at": "2026-10-03T10:00:13.252Z",
+          "sequence": 1,
+          "status": "CANDIDATE"
+        },
+        "ownership_interval_seconds": 37.768,
+        "launch_time": "2026-10-03 09:59:49+00:00",
+        "final_observed_instance_state": "terminated",
+        "launch_to_first_observed_healthy_heartbeat_seconds": 24.252
+      },
+      {
+        "generation": 4,
+        "instance_id": "i-04dabe7fe1e45b245",
+        "ownership_at": "2026-10-03T10:01:01.890Z",
+        "first_observed_healthy_heartbeat": {
+          "updated_at": "2026-10-03T10:00:53.123Z",
+          "sequence": 1,
+          "status": "CANDIDATE"
+        },
+        "retirement_completed_first_observed_at": "2026-10-03T10:01:38.817886+00:00",
+        "ownership_interval_seconds": 40.156,
+        "launch_time": "2026-10-03 10:00:25+00:00",
+        "final_observed_instance_state": "terminated",
+        "launch_to_first_observed_healthy_heartbeat_seconds": 28.123,
+        "ownership_to_first_observed_retirement_completed_seconds": 36.928
+      },
+      {
+        "generation": 5,
+        "instance_id": "i-03b8d525006f346ef",
+        "ownership_at": "2026-10-03T10:01:39.106Z",
+        "first_observed_healthy_heartbeat": {
+          "updated_at": "2026-10-03T10:01:31.735Z",
+          "sequence": 1,
+          "status": "CANDIDATE"
+        },
+        "ownership_interval_seconds": 37.216,
+        "launch_time": "2026-10-03 10:01:05+00:00",
+        "final_observed_instance_state": "terminated",
+        "launch_to_first_observed_healthy_heartbeat_seconds": 26.735
+      },
+      {
+        "generation": 6,
+        "instance_id": "i-04d2dfeb30477778c",
+        "ownership_at": "2026-10-03T10:02:20.230Z",
+        "first_observed_healthy_heartbeat": {
+          "updated_at": "2026-10-03T10:02:12.754Z",
+          "sequence": 1,
+          "status": "CANDIDATE"
+        },
+        "retirement_completed_first_observed_at": "2026-10-03T10:03:03.827682+00:00",
+        "ownership_interval_seconds": 41.124,
+        "launch_time": "2026-10-03 10:01:44+00:00",
+        "final_observed_instance_state": "terminated",
+        "launch_to_first_observed_healthy_heartbeat_seconds": 28.754,
+        "ownership_to_first_observed_retirement_completed_seconds": 43.598
+      },
+      {
+        "generation": 7,
+        "instance_id": "i-0c2d50ac4dbb86bb9",
+        "ownership_at": "2026-10-03T10:03:03.705Z",
+        "first_observed_healthy_heartbeat": {
+          "updated_at": "2026-10-03T10:02:55.314Z",
+          "sequence": 1,
+          "status": "CANDIDATE"
+        },
+        "ownership_interval_seconds": 43.475,
+        "launch_time": "2026-10-03 10:02:25+00:00",
+        "final_observed_instance_state": "terminated",
+        "launch_to_first_observed_healthy_heartbeat_seconds": 30.314
+      },
+      {
+        "generation": 8,
+        "instance_id": "i-00e6bb544503a7a99",
+        "ownership_at": "2026-10-03T10:03:43.906Z",
+        "first_observed_healthy_heartbeat": {
+          "updated_at": "2026-10-03T10:03:35.513Z",
+          "sequence": 1,
+          "status": "CANDIDATE"
+        },
+        "ownership_interval_seconds": 40.201,
+        "launch_time": "2026-10-03 10:03:07+00:00",
+        "final_observed_instance_state": "terminated",
+        "launch_to_first_observed_healthy_heartbeat_seconds": 28.513
+      },
+      {
+        "generation": 9,
+        "instance_id": "i-09a611fc3d411ed34",
+        "ownership_at": "2026-10-03T10:04:25.033Z",
+        "first_observed_healthy_heartbeat": {
+          "updated_at": "2026-10-03T10:04:18.147Z",
+          "sequence": 1,
+          "status": "CANDIDATE"
+        },
+        "retirement_completed_first_observed_at": "2026-10-03T10:04:46.177753+00:00",
+        "ownership_interval_seconds": 41.127,
+        "launch_time": "2026-10-03 10:03:48+00:00",
+        "final_observed_instance_state": "running",
+        "launch_to_first_observed_healthy_heartbeat_seconds": 30.147,
+        "ownership_to_first_observed_retirement_completed_seconds": 21.145
+      }
+    ],
+    "measurement_limits": [
+      "API LaunchTime is rounded to seconds. First observed workload-healthy heartbeat is a startup proxy, not the authoritative readiness decision.",
+      "Retirement completion is first observed by a roughly 3.5-second sampler, not an exact phase duration.",
+      "Internal phase durations are not remotely exported; DryRun and handoff phase timings are unmeasured.",
+      "Single trials with different source/image and retirement behavior cannot isolate an EC2-versus-CloudFormation causal speedup."
+    ],
+    "monitor": {
+      "outcome": "TERMINAL_GENERATION_RETIRED_PREDECESSOR",
+      "peak_live": 3,
+      "observed_instances": 10,
+      "elapsed_seconds": 460.5811460018158
+    },
+    "endpoint_components": [
+      {
+        "from_generation": 0,
+        "to_generation": 1,
+        "ownership_to_successor_launch_seconds": 1.962,
+        "successor_launch_to_first_healthy_heartbeat_seconds": 21.494,
+        "first_healthy_heartbeat_to_ownership_seconds": 7.867
+      },
+      {
+        "from_generation": 1,
+        "to_generation": 2,
+        "ownership_to_successor_launch_seconds": 4.639,
+        "successor_launch_to_first_healthy_heartbeat_seconds": 24.928,
+        "first_healthy_heartbeat_to_ownership_seconds": 7.038
+      },
+      {
+        "from_generation": 2,
+        "to_generation": 3,
+        "ownership_to_successor_launch_seconds": 5.034,
+        "successor_launch_to_first_healthy_heartbeat_seconds": 24.252,
+        "first_healthy_heartbeat_to_ownership_seconds": 8.482
+      },
+      {
+        "from_generation": 3,
+        "to_generation": 4,
+        "ownership_to_successor_launch_seconds": 3.266,
+        "successor_launch_to_first_healthy_heartbeat_seconds": 28.123,
+        "first_healthy_heartbeat_to_ownership_seconds": 8.767
+      },
+      {
+        "from_generation": 4,
+        "to_generation": 5,
+        "ownership_to_successor_launch_seconds": 3.11,
+        "successor_launch_to_first_healthy_heartbeat_seconds": 26.735,
+        "first_healthy_heartbeat_to_ownership_seconds": 7.371
+      },
+      {
+        "from_generation": 5,
+        "to_generation": 6,
+        "ownership_to_successor_launch_seconds": 4.894,
+        "successor_launch_to_first_healthy_heartbeat_seconds": 28.754,
+        "first_healthy_heartbeat_to_ownership_seconds": 7.476
+      },
+      {
+        "from_generation": 6,
+        "to_generation": 7,
+        "ownership_to_successor_launch_seconds": 4.77,
+        "successor_launch_to_first_healthy_heartbeat_seconds": 30.314,
+        "first_healthy_heartbeat_to_ownership_seconds": 8.391
+      },
+      {
+        "from_generation": 7,
+        "to_generation": 8,
+        "ownership_to_successor_launch_seconds": 3.295,
+        "successor_launch_to_first_healthy_heartbeat_seconds": 28.513,
+        "first_healthy_heartbeat_to_ownership_seconds": 8.393
+      },
+      {
+        "from_generation": 8,
+        "to_generation": 9,
+        "ownership_to_successor_launch_seconds": 4.094,
+        "successor_launch_to_first_healthy_heartbeat_seconds": 30.147,
+        "first_healthy_heartbeat_to_ownership_seconds": 6.886
+      }
+    ],
+    "endpoint_component_means": {
+      "ownership_to_successor_launch_seconds": 3.896,
+      "successor_launch_to_first_healthy_heartbeat_seconds": 27.029,
+      "first_healthy_heartbeat_to_ownership_seconds": 7.852
+    },
+    "sample_cadence_seconds": {
+      "median": 3.496,
+      "max": 3.82
+    },
+    "comparison": {
+      "cloudformation_baseline": {
+        "seed_startup_seconds": 50.662,
+        "mean_ownership_interval_seconds": 39.481,
+        "total_seconds": 405.991,
+        "sampled_live_peak": 3
+      },
+      "serialized_ec2": {
+        "seed_startup_seconds": 37.239,
+        "mean_ownership_interval_seconds": 56.391,
+        "total_seconds": 544.756,
+        "sampled_live_peak": 2
+      },
+      "overlap_ec2": {
+        "seed_startup_seconds": 36.192,
+        "mean_ownership_interval_seconds": 38.777,
+        "total_seconds": 385.187,
+        "sampled_live_peak": 3
+      },
+      "cloudformation_baseline_comparison": {
+        "total_duration_change_percent": -5.124,
+        "mean_interval_change_percent": -1.783
+      },
+      "serialized_ec2_comparison": {
+        "total_duration_change_percent": -29.292,
+        "mean_interval_change_percent": -31.235
+      }
+    },
+    "cloudtrail_counts_before_cleanup": {
+      "RunInstances:SUCCESS": 10,
+      "RunInstances:Client.DryRunOperation": 8,
+      "TerminateInstances:SUCCESS": 9
+    },
+    "overlap_evidence": {
+      "sampled_overlap_confirmed": true,
+      "overlapping_owner_count": 8,
+      "overlap_observations": [
+        {
+          "at": "2026-10-03T09:59:14.697037+00:00",
+          "owner_generation": "000001",
+          "predecessor_instance_id": "i-0080e686a1fc1dcc8",
+          "predecessor_state": "shutting-down",
+          "candidate_ids": [
+            "i-0eb0d2828cd634cb0"
+          ],
+          "current_retirement_completed": false,
+          "live_count": 3
+        },
+        {
+          "at": "2026-10-03T09:59:53.381501+00:00",
+          "owner_generation": "000002",
+          "predecessor_instance_id": "i-061645ca65a25ec4b",
+          "predecessor_state": "shutting-down",
+          "candidate_ids": [
+            "i-090eed37f2337c67e"
+          ],
+          "current_retirement_completed": false,
+          "live_count": 3
+        },
+        {
+          "at": "2026-10-03T10:00:28.441165+00:00",
+          "owner_generation": "000003",
+          "predecessor_instance_id": "i-0eb0d2828cd634cb0",
+          "predecessor_state": "shutting-down",
+          "candidate_ids": [
+            "i-04dabe7fe1e45b245"
+          ],
+          "current_retirement_completed": false,
+          "live_count": 3
+        },
+        {
+          "at": "2026-10-03T10:01:07.165953+00:00",
+          "owner_generation": "000004",
+          "predecessor_instance_id": "i-090eed37f2337c67e",
+          "predecessor_state": "shutting-down",
+          "candidate_ids": [
+            "i-03b8d525006f346ef"
+          ],
+          "current_retirement_completed": false,
+          "live_count": 3
+        },
+        {
+          "at": "2026-10-03T10:01:46.114083+00:00",
+          "owner_generation": "000005",
+          "predecessor_instance_id": "i-04dabe7fe1e45b245",
+          "predecessor_state": "shutting-down",
+          "candidate_ids": [
+            "i-04d2dfeb30477778c"
+          ],
+          "current_retirement_completed": false,
+          "live_count": 3
+        },
+        {
+          "at": "2026-10-03T10:02:28.568205+00:00",
+          "owner_generation": "000006",
+          "predecessor_instance_id": "i-03b8d525006f346ef",
+          "predecessor_state": "shutting-down",
+          "candidate_ids": [
+            "i-0c2d50ac4dbb86bb9"
+          ],
+          "current_retirement_completed": false,
+          "live_count": 3
+        },
+        {
+          "at": "2026-10-03T10:03:10.994267+00:00",
+          "owner_generation": "000007",
+          "predecessor_instance_id": "i-04d2dfeb30477778c",
+          "predecessor_state": "shutting-down",
+          "candidate_ids": [
+            "i-00e6bb544503a7a99"
+          ],
+          "current_retirement_completed": false,
+          "live_count": 3
+        },
+        {
+          "at": "2026-10-03T10:03:49.805113+00:00",
+          "owner_generation": "000008",
+          "predecessor_instance_id": "i-0c2d50ac4dbb86bb9",
+          "predecessor_state": "shutting-down",
+          "candidate_ids": [
+            "i-09a611fc3d411ed34"
+          ],
+          "current_retirement_completed": false,
+          "live_count": 3
+        }
+      ],
+      "handoffs_observed": [
+        {
+          "from_generation": "000000",
+          "to_generation": "000001",
+          "observed_at": "2026-10-03T09:59:11.057807+00:00",
+          "prior_retirement_target": null,
+          "target_state_at_observation": null
+        },
+        {
+          "from_generation": "000001",
+          "to_generation": "000002",
+          "observed_at": "2026-10-03T09:59:46.181100+00:00",
+          "prior_retirement_target": "i-0080e686a1fc1dcc8",
+          "target_state_at_observation": "terminated"
+        },
+        {
+          "from_generation": "000002",
+          "to_generation": "000003",
+          "observed_at": "2026-10-03T10:00:24.756868+00:00",
+          "prior_retirement_target": "i-061645ca65a25ec4b",
+          "target_state_at_observation": "terminated"
+        },
+        {
+          "from_generation": "000003",
+          "to_generation": "000004",
+          "observed_at": "2026-10-03T10:01:03.477129+00:00",
+          "prior_retirement_target": "i-0eb0d2828cd634cb0",
+          "target_state_at_observation": "terminated"
+        },
+        {
+          "from_generation": "000004",
+          "to_generation": "000005",
+          "observed_at": "2026-10-03T10:01:42.294165+00:00",
+          "prior_retirement_target": "i-090eed37f2337c67e",
+          "target_state_at_observation": "terminated"
+        },
+        {
+          "from_generation": "000005",
+          "to_generation": "000006",
+          "observed_at": "2026-10-03T10:02:21.387656+00:00",
+          "prior_retirement_target": "i-04dabe7fe1e45b245",
+          "target_state_at_observation": "terminated"
+        },
+        {
+          "from_generation": "000006",
+          "to_generation": "000007",
+          "observed_at": "2026-10-03T10:03:07.333957+00:00",
+          "prior_retirement_target": "i-03b8d525006f346ef",
+          "target_state_at_observation": "terminated"
+        },
+        {
+          "from_generation": "000007",
+          "to_generation": "000008",
+          "observed_at": "2026-10-03T10:03:46.155084+00:00",
+          "prior_retirement_target": "i-04d2dfeb30477778c",
+          "target_state_at_observation": "terminated"
+        },
+        {
+          "from_generation": "000008",
+          "to_generation": "000009",
+          "observed_at": "2026-10-03T10:04:28.738636+00:00",
+          "prior_retirement_target": "i-0c2d50ac4dbb86bb9",
+          "target_state_at_observation": "terminated"
+        }
+      ],
+      "sampled_ceiling": 3,
+      "hold_samples": 0,
+      "limits": "Corroboration from sampled EC2 state, not exact termination timestamps; authoritative handoff is the guarded agent transaction."
+    },
+    "phase_timing_limitation": "Internal phase JSON remains in instance journals; individual API durations are not remotely exported."
+  },
+  "propagation_cleanup": {
+    "verified": true,
+    "request_id": "6",
+    "propagation_enabled": false,
+    "bootstrap_requested": false,
+    "cleanup_status": "COMPLETE",
+    "current_status": "UNINITIALIZED",
+    "max_generation": 10,
+    "max_live_generations": 3,
+    "hold_present": false,
+    "provisioning_lock_present": false,
+    "propagation_lock_present": false,
+    "live_instances": 0,
+    "benchmark_instances_terminated": 10,
+    "root_volumes_deleted": 10,
+    "attached_volumes": 0,
+    "generation_alarms": 0,
+    "active_generation_stacks": 0,
+    "generation_records_remaining": 0,
+    "approved_ami_retained": true,
+    "approved_snapshot_retained": true,
+    "approved_launch_template_retained": true,
+    "control_sha256": "16e629b9c706fb9f78cecb75b5a0d212ac7ba6c8be28ed2d9396c0fbd370f9b0"
+  },
+  "cleanup_request_sequencing": {
+    "precheck": "A pre-cleanup assertion ran before stop settled; shell sequencing incorrectly continued to the supported cleanup request.",
+    "correction": "Subsequent commands use fail-fast sequencing. Supported cleanup applies its own fencing, and fresh reads verified disabled propagation/bootstrap, no HOLD and both locks absent before deletion completed."
+  },
+  "start_retry": {
+    "first_command": "Rejected without provisioning while stale previous CONTROL cleanup status reconciled from DELETING to COMPLETE.",
+    "recovery": "Confirmed READY request, UNINITIALIZED CURRENT, absent HOLD/provisioning/lease and conclusive rejection; retried supported start once. No unconditional state reset."
+  },
+  "deployment": {
+    "stacks": {
+      "cloud-glider-sandbox-boundaries": "UPDATE_COMPLETE",
+      "cloud-glider-sandbox": "UPDATE_COMPLETE",
+      "cloud-glider-sandbox-bootstrap": "UPDATE_COMPLETE",
+      "cloud-glider-sandbox-launch-template": "UPDATE_COMPLETE"
+    },
+    "desired_template_version": "ec2-04bc90f-overlap",
+    "desired_bootstrap_version": "ec2-04bc90f-overlap",
+    "runtime_permission_changes": "Exact new private image substitution only; existing actions, roles, resource patterns and exact /cloud-glider/ profile restriction retained.",
+    "activation_control_sha256": "ab947c6eabad593261af63af1fa979e4a32b5db2a20cef61cc6f72a3df4c9fe6"
+  },
+  "private_evidence_sha256": {
+    "artifacts.json": "c456e89498aef5deee9f94911779feee9e406bd7ba43ccfbe69c9e0ffcb18e21",
+    "benchmark-alarms-after-cleanup.json": "b246d35e2643f86f8ac607fce757b5f6f90bd72be7fd3bc4a93ba78d5aad9602",
+    "benchmark-analysis.json": "8c1992eb01ac9480abfb699f12ca952d2a3c27734c4a0b7799bf1fe74616f77f",
+    "benchmark-cleanup-progress.json": "189e400060baecb0adfe8f0aa3ea81fca49e1e8307ce6d06ee61ee3592ec9ad9",
+    "benchmark-current-000000.json": "01a5231bcee93178fca47829c66298ee91d9406e4fcf35f1512546a17830f427",
+    "benchmark-current-000001.json": "4583a36135bbab155d519bf4fee6ea81de2dc086b3858e05f29678ed5a20c6ff",
+    "benchmark-current-000002.json": "17483edb4a0c423a51e70091c1ca968dc3644ff10b6ab972d7d48ebef53e1923",
+    "benchmark-current-000003.json": "7a2678b047586cd3e3d23d46f4389b1c676c3cf6c98f521084bbd277101229d1",
+    "benchmark-current-000004.json": "a69c313b93ce9eef834f552f869d66c25929d7e1a8c2d7d71a0262e74776fd0f",
+    "benchmark-current-000005.json": "a442293cc9d1a3d4f08e7fd7bd61340c9762538fa541f2b4c4aab5da4feb8d1a",
+    "benchmark-current-000006.json": "d97d17b135601d2d02ddbefd7d31dcaf71760d51272da2e9e33823ab9bb7f8e9",
+    "benchmark-current-000007.json": "c88fc14c411695495b9b2a9097d83756de12c480ddf90f856ff8843c6f3374ee",
+    "benchmark-current-000008.json": "a55fda2d10fafe7137cf5848b1794f5508f82f9c36f5a7129c060af12ce29f1f",
+    "benchmark-current-000009.json": "0e0187578648aa12837778cf5d4c2c01e1344fd046d8596d271e8e2528aecd44",
+    "benchmark-ec2-cloudtrail-events.json": "8df04741d260a2eb45385010e33436f62db0d1239cccc2096cf0843f3c74ff47",
+    "benchmark-exact-instances-terminal.json": "3cbdc5e88471cc267ee56968ca64b5ffd0cf3095913020721d57f9a86f70093a",
+    "benchmark-final-verification.json": "b8fa976514ab194d9670552c49cf814b696ec5e07364eef3d5fb8b4aa1192fc2",
+    "benchmark-generation-inventory.json": "8abe79f3411f3ab991f6bfa50305bdb93f4e4d445274ba0b848651285b41af98",
+    "benchmark-handoff-000001.json": "ecafbcd5ef9f78f12cad231366e51366ba816d8cdf131cea12ec4b52cca71b65",
+    "benchmark-handoff-000002.json": "c6a9dcf76d5d0b07e73fb1f8fbc1607678f16ea53992592be67337cbd66fbe83",
+    "benchmark-handoff-000003.json": "e1965e4bac5d51ffed0b055fb7fc579d03a80f7a542adc5deaa7d913bb376c69",
+    "benchmark-handoff-000004.json": "c05c3d7cbb53a6463504419422d87824f184f968f02f6815c0fbaf8d53837722",
+    "benchmark-handoff-000005.json": "59549b04d9438a04b986d03433b34eae09f0f8016e6c083b2a882dde73417e0e",
+    "benchmark-handoff-000006.json": "94a7efe317f7f1cb41fe5b5d0c503069593765dbcbd34aab56bdbfb860bb0f4f",
+    "benchmark-handoff-000007.json": "bb53f8cff925a4bea98905976b86a64b8a7b91c15afe70cb929fe1632bf44fec",
+    "benchmark-handoff-000008.json": "21b02cb130dbbf755b30634837bcd6489ca844e897691e9df28bc938c3966999",
+    "benchmark-handoff-000009.json": "39119a90cec074bfcfebdbaa20e383e1f78bfd5976f72eac57d983ba0094ac74",
+    "benchmark-instances-after-cleanup.json": "8a651e66ce13f5ba2c859982fbf9103a15936b8dcb32c9b36e8319f7d32b9058",
+    "benchmark-instances.json": "f7fed997404cbe8cba2a08baa24ef58f20ec34467fd3bcfcd90e72ffa221e748",
+    "benchmark-live-after-cleanup.json": "2d422a73abc05c31be44403215ec416f1749b38d3d1293850a80f6066e4faacb",
+    "benchmark-monitor-result.json": "901c4b2e9098716cdeae18f0b063b226ea09a7f95e45e88a2194e693b94824cb",
+    "benchmark-overlap-evidence.json": "72fb1c4470f44a948bb04c47cf2281243ab03befea4e73b4bb8a7cf0215faf8e",
+    "benchmark-seed-after-cleanup.json": "36750e0de92c76eabe26a7b2e84007658359984579b611deeb538f12ee1f5693",
+    "benchmark-seed-events-terminal.json": "0296432d18fe1afb4ca5189be4fb8b3c5107314b4d9e4003fe1d12616d857671",
+    "benchmark-seed-stack-terminal.json": "4d2adb0a45e167b2e572479807964a06122581e9576d026f249969ab2006d086",
+    "benchmark-seed-stack.json": "69f790357b4c695d64730807e0a50c0485102db35ac0714e39a7c733f27da53c",
+    "benchmark-state-000000.json": "c1b5de956fe863db0b45ee368978d8d411aff0a6d5354abab1c5c1da697b8651",
+    "benchmark-state-000001.json": "7b6c96596a9edeb1ca11c12cb5ab8d643db518785809d6cbf57a2ce1f41afd1f",
+    "benchmark-state-000002.json": "30b519ee43593fa0f7c006c673844d617643aca08898b078b60aa7ca83a7d9ce",
+    "benchmark-state-000003.json": "cb3ba98b09e7564340c9779a0451a7b3c1d515f3d2d6cd00795d05ed4c9bbb93",
+    "benchmark-state-000004.json": "3733abbd1f343092e1208bb4c95e84dc66309c77170cfcd26650d72c49861350",
+    "benchmark-state-000005.json": "40f82ea6a86557b63e407a5cb94555e3c217c03a737d8d9685140933b880533e",
+    "benchmark-state-000006.json": "a7e36967a444eea12dc3cbafa6f8a4f1ef2ddbc1989649d4f302aaaac68129da",
+    "benchmark-state-000007.json": "0dbf760dcc79e0cbcf130ddcf080a9d5810f627faa2951ab67ff0015c78c1f5b",
+    "benchmark-state-000008.json": "5beb9c40ebfcbdcc5fb3a0834bec114d0bd9b9cf190ac3352c565f62536d2c0f",
+    "benchmark-state-000009.json": "74a4b7ff48b33fbdc779d8115f7fd0e32752e8e39dc2e4b9060b04c4a35f6e07",
+    "benchmark-stopped-state.json": "753ae23e06d13a1c70ab091e9bd2ee30b62910d87ef9bde251a8765ac1d29718",
+    "benchmark-terminal-state.json": "33a6b23a5c01be7f9aef651c924516a92819d237ce17af814b79cc559f06fc74",
+    "benchmark-volumes-after-cleanup.json": "cb27cdf679b41353a0992cbaf5e6a261a75ca8f9b596e4f92bd12fe48fc10a1e",
+    "builder-cleanup.json": "73a87ed01c9c8011467b256dbad0343d1718e5898c92d5c8e35aefeb4e287fa1",
+    "cap-6-10-transaction.json": "2a854a1674daeb197584aba4f610a867c10a0e3a3727bcb637f9414b97ce1c8f",
+    "cloud-glider-sandbox-before.json": "ea2efdd092f70f94e590c203e06ae1061df7a1d3a3839430152c8c79152c4180",
+    "cloud-glider-sandbox-bootstrap-before.json": "9b757cc8e30b16dc0fc469a50b7d0a4ec2081aa6729fc766764307591675f43f",
+    "cloud-glider-sandbox-bootstrap-changeset-create.json": "9f3fc64300d886480946b44a07e17d7b11692d743956ab8c2661dc76aafd67ad",
+    "cloud-glider-sandbox-bootstrap-changeset.json": "a7b150ce1bf393a4711f5a31c5020abd1963e9912c34cf5f70f021c40c3e140c",
+    "cloud-glider-sandbox-bootstrap-deployed.json": "0e84fdfe7818fd351d6cc19e35c99f4d2f1a9ce231baa4aa2ff89ce3ef0981eb",
+    "cloud-glider-sandbox-bootstrap-request.json": "aa80822d8916f41eb996764fd68e55051cccae0d814a51f59deb736b05d3a308",
+    "cloud-glider-sandbox-boundaries-before.json": "117477dc607fad6606afc637b5f91bfb7a1c164d949e1ca7b9d8595d61904aba",
+    "cloud-glider-sandbox-boundaries-changeset-create.json": "6f864d315d4b151383b2df8ce8eb3944346034a24c4ccb32b816e5a93f74dc83",
+    "cloud-glider-sandbox-boundaries-changeset.json": "3f9644ab648e198b2b6ff75a07f0aa92864c9ef6600bebfd7a89050514482a57",
+    "cloud-glider-sandbox-boundaries-deployed.json": "463197e430a9411b063a19769fc8dc5d5e413aa9b22e87c7e77726004a23fb25",
+    "cloud-glider-sandbox-boundaries-request.json": "ecac2bdc529703318aa23d6a625c09a5facd61cfcf31eddbdf2413074671e72f",
+    "cloud-glider-sandbox-changeset-create.json": "e55b4f5ac3cd83d2e22478ed4694f0cb555c4152be92f0be1ebaa61c0c873947",
+    "cloud-glider-sandbox-changeset.json": "68b2e19baf5739a8d64b8038b914539845c26f682a95d03f056ada68ced8208c",
+    "cloud-glider-sandbox-deployed.json": "acf8e4040528a13024b7bc32e3b3575e725aacb6cf2a8af79b8b188a7a121c2a",
+    "cloud-glider-sandbox-launch-template-before.json": "17a154f890003a8f97abc6714a8f4f567d64a59f0a3b1d3c3ec72efc9777bbe8",
+    "cloud-glider-sandbox-launch-template-changeset-create.json": "50af07e627bfa5355904ada9bc58dbaf73b2563e9ce73c8f66c2a4b23c545e2c",
+    "cloud-glider-sandbox-launch-template-changeset.json": "ba46a2512d80b066e9494a23b7d45b4131f89ec457c27ea9e40444028f4e825b",
+    "cloud-glider-sandbox-launch-template-deployed.json": "874aa6056f0200ce064ee459b43db0cd9855f61340db53e9a0a7cd42a363170f",
+    "cloud-glider-sandbox-launch-template-request.json": "294183448dae9f05ef6f830cd80f628b6823c598ab46c5bf64ff7bd3d191aa97",
+    "cloud-glider-sandbox-request.json": "98ef7c1ebec2ae3c7d179c017e5102d7233bee754248c6716f1379697a67a121",
+    "idle-state-5-9.json": "73986aeda594edde028c5d1817348c060cdaf8050e3f980908e2d90c9fd94247",
+    "idle-state-6-10.json": "84e3fbebd77684e3dad7c9b2c368e27349922c8b8b8abac91dffa941c199bbc1",
+    "image-metadata-gate.json": "31ecfc472b01cd80aa57a6e774ca6fef2391794944a831bac61f1a0c7fa8eeb1",
+    "image-metadata.json": "4206a2ebe83423c4198a96981ee25e87f210691726e1ce9dc790ea588a77637c",
+    "launch-template-pins.json": "e29b397b99fcaa91ce486c49a784db231fe66a2df0716d135644c42b00153fd2",
+    "launch-template-version.json": "5867639cb86b409b2036c03cb796bf97dd59eb09ce9598b5a5da425a54f4ffbd",
+    "maintenance-hold-transaction.json": "04d8c4b2c54afd1f3a7703a1367df697655562ed342622d324899bbe0d5693c2",
+    "offline-activation-transaction.json": "ccdd7d419150afc7090345e717d65577496d92b362d182e422423de3b25de9af",
+    "runtime-role-policies.json": "642dd49805892852a2ad2ddcbc69ff356622b3c57012b5e45dee0a84eccc4bcf",
+    "smoke-cleanup.json": "30f8d04063300199deaff5c601923861ab30d5b1ab72f7e728a6743bc6ccbc56",
+    "smoke-events.json": "23e6d0738a6a86d96c1969b12afd92c42bf76cf771716e9e8a9fad1ee6a4222e",
+    "smoke-instance.json": "da5b2433e9c6b549c2e2fee57b35efe28053ab6fb6f84a323e7c0b63312325d0",
+    "smoke-result.json": "3070e64758b307ef38fe0e3180ff52478289a186899ae0407466a5f90f5a47b4",
+    "smoke-stack-create.json": "960b976b466628cfef5f45e39990b53c961216055ccdc8660282c87ade7cf457",
+    "smoke-stack-current.json": "d2a8e54ae28a3494906d0ea67abfdacdd59f0d941226df39cf6a85b3c1ae2304",
+    "snapshot-metadata.json": "cb64325a70ded8f86685867addc0b11a3598b2420a28805f88059224b5d950f4",
+    "start-rejected-idle-confirmed.json": "a662e95253a83080919bd5e5e83b88ad31b79a2228da6b4a1e71e038918a3f98",
+    "state-before.json": "8be8aa0b6f3564da2e7babd388918611991b24b05be0cd63d5d82269a0221f84",
+    "packer-build.log": "dedccc4dc0ed01fbfea944a6ed37ba0ddba4a3ff4f3e7fd49ae1424cc811611d",
+    "ami-build-manifest.json": "3d9a6e548ec35f34d62438a4fa7f1fbb705175b4f081f6f4c015415324dd6909",
+    "benchmark-samples.jsonl": "d00f775fdbf618759bd0fb2de2a9d1239068dea38211cb4e3abf32453e784634"
+  }
+}
