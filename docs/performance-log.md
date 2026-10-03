@@ -1,8 +1,21 @@
 # Generation and propagation timing log
 
-Public summaries of generation timing. Append run results and corrections;
+Public summaries of generation timing. Keep dated entries in reverse
+chronological order, with newest run results and corrections first;
 keep raw operational evidence private. Use UTC timestamps and seconds, and
 write `not measured` for missing durations.
+
+## October 3: fixed baked image, ten generations
+
+The operator-authorized run from merged preflight-removal source completed
+generations 0–9 with nine handoffs and no hold. Initial creation-to-ownership:
+50.662s. First creation-to-final ownership: 405.991s. Mean ownership interval:
+39.481s; range 38.555–42.458s. Observed live-instance peak: three, sampled at
+about 3.3s including pending and shutting-down instances. All benchmark stacks
+were deleted; propagation is disabled and max_generation restored to 2.
+See the [release receipt](../config/releases/2026-10-03-preflight-removal-minimal-ami.json)
+for exact source/image identities and per-generation timings. These measurements
+exclude build/deployment/cleanup; the earlier failed benchmark is historical.
 
 ## 2026-10-02 UTC — Run through generation 10
 
@@ -110,15 +123,3 @@ data, and raw logs; follow the [audit logging contract](audit-logging.md).
   the predecessor; include retries and failed hops in timing summaries.
 - Compare hop intervals and overlap across repeated comparable runs; report
   sample count and median/range before proposing timing targets.
-
-## October 3: fixed baked image, ten generations
-
-The operator-authorized run from merged preflight-removal source completed
-generations 0–9 with nine handoffs and no hold. Initial creation-to-ownership:
-50.662s. First creation-to-final ownership: 405.991s. Mean ownership interval:
-39.481s; range 38.555–42.458s. Observed live-instance peak: three, sampled at
-about 3.3s including pending and shutting-down instances. All benchmark stacks
-were deleted; propagation is disabled and max_generation restored to 2.
-See the [release receipt](../config/releases/2026-10-03-preflight-removal-minimal-ami.json)
-for exact source/image identities and per-generation timings. These measurements
-exclude build/deployment/cleanup; the earlier failed benchmark is historical.
