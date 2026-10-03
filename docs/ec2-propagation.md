@@ -72,3 +72,13 @@ measured overlap, nine handoffs, terminal retirement and full cleanup. Propagati
 is disabled at idle; the operator-selected max_generation is 10 and the absolute
 three-instance ceiling is retained. Future source changes require a matching
 archive/AMI, reviewed pins and an observed bounded test before claiming improvement.
+
+## Polling configuration review
+
+See the [source-only polling evaluation](ec2-polling-evaluation.md) for the
+one-second EC2 ownership loop, separately spaced heartbeats, optional one-second
+readiness configuration, batched capacity identities and unchanged image
+verification. Review increased DynamoDB reads and lease-renewal writes before
+deployment. The shared readiness default remains two seconds; selecting one
+second for an EC2 cycle requires reviewed CONTROL configuration with heartbeat
+interval five seconds and two required healthy heartbeats preserved.
