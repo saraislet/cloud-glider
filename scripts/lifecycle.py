@@ -24,7 +24,7 @@ def build_update(table, request, action, actor, now):
         if request.get('cleanup_status') != {'S': 'NEEDS_ATTENTION'}:
             raise ValueError('Only an inspected NEEDS_ATTENTION cleanup can be resumed')
         assignments.update(cleanup_requested={'BOOL': True}, cleanup_status={'S': 'QUIESCING'},
-            cleanup_started_at={'N': str(now)}, cleanup_error={'S': ''},
+            cleanup_started_at={'N': str(now)}, cleanup_error={'S': ''}, cleanup_retry_token={'S': ''},
             propagation_enabled={'BOOL': False}, bootstrap_requested={'BOOL': False})
         condition += ' AND cleanup_status = :attention'
         values.pop(':no')

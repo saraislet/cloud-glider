@@ -88,6 +88,21 @@ def decision(policy, action, resource, context=None):
 
 
 class GuardrailTests(unittest.TestCase):
+    def test_cleanup_scheduler_boundary_is_limited_to_its_group_and_role(self):
+        policy = self.boundaries['BootstrapBoundary']
+        schedule = 'arn:aws:scheduler:us-west-2:' + ACCOUNT + ':schedule/' + PREFIX + '-cleanup/cleanup-1-1'
+        retry_role = ROLE + PREFIX + '-cleanup-retry'
+        for action in ('scheduler:CreateSchedule', 'scheduler:GetSchedule', 'scheduler:DeleteSchedule'):
+            self.assertEqual(decision(policy, action, schedule), 'allowed')
+            self.assertEqual(decision(policy, action, schedule.replace('-cleanup/', '-other/')), 'implicitDeny')
+            self.assertEqual(decision(policy, action, schedule.replace('cleanup-1-1', 'bootstrap-1')), 'implicitDeny')
+        self.assertEqual(decision(policy, 'iam:PassRole', retry_role, {'iam:PassedToService': 'scheduler.amazonaws.com'}), 'allowed')
+        self.assertEqual(decision(policy, 'iam:PassRole', retry_role, {'iam:PassedToService': 'ec2.amazonaws.com'}), 'implicitDeny')
+        function = 'arn:aws:lambda:us-west-2:' + ACCOUNT + ':function:' + PREFIX + '-bootstrap'
+        self.assertEqual(decision(self.boundaries['CleanupRetryBoundary'], 'lambda:InvokeFunction', function), 'allowed')
+        self.assertEqual(decision(self.boundaries['CleanupRetryBoundary'], 'lambda:InvokeFunction', function.replace('-bootstrap', '-other')), 'implicitDeny')
+        self.assertEqual(decision(self.boundaries['CleanupRetryBoundary'], 'dynamodb:PutItem', TABLE), 'implicitDeny')
+
     def test_foundation_lifecycle_resources_are_scoped(self):
         policy = self.boundaries['FoundationBoundary']
         generations = TABLE.replace('-state', '-generations')
@@ -101,7 +116,7 @@ class GuardrailTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.template = json.loads((ROOT / "cfn/permission-boundaries.json").read_text())
-        cls.boundaries = {name: resolve(resource["Properties"]["PolicyDocument"], VALUES) for name, resource in cls.template["Resources"].items()}
+        cls.boundaries = {name: resolve(resource["Properties"]["PolicyDocument"], VALUES) for name, resource in cls.template["Resources"].items() if resource["Type"] == "AWS::IAM::ManagedPolicy"}
         cls.organization = {name: json.loads(text) for name, text in renderer.render_policies(CONFIG).items()}
 
     def boundary(self, name, action, resource, context=None):
@@ -291,6 +306,8 @@ class GuardrailTests(unittest.TestCase):
     def test_policy_sizes_include_expanded_cloudformation_parameters(self):
         largest = {**VALUES, "Environment": "environment12345", "ApprovedGenerationTemplateUrl": "x" * self.template["Parameters"]["ApprovedGenerationTemplateUrl"]["MaxLength"], "AllowedImageId": "ami-0123456789abcdef0", "AllowedSubnetId": "subnet-0123456789abcdef0", "AllowedSecurityGroupId": "sg-0123456789abcdef0"}
         for name, resource in self.template["Resources"].items():
+            if resource["Type"] != "AWS::IAM::ManagedPolicy":
+                continue
             policy = resolve(resource["Properties"]["PolicyDocument"], largest)
             with self.subTest(name=name):
                 self.assertLessEqual(len(json.dumps(policy, separators=(",", ":"))), 6144)

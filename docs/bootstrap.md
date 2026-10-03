@@ -6,9 +6,8 @@ Use one DynamoDB item: `CONTROL/GLOBAL` in `cloud-glider-sandbox-state`, Region
 ## AWS Lambda
 
 The existing `cloud-glider-sandbox-bootstrap` Lambda launches the first generation.
-This release extends it with the three switches below, automatic request preparation,
-cleanup, and result messages. **The new interface and cleanup are implemented on the
-branch but are not deployed to AWS yet.** Follow deployment/migration below first.
+This release adds the three switches below, automatic request preparation,
+cleanup, and result messages. Follow deployment/migration below before first use.
 
 ## Start, stop, or clean up through DynamoDB
 
@@ -36,8 +35,10 @@ Examples of `last_result`:
 - “Cleanup complete. Ready for another start.”
 
 Processing is asynchronous; DynamoDB does not show a Lambda popup. Refresh to see
-the result. A once-per-minute reconciliation timer recovers pending requests and
-continues accepted operations. SUBMITTED means AWS accepted creation, not workload
+the result. DynamoDB triggers each request. While cleanup remains active, the
+Lambda schedules one retry about a minute later. Each completed schedule deletes
+itself; completion or a problem needing attention stops further scheduling.
+There is no idle timer or scheduled bootstrap retry. SUBMITTED means AWS accepted creation, not workload
 health. An emergency hold blocks start.
 
 Cleanup waits for in-flight creation, deletes verified stacks through CloudFormation,
@@ -46,7 +47,7 @@ Holds, shared infrastructure, artifacts, and audit/log storage remain; some cost
 
 ## If an operation fails
 
-1. Read `last_result`. Check `/aws/lambda/cloud-glider-sandbox-bootstrap` logs and stack events.
+1. Read `last_result`. For bootstrap delivery failures, inspect the submitted stack and provisioning marker before retrying delivery; no permanent timer retries bootstrap. Check `/aws/lambda/cloud-glider-sandbox-bootstrap` logs and stack events.
 2. Resolve the reported submission, ownership, deletion, or residual-resource problem.
 3. Submitted bootstrap retries verify the exact stack and restore inventory before clearing a matching marker. If `LOCK/PROVISIONING` remains, confirm the submission outcome and that its process has finished before conditionally clearing it. Age or one empty listing is insufficient.
 4. Request cleanup again to resume it, or use the recovery helper below. Start during cleanup is rejected, not queued.
@@ -92,11 +93,11 @@ controller allows three minutes for an outstanding submission marker to settle.
 
 ## Deploy or migrate this release
 
-1. Independently administer the reviewed permission-boundary update; foundation/bootstrap deployment cannot change those ceilings. Review foundation/bootstrap change sets, runtime permissions, independent boundary updates, and timer costs. Require no state-table replacement; do not broaden deployment permissions.
+1. Deploy reviewed boundaries, the cleanup schedule group, and its delivery role through the independently administered boundary stack. Review runtime permissions; require no state-table replacement.
 2. Create the retained `cloud-glider-sandbox-generations` table through the reviewed foundation change set while operator provisioning is paused; do not replace the control table. Publish approved, immutable generation-template and agent-artifact versions with their SHA-256 digests. The template requires `RequestId` and `GenerationTableName`.
 3. For an existing installation, complete the offline migration below. For a new one, initialize approved CONTROL/CURRENT settings.
 4. Apply coordinated reviewed templates and artifact settings.
-5. Verify CONTROL stream filters, Lambda concurrency one, reconciliation, and IAM before use.
+5. Verify CONTROL stream filters, Lambda concurrency one, cleanup-only schedules, and IAM. Remove the old recurring rule.
 
 ### Existing installation: offline migration
 
