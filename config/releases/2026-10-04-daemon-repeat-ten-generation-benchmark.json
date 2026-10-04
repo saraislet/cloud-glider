@@ -1,0 +1,119 @@
+{
+  "run": "E",
+  "date": "2026-10-04",
+  "source_commit": "a32e6c90d7ba41596a72f2514be69cc0774cf243",
+  "generations": 10,
+  "handoffs": 9,
+  "backend": "ec2",
+  "instance_type": "t4g.micro",
+  "mean_hop_seconds": 30.19311112827725,
+  "median_hop_seconds": 29.501999855041504,
+  "hop_range_seconds": [
+    26.198000192642212,
+    34.473000049591064
+  ],
+  "generation_endpoints": [
+    {
+      "generation": 0,
+      "launch_to_first_observed_live_state_seconds": 28.3785879611969,
+      "launch_to_functional_proof_seconds": null,
+      "functional_proof_to_ownership_seconds": null,
+      "launch_to_ownership_seconds": 27.658999919891357,
+      "ownership_hop_seconds": null
+    },
+    {
+      "generation": 1,
+      "launch_to_first_observed_live_state_seconds": 25.431923866271973,
+      "launch_to_functional_proof_seconds": 23.0,
+      "functional_proof_to_ownership_seconds": 3.7190001010894775,
+      "launch_to_ownership_seconds": 26.719000101089478,
+      "ownership_hop_seconds": 28.06000018119812
+    },
+    {
+      "generation": 2,
+      "launch_to_first_observed_live_state_seconds": 22.480236053466797,
+      "launch_to_functional_proof_seconds": 22.0,
+      "functional_proof_to_ownership_seconds": 3.684000015258789,
+      "launch_to_ownership_seconds": 25.68400001525879,
+      "ownership_hop_seconds": 27.96499991416931
+    },
+    {
+      "generation": 3,
+      "launch_to_first_observed_live_state_seconds": 30.554347038269043,
+      "launch_to_functional_proof_seconds": 28.0,
+      "functional_proof_to_ownership_seconds": 4.1570000648498535,
+      "launch_to_ownership_seconds": 32.15700006484985,
+      "ownership_hop_seconds": 34.473000049591064
+    },
+    {
+      "generation": 4,
+      "launch_to_first_observed_live_state_seconds": 21.60777497291565,
+      "launch_to_functional_proof_seconds": 22.0,
+      "functional_proof_to_ownership_seconds": 3.740999937057495,
+      "launch_to_ownership_seconds": 25.740999937057495,
+      "ownership_hop_seconds": 28.58399987220764
+    },
+    {
+      "generation": 5,
+      "launch_to_first_observed_live_state_seconds": 29.681645154953003,
+      "launch_to_functional_proof_seconds": 27.0,
+      "functional_proof_to_ownership_seconds": 4.700999975204468,
+      "launch_to_ownership_seconds": 31.700999975204468,
+      "ownership_hop_seconds": 33.96000003814697
+    },
+    {
+      "generation": 6,
+      "launch_to_first_observed_live_state_seconds": 27.7424418926239,
+      "launch_to_functional_proof_seconds": 25.0,
+      "functional_proof_to_ownership_seconds": 4.265000104904175,
+      "launch_to_ownership_seconds": 29.265000104904175,
+      "ownership_hop_seconds": 31.564000129699707
+    },
+    {
+      "generation": 7,
+      "launch_to_first_observed_live_state_seconds": 25.80534291267395,
+      "launch_to_functional_proof_seconds": 23.0,
+      "functional_proof_to_ownership_seconds": 3.7669999599456787,
+      "launch_to_ownership_seconds": 26.76699995994568,
+      "ownership_hop_seconds": 29.501999855041504
+    },
+    {
+      "generation": 8,
+      "launch_to_first_observed_live_state_seconds": 28.87208914756775,
+      "launch_to_functional_proof_seconds": 25.0,
+      "functional_proof_to_ownership_seconds": 4.198999881744385,
+      "launch_to_ownership_seconds": 29.198999881744385,
+      "ownership_hop_seconds": 31.431999921798706
+    },
+    {
+      "generation": 9,
+      "launch_to_first_observed_live_state_seconds": 23.932106018066406,
+      "launch_to_functional_proof_seconds": 23.0,
+      "functional_proof_to_ownership_seconds": 1.3970000743865967,
+      "launch_to_ownership_seconds": 24.397000074386597,
+      "ownership_hop_seconds": 26.198000192642212
+    }
+  ],
+  "seed_creation_to_initial_ownership_seconds": 31.984999895095825,
+  "seed_creation_to_final_ownership_seconds": 303.72300004959106,
+  "sampled_live_peak": 3,
+  "observer_cadence_median_seconds": 2.0050201416015625,
+  "observer_cadence_max_seconds": 2.0052850246429443,
+  "internal_boot_api_phase_timings": "NOT_MEASURED",
+  "collection_blocker": "Runtime SSM and SSH disabled; timing journals remain local and are not exported.",
+  "failed_hops_observed": 0,
+  "replacement_instances_observed": 0,
+  "sdk_retries": "NOT_MEASURED",
+  "cleanup_verified": true,
+  "all_ten_instances_terminated": true,
+  "generation_disks_records_seed_stack_absent": true,
+  "request_status": "READY",
+  "cleanup_status": "COMPLETE",
+  "propagation_enabled": false,
+  "generation_limit_restored": 2,
+  "active_command": "NONE",
+  "pending_cleanup_retry_token": false,
+  "scheduler_inventory": "Not independently queried after this run; local CLI lacks permission. Controller completion cleared retry token.",
+  "observer_ui": "Supplemental; transient lag/status misclassification observed. Direct AWS/DynamoDB evidence used.",
+  "causal_performance_claim": null
+}
