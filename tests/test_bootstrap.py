@@ -266,7 +266,8 @@ class BootstrapTests(unittest.TestCase):
 
     def test_stream_filter_matches_boolean_transition(self):
         template = (ROOT / 'cfn/bootstrap.yaml').read_text()
-        pattern = json.loads(template.split("- Pattern: '", 1)[1].split("'", 1)[0])
+        patterns = [json.loads(p.split("'", 1)[0]) for p in template.split("- Pattern: '")[1:]]
+        pattern = next(p for p in patterns if "bootstrap_requested" in p["dynamodb"].get("OldImage", {}))
         self.assertEqual(pattern['eventName'], ['MODIFY'])
         self.assertEqual(pattern['dynamodb']['OldImage']['bootstrap_requested'], {'BOOL': [False]})
         self.assertEqual(pattern['dynamodb']['NewImage']['bootstrap_requested'], {'BOOL': [True]})

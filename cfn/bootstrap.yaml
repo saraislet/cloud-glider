@@ -1193,6 +1193,33 @@ Resources:
                   finish_cleanup_delivery(ddb, scheduler, env, before)
 
 
+          def is_terminal_trigger(record):
+              image = record.get('dynamodb', {}).get('NewImage', {})
+              return (record.get('eventName') == 'MODIFY' and image.get('PK') == {'S': 'CURRENT'}
+                      and image.get('SK') == {'S': 'GLOBAL'} and image.get('retirement_completed') == {'BOOL': True})
+
+
+          def request_terminal_cleanup(ddb, env, image):
+              control, current, hold, request = snapshot(ddb, env['STATE_TABLE'])
+              if (hold or any(current.get(k) != image.get(k) for k in ('request_id','generation','instance_id')) or current.get('status') != {'S': 'CURRENT'}
+                      or current.get('retirement_completed') != {'BOOL': True}
+                      or current.get('request_id') != request.get('request_id')
+                      or request.get('propagation_enabled') != {'BOOL': True}
+                      or request.get('cleanup_requested') != {'BOOL': False}
+                      or request.get('cleanup_status', {}).get('S') not in ('IDLE', 'COMPLETE')
+                      or any(control.get(f) != {'BOOL': False} for f in ('start_requested','stop_requested','cleanup_requested'))):
+                  return False
+              if int(current.get('generation', {}).get('S', '-1')) != int(control['max_generation']['N']):
+                  return False
+              table = env['STATE_TABLE']
+              return command_transaction(ddb, [
+                  {'ConditionCheck': {'TableName': table, 'Key': key('CURRENT'), **exact_condition(current)}},
+                  {'ConditionCheck': {'TableName': table, 'Key': key('BOOTSTRAP', 'REQUEST'), **exact_condition(request)}},
+                  {'ConditionCheck': {'TableName': table, 'Key': key('HOLD','ACTIVE'), 'ConditionExpression': 'attribute_not_exists(PK)'}},
+                  command_update(table, control, {'cleanup_requested': {'BOOL': True},
+                      'last_result': {'S': 'Max generation completed. Automatic cleanup requested.'}, 'operation_updated_at': {'N': str(int(time.time()))}})])
+
+
           def handler(event, context):
               import boto3
               from botocore.config import Config
@@ -1206,12 +1233,14 @@ Resources:
                   return
               for record in event.get('Records', []):
                   image = record.get('dynamodb', {}).get('NewImage', {})
-                  if not any(trigger(record) for trigger in (is_operator_trigger, is_bootstrap_trigger, is_cleanup_trigger)):
+                  if not any(trigger(record) for trigger in (is_operator_trigger, is_bootstrap_trigger, is_cleanup_trigger, is_terminal_trigger)):
                       continue
                   require(record.get('eventSourceARN') == env['STREAM_ARN'], 'Unexpected event source')
                   before = read_item(ddb, env['STATE_TABLE'], 'BOOTSTRAP', 'REQUEST')
                   try:
-                      if is_operator_trigger(record):
+                      if is_terminal_trigger(record):
+                          request_terminal_cleanup(ddb, env, image)
+                      elif is_operator_trigger(record):
                           run_operator(ddb, cfn, s3, ec2, env, image)
                       elif is_cleanup_trigger(record):
                           cleanup_step(image, ddb, cfn, ec2, env)
@@ -1239,6 +1268,7 @@ Resources:
           Destination: !Sub 'arn:${AWS::Partition}:sns:${AWS::Region}:${AWS::AccountId}:cloud-glider-${Environment}-operational-alerts'
       FilterCriteria:
         Filters:
+          - Pattern: '{"eventName":["MODIFY"],"dynamodb":{"Keys":{"PK":{"S":["CURRENT"]},"SK":{"S":["GLOBAL"]}},"NewImage":{"retirement_completed":{"BOOL":[true]}}}}'
           - Pattern: '{"eventName":["MODIFY"],"dynamodb":{"Keys":{"PK":{"S":["BOOTSTRAP"]},"SK":{"S":["REQUEST"]}},"OldImage":{"bootstrap_requested":{"BOOL":[false]}},"NewImage":{"bootstrap_requested":{"BOOL":[true]},"status":{"S":["READY"]}}}}'
           - Pattern: '{"eventName":["MODIFY"],"dynamodb":{"Keys":{"PK":{"S":["BOOTSTRAP"]},"SK":{"S":["REQUEST"]}},"OldImage":{"cleanup_requested":{"BOOL":[false]}},"NewImage":{"cleanup_requested":{"BOOL":[true]}}}}'
           - Pattern: '{"eventName":["MODIFY"],"dynamodb":{"Keys":{"PK":{"S":["BOOTSTRAP"]},"SK":{"S":["REQUEST"]}},"OldImage":{"cleanup_status":{"S":["NEEDS_ATTENTION"]}},"NewImage":{"cleanup_requested":{"BOOL":[true]},"cleanup_status":{"S":["QUIESCING"]}}}}'

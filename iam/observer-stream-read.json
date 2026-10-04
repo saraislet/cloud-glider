@@ -1,0 +1,18 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadCloudGliderObserverStreams",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:DescribeStream",
+        "dynamodb:GetShardIterator",
+        "dynamodb:GetRecords"
+      ],
+      "Resource": [
+        "arn:aws:dynamodb:us-west-2:123456789012:table/cloud-glider-sandbox-state/stream/*",
+        "arn:aws:dynamodb:us-west-2:123456789012:table/cloud-glider-sandbox-generations/stream/*"
+      ]
+    }
+  ]
+}

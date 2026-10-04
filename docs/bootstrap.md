@@ -139,3 +139,10 @@ predates the current request/table contract. Follow the [reconciliation and
 release runbook](minimal-ami.md) before a coordinated image/controller release.
 
 Direct EC2 propagation is available as an explicit offline transition. See [the EC2 runbook](ec2-propagation.md) and decision 0019. Existing CloudFormation cycles retain their current behavior.
+
+## Completed runs
+
+The controller automatically requests supported cleanup after max-generation
+ownership and confirmed predecessor retirement. It respects holds, disabled
+propagation, pending commands and cycle fencing; ambiguous completion preserves
+instances. Cleanup resets CURRENT and prepares the next cycle. See decision 0023.

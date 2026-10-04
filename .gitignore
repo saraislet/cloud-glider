@@ -135,3 +135,6 @@ celerybeat-schedule
 
 # mypy
 .mypy_cache/
+
+# Private observer history
+.observer/
