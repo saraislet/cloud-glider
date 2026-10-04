@@ -415,7 +415,7 @@ subsequently recovered from retained AWS records.
 | Continuation preflight timeout | Separate 600-second wait for an unexecuted CREATE change set |
 
 Source: [runtime defaults](../config/runtime-defaults.json) and
-[agent implementation](../agent/cloud_glider/agent.py). These are settings,
+[agent implementation](../daemon/cloud_glider/daemon.py). These are settings,
 not measured generation times. The source checkout had older 30/15-second
 README values and described the timeout as starting after CREATE_COMPLETE.
 Current cloud-glider main documents the 5/2-second settings and the timeout

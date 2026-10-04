@@ -48,8 +48,8 @@ submission intent and retirement reconciliation continue to prevent duplicate
 creation, ambiguous relaunch and ownership advancement before older termination.
 
 The operator accepted losing sustained-health evidence. Functional readiness
-proves recent agent operations; it is not independent application health and does
-not guarantee the agent will survive after handoff. EC2 running/status checks
+proves recent daemon operations; it is not independent application health and does
+not guarantee the daemon will survive after handoff. EC2 running/status checks
 cannot substitute for the proof. At max_generation the boundary remains terminal;
 max_generation=10 and max_live_generations=3 are unchanged in deployed controls.
 
@@ -100,10 +100,10 @@ costs and observe bounded propagation before enabling a new release.
 Build the exact reviewed source archive and a new matching AMI, run the image
 checks, then review the immutable artifact/image/template pins. Deploy only with
 separate authorization and propagation disabled, after supported cleanup leaves
-no live cycle. Old EC2 agents require two heartbeats and new agents require a
+no live cycle. Old EC2 daemons require two heartbeats and new daemons require a
 functional proof; live mixed-version migration is unsupported and fails closed.
 Preserve the current AMI/pins until that review. IAM and workflow changes are not
-part of this change. The existing approved agent role already has the read APIs
+part of this change. The existing approved daemon role already has the read APIs
 and DryRun permissions used here.
 
 If readiness is missing, inspect GEN STATE, CURRENT lineage, proof timestamps,

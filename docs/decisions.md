@@ -8,7 +8,7 @@
 - Networking: the operator-deployed `cfn/network.yaml` stack creates one
   dedicated VPC, public subnet with an internet-gateway route, and no-inbound,
   HTTPS-egress-only security group. The immutable generation template assigns
-  one ephemeral public IPv4 address to the primary ENI. Agents cannot mutate
+  one ephemeral public IPv4 address to the primary ENI. Daemons cannot mutate
   networking directly and no SSH path is created.
 - Region and compute: `us-west-2`, Linux `arm64`, and `t4g.micro` only.
 - Legacy CloudFormation readiness: two consecutive healthy heartbeats at a 5-second cadence,
@@ -18,15 +18,15 @@
   a new limit takes effect on a fresh run from generation 0 after cleanup.
 - EC2 source readiness: [decision 0021](decisions/0021-successor-functional-readiness.md)
   replaces the fixed observation wait with fresh successor-produced functional
-  agent proof. The deployed overlap image retains its prior heartbeat gate until
+  daemon proof. The deployed overlap image retains its prior heartbeat gate until
   a separately approved rebuilt-image release.
 - Runtime defaults: `config/runtime-defaults.json` is authoritative for values
-  written into initial control state. Agents read those values from DynamoDB.
+  written into initial control state. Daemons read those values from DynamoDB.
 - Control store: DynamoDB, not S3; encrypted at rest with an AWS-owned key.
 - Monitoring: basic EC2 monitoring, with the separate one-minute status-check
   alarm retained. See [decision 0004](decisions/0004-reduced-cost-operation.md).
 - Template identity: bucket/key, immutable S3 VersionId, SHA-256 digest,
-  template version, and Git commit or build ID are all required. Agent artifact
+  template version, and Git commit or build ID are all required. Daemon artifact
   identity independently requires bucket/key, immutable S3 VersionId, and
   SHA-256 digest. See `docs/decisions/0001-propagation-agent.md`.
 - Configured billing thresholds: `$20` monthly sandbox budget; actual alerts at
@@ -45,7 +45,7 @@
 
 ## Required before the first deployment
 
-- Initial immutable generation-template and agent-artifact object versions and
+- Initial immutable generation-template and daemon-artifact object versions and
   SHA-256 digests if the proposed template identity policy is adopted.
 
 ## Required before SCP creation or attachment
@@ -62,7 +62,7 @@ private candidates only with independently verified values using
 
 - Readiness poll, heartbeat freshness, and maximum wait.
 - Exact service-quota headroom threshold.
-- AMI and agent release cadence.
+- AMI and daemon release cadence.
 - Whether terminal operational errors may set emergency hold automatically or
   require operator confirmation. Policy/template/ownership mismatches remain
   fail-closed regardless.
@@ -97,3 +97,5 @@ budget is a planning target while billing alerts are deferred; verify current
 - [Decision 0018](decisions/0018-remove-continuation-preflight.md) removes disposable continuation previews and gates handoff on the real successor.
 
 [Decision 0019](decisions/0019-direct-ec2-propagation.md) adds cycle-fenced direct EC2 successors and integrates the backend with the baked 2 GiB image. Building and isolated-testing the candidate does not deploy or enable propagation.
+
+- [0022: agent-to-daemon rename](decisions/0022-agent-to-daemon.md) changes names across both backends and release contracts; deploy offline using the daemon migration runbook.

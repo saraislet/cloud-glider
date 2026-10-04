@@ -66,7 +66,7 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("DeleteOnTermination: true", generation)
         self.assertNotIn("AssociatePublicIpAddress: false", generation)
 
-    def test_agent_cannot_mutate_networking_directly(self):
+    def test_daemon_cannot_mutate_networking_directly(self):
         foundation = (ROOT / "cfn" / "foundation.yaml").read_text(encoding="utf-8")
         self.assertIn("DenyDirectNetworkMutation", foundation)
         for action in (
@@ -117,7 +117,7 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertNotIn("MapPublicIpOnLaunch: true", network)
         self.assertNotIn("AWS::EC2::NatGateway", network)
 
-    def test_agent_hold_access_is_condition_check_only(self):
+    def test_daemon_hold_access_is_condition_check_only(self):
         foundation = (ROOT / "cfn" / "foundation.yaml").read_text(encoding="utf-8")
         statement = foundation.split("- Sid: AssertNoEmergencyHoldAtHandoff", 1)[1].split(
             "- Sid: ReleaseOnlyPropagationLease", 1
@@ -144,7 +144,7 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertNotIn("ec2:CreateVolume", auxiliary)
         self.assertNotIn(":instance/*", auxiliary)
 
-    def test_agent_can_verify_its_instance_resource(self):
+    def test_daemon_can_verify_its_instance_resource(self):
         foundation = (ROOT / "cfn" / "foundation.yaml").read_text()
         statement = foundation.split("- Sid: InspectGenerationStacks", 1)[1].split("- Sid: PassOnlyGenerationServiceRole", 1)[0]
         self.assertIn("- cloudformation:DescribeStackResource\n", statement)

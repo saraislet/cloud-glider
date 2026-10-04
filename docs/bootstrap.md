@@ -94,7 +94,7 @@ controller allows three minutes for an outstanding submission marker to settle.
 ## Deploy or migrate this release
 
 1. Deploy reviewed boundaries, the cleanup schedule group, and its delivery role through the independently administered boundary stack. Review runtime permissions; require no state-table replacement.
-2. Create the retained `cloud-glider-sandbox-generations` table through the reviewed foundation change set while operator provisioning is paused; do not replace the control table. Publish approved, immutable generation-template and agent-artifact versions with their SHA-256 digests. The template requires `RequestId` and `GenerationTableName`.
+2. Create the retained `cloud-glider-sandbox-generations` table through the reviewed foundation change set while operator provisioning is paused; do not replace the control table. Publish approved, immutable generation-template and daemon-artifact versions with their SHA-256 digests. The template requires `RequestId` and `GenerationTableName`.
 3. For an existing installation, complete the offline migration below. For a new one, initialize approved CONTROL/CURRENT settings.
 4. Apply coordinated reviewed templates and artifact settings.
 5. Verify CONTROL stream filters, Lambda concurrency one, cleanup-only schedules, and IAM. Remove the old recurring rule.
@@ -133,8 +133,8 @@ and [decision 0012](decisions/0012-shared-chain-lifecycle.md) for cleanup mechan
 
 ## Minimal baked AMI
 
-Use `AgentDeliveryMode=baked`, `/dev/sda1` and a 2 GiB root only with an image
-containing the current lifecycle agent. The previously deployed minimal image
+Use `DaemonDeliveryMode=baked`, `/dev/sda1` and a 2 GiB root only with an image
+containing the current lifecycle daemon. The previously deployed minimal image
 predates the current request/table contract. Follow the [reconciliation and
 release runbook](minimal-ami.md) before a coordinated image/controller release.
 

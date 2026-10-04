@@ -58,15 +58,15 @@
     }
   },
   "Resources": {
-    "AgentBoundary": {
+    "DaemonBoundary": {
       "Type": "AWS::IAM::ManagedPolicy",
       "DeletionPolicy": "Retain",
       "UpdateReplacePolicy": "Retain",
       "Properties": {
         "ManagedPolicyName": {
-          "Fn::Sub": "cloud-glider-${Environment}-agent-boundary"
+          "Fn::Sub": "cloud-glider-${Environment}-daemon-boundary"
         },
-        "Description": "Security-administered Cloud Glider agent permissions ceiling; grants no access.",
+        "Description": "Security-administered Cloud Glider daemon permissions ceiling; grants no access.",
         "PolicyDocument": {
           "Fn::If": [
             "DirectEc2Backend",
@@ -170,7 +170,7 @@
                   ],
                   "Resource": [
                     {
-                      "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/cloud-glider/${Environment}/operations/agent:log-stream:*"
+                      "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/cloud-glider/${Environment}/operations/daemon:log-stream:*"
                     },
                     {
                       "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/cloud-glider/${Environment}/audit/propagation:log-stream:*"
@@ -274,7 +274,7 @@
                       "ec2:InstanceType": "t4g.micro",
                       "ec2:MetadataHttpTokens": "required",
                       "ec2:InstanceProfile": {
-                        "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:instance-profile/cloud-glider/cloud-glider-${Environment}-agent"
+                        "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:instance-profile/cloud-glider/cloud-glider-${Environment}-daemon"
                       },
                       "aws:RequestTag/project": "cloud-glider",
                       "aws:RequestTag/environment": {
@@ -347,7 +347,7 @@
                   "Effect": "Allow",
                   "Action": "iam:PassRole",
                   "Resource": {
-                    "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider-${Environment}-agent"
+                    "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider-${Environment}-daemon"
                   },
                   "Condition": {
                     "StringEquals": {
@@ -603,7 +603,7 @@
                   ],
                   "Resource": [
                     {
-                      "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/cloud-glider/${Environment}/operations/agent:log-stream:*"
+                      "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/cloud-glider/${Environment}/operations/daemon:log-stream:*"
                     },
                     {
                       "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/cloud-glider/${Environment}/audit/propagation:log-stream:*"
@@ -840,7 +840,7 @@
               "Effect": "Allow",
               "Action": "iam:PassRole",
               "Resource": {
-                "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider-${Environment}-agent"
+                "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider-${Environment}-daemon"
               },
               "Condition": {
                 "StringEquals": {
@@ -1578,12 +1578,12 @@
                 "iam:PutRolePermissionsBoundary"
               ],
               "Resource": {
-                "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider-${Environment}-agent"
+                "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider-${Environment}-daemon"
               },
               "Condition": {
                 "ArnEquals": {
                   "iam:PermissionsBoundary": {
-                    "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/cloud-glider-${Environment}-agent-boundary"
+                    "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/cloud-glider-${Environment}-daemon-boundary"
                   }
                 }
               }
@@ -1643,7 +1643,7 @@
               "Effect": "Allow",
               "Action": "iam:PassRole",
               "Resource": {
-                "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider-${Environment}-agent"
+                "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider-${Environment}-daemon"
               },
               "Condition": {
                 "StringEquals": {
@@ -1780,7 +1780,7 @@
               ],
               "Resource": [
                 {
-                  "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider-${Environment}-agent"
+                  "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider-${Environment}-daemon"
                 },
                 {
                   "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider-${Environment}-generation-cfn"
@@ -1792,7 +1792,7 @@
                   "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider-${Environment}-bootstrap-BootstrapRole-*"
                 },
                 {
-                  "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:instance-profile/cloud-glider/cloud-glider-${Environment}-agent"
+                  "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:instance-profile/cloud-glider/cloud-glider-${Environment}-daemon"
                 },
                 {
                   "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-state"
@@ -1846,7 +1846,7 @@
                 "iam:DeleteInstanceProfile"
               ],
               "Resource": {
-                "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:instance-profile/cloud-glider-${Environment}-agent"
+                "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:instance-profile/cloud-glider-${Environment}-daemon"
               }
             },
             {
@@ -1988,9 +1988,9 @@
     }
   },
   "Outputs": {
-    "AgentBoundaryArn": {
+    "DaemonBoundaryArn": {
       "Value": {
-        "Ref": "AgentBoundary"
+        "Ref": "DaemonBoundary"
       }
     },
     "GenerationBoundaryArn": {

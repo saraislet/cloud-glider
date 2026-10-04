@@ -4,10 +4,10 @@
     {
       "Effect": "Allow",
       "Action": "iam:PutRolePermissionsBoundary",
-      "Resource": "arn:aws:iam::123456789012:role/cloud-glider-sandbox-agent",
+      "Resource": "arn:aws:iam::123456789012:role/cloud-glider-sandbox-daemon",
       "Condition": {
         "ArnEquals": {
-          "iam:PermissionsBoundary": "arn:aws:iam::123456789012:policy/cloud-glider-sandbox-agent-boundary"
+          "iam:PermissionsBoundary": "arn:aws:iam::123456789012:policy/cloud-glider-sandbox-daemon-boundary"
         }
       }
     },

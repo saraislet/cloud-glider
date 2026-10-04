@@ -48,22 +48,22 @@ Parameters:
   SecurityGroupId:
     Type: AWS::EC2::SecurityGroup::Id
     Default: sg-0da9cdee2a98d8dc2
-  AgentInstanceProfileName:
+  DaemonInstanceProfileName:
     Type: String
   GenerationTableName:
     Type: String
     AllowedPattern: '^cloud-glider-[a-z][a-z0-9-]{1,15}-generations$'
   StateTableName:
     Type: String
-  AgentArtifactBucket:
+  DaemonArtifactBucket:
     Type: String
-  AgentArtifactKey:
+  DaemonArtifactKey:
     Type: String
     AllowedPattern: '^generation/.+$'
-  AgentArtifactVersionId:
+  DaemonArtifactVersionId:
     Type: String
     MinLength: 1
-  AgentArtifactSha256:
+  DaemonArtifactSha256:
     Type: String
     AllowedPattern: '^[A-Fa-f0-9]{64}$'
   BootstrapVersion:
@@ -92,7 +92,7 @@ Parameters:
     MaxLength: 128
   PropagationAuditLogGroupName:
     Type: String
-  AgentOperationsLogGroupName:
+  DaemonOperationsLogGroupName:
     Type: String
   EmergencyHoldFunctionName:
     Type: String
@@ -100,7 +100,7 @@ Parameters:
     Type: String
     AllowedPattern: '^arn:[a-z0-9-]+:sns:us-west-2:[0-9]{12}:cloud-glider-[a-z][a-z0-9-]{1,15}-operational-alerts$'
     Description: Foundation SNS topic ARN for generation health notifications.
-  AgentDeliveryMode:
+  DaemonDeliveryMode:
     Type: String
     Default: baked
     AllowedValues: [baked]
@@ -134,20 +134,20 @@ Resources:
         InstanceType: !Ref InstanceType
         SubnetId: !Ref SubnetId
         SecurityGroupId: !Ref SecurityGroupId
-        AgentInstanceProfileName: !Ref AgentInstanceProfileName
+        DaemonInstanceProfileName: !Ref DaemonInstanceProfileName
         GenerationTableName: !Ref GenerationTableName
         StateTableName: !Ref StateTableName
-        AgentArtifactBucket: !Ref AgentArtifactBucket
-        AgentArtifactKey: !Ref AgentArtifactKey
-        AgentArtifactVersionId: !Ref AgentArtifactVersionId
-        AgentArtifactSha256: !Ref AgentArtifactSha256
+        DaemonArtifactBucket: !Ref DaemonArtifactBucket
+        DaemonArtifactKey: !Ref DaemonArtifactKey
+        DaemonArtifactVersionId: !Ref DaemonArtifactVersionId
+        DaemonArtifactSha256: !Ref DaemonArtifactSha256
         TemplateBucket: !Ref TemplateBucket
         TemplateKey: !Ref TemplateKey
         TemplateS3VersionId: !Ref TemplateS3VersionId
         PropagationAuditLogGroupName: !Ref PropagationAuditLogGroupName
-        AgentOperationsLogGroupName: !Ref AgentOperationsLogGroupName
+        DaemonOperationsLogGroupName: !Ref DaemonOperationsLogGroupName
         EmergencyHoldFunctionName: !Ref EmergencyHoldFunctionName
-        AgentDeliveryMode: !Ref AgentDeliveryMode
+        DaemonDeliveryMode: !Ref DaemonDeliveryMode
         RootDeviceName: !Ref RootDeviceName
         RootVolumeGiB: !Ref RootVolumeGiB
     Properties:

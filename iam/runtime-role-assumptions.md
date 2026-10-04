@@ -1,3 +1,6 @@
+> Historical deployment evidence uses agent names. For the renamed release, see
+> [the daemon migration runbook](../docs/daemon-migration.md).
+
 # Runtime IAM assumptions
 
 The v1 public-IPv4 design does not add an IAM allow permission.

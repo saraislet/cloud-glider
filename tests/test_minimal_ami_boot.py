@@ -38,7 +38,7 @@ class MinimalAmiBootTests(unittest.TestCase):
                 'sys.exit(' + str(verifier_status) + ')\n')
             template = (ROOT / 'cfn/generation.yaml').read_text()
             script = textwrap.dedent(template.split('Fn::Base64: !Sub |\n', 1)[1].split('\n  GenerationStatusCheckAlarm:', 1)[0])
-            script = re.sub(r'\$\{([^}]+)\}', lambda match: mode if match[1] == 'AgentDeliveryMode' else 'fixture', script)
+            script = re.sub(r'\$\{([^}]+)\}', lambda match: mode if match[1] == 'DaemonDeliveryMode' else 'fixture', script)
             for path in ('/etc/cloud-glider', '/opt/cloud-glider', '/etc/systemd', '/var/lib/cloud-glider', '/usr/local/lib/cloud-glider'):
                 script = script.replace(path, str(root) + path)
             log = root / 'calls'

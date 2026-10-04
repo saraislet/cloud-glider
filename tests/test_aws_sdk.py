@@ -8,7 +8,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agent"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "daemon"))
 if importlib.util.find_spec("boto3") is not None:
     import boto3
     from botocore.exceptions import EndpointConnectionError
@@ -18,11 +18,11 @@ if importlib.util.find_spec("boto3") is not None:
     from cloud_glider.aws_sdk import AwsSdkGateway, _av, _unmarshal
 else:
     boto3 = None
-from cloud_glider.agent import SafetyViolation, TransientFailure
+from cloud_glider.daemon import SafetyViolation, TransientFailure
 
 
 @unittest.skipIf(
-    boto3 is None, "Install agent/requirements.txt to run SDK transport tests"
+    boto3 is None, "Install daemon/requirements.txt to run SDK transport tests"
 )
 class SdkTests(unittest.TestCase):
     def setUp(self):

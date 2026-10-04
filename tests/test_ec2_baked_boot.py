@@ -37,7 +37,7 @@ class Ec2BakedBootTests(unittest.TestCase):
             verifier = root / "usr/local/lib/cloud-glider/verify_image.py"
             verifier.parent.mkdir(parents=True)
             verifier.write_text(
-                'import json,sys\nraw=json.load(open(sys.argv[2]))\nassert raw["propagation_backend"]=="ec2"\nassert raw["agent_delivery_mode"]=="baked"\nassert "request_id" not in raw and "generation" not in raw\nsys.exit('
+                'import json,sys\nraw=json.load(open(sys.argv[2]))\nassert raw["propagation_backend"]=="ec2"\nassert raw["daemon_delivery_mode"]=="baked"\nassert "request_id" not in raw and "generation" not in raw\nsys.exit('
                 + str(verifier_status)
                 + ")\n"
             )

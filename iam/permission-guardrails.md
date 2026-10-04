@@ -9,7 +9,7 @@ recovery access must be inspected in AWS before deployment.
 
 | Component | Purpose | Administration |
 | --- | --- | --- |
-| `cfn/permission-boundaries.json` | Five managed ceilings: agent, generation CloudFormation, bootstrap, hold, foundation | Separate security stack and security deployment principal |
+| `cfn/permission-boundaries.json` | Five managed ceilings: daemon, generation CloudFormation, bootstrap, hold, foundation | Separate security stack and security deployment principal |
 | `cfn/foundation.yaml`, `cfn/bootstrap.yaml` | Require the four runtime ceilings; require an approved template URL | Foundation deployment service role |
 | `iam/foundation-boundary-supplement.json` | Permit attaching only the corresponding runtime ceiling | Reviewed supplement to the foundation role; grants no policy editing |
 | `iam/deployment-operator-policy.json` | Narrow foundation/bootstrap change-set deployment permissions | Candidate replacement for broad operator deployment grants |
@@ -112,13 +112,13 @@ It intentionally does not grant foundation deletion or security-stack access.
    A first deployment may keep the approved URL empty until artifacts exist.
    Use the existing foundation service role explicitly. Review role updates and
    ensure no generation replacement or new compute is proposed.
-5. Upload and verify the immutable approved template and agent versions through
+5. Upload and verify the immutable approved template and daemon versions through
    the operator release path. Set the identical, versioned S3 URL in the boundary,
    foundation and bootstrap stacks, and the matching identity tuple in CONTROL.
    The URL must use HTTPS, the regional S3 endpoint and `generation/`, contain an
    explicit non-null version ID, and be at most 512 characters. Independently
    verify that its bucket belongs to this account and is the approved artifact
-   bucket. Compare the actual URL encoding produced by the agent/bootstrap.
+   bucket. Compare the actual URL encoding produced by the daemon/bootstrap.
 6. Run IAM/Access Analyzer validation and the sandbox request tests below. Review
    and attach runtime, boundary, and role-administration SCPs at the target
    test-account/OU level. Keep the existing SCP allow baseline and inherited
@@ -149,7 +149,7 @@ mismatch blocks creation. URL conditions apply only to CreateStack and
 CreateChangeSet: retiring a predecessor or deleting an unexecuted preflight does
 not require the old release URL to remain approved. Existing change sets do not
 carry a template URL in ExecuteChangeSet authorization; discard stale change
-sets during a release, inspect their origin, and retain the agent's identity and
+sets during a release, inspect their origin, and retain the daemon's identity and
 ownership checks. Do not interpret the URL condition as an execution-time digest
 or arbitrary parameter validator.
 
@@ -189,11 +189,11 @@ Before production attachment, verify:
   alternate URL, omitted URL/TemplateBody, wrong role and unrelated stack fail.
 - Approved RunInstances resources and launch tags succeed; different AMI,
   subnet, security group, instance type, IMDSv1 and post-creation retagging fail.
-- Arbitrary PassRole, IAM mutation, STS role chaining, direct agent compute,
+- Arbitrary PassRole, IAM mutation, STS role chaining, direct daemon compute,
   boundary removal/replacement/version editing, and off-Region runtime calls fail.
 - Actual CloudFormation launch and rollback tagging behavior works with
   `ec2:CreateAction=RunInstances`; do not broaden tagging to pass a failed test.
-- Agent CONTROL/HOLD writes fail, required CONTROL/HOLD ConditionCheckItem reads
+- Daemon CONTROL/HOLD writes fail, required CONTROL/HOLD ConditionCheckItem reads
   succeed, hold creation works, and only the operator can clear HOLD.
 - Disabled propagation, emergency hold, duplicate execution, ambiguous health
   and failed conditional handoff preserve the predecessor. Existing unit tests

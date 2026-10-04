@@ -13,7 +13,7 @@ import boto3
 from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 
-from .agent import AgentConfig, SafetyViolation, TransientFailure
+from .daemon import DaemonConfig, SafetyViolation, TransientFailure
 
 IMDS = "http://169.254.169.254/latest"
 
@@ -76,7 +76,7 @@ def _ddb_item(values: dict[str, Any]) -> dict[str, Any]:
 
 
 class AwsSdkGateway:
-    def __init__(self, config: AgentConfig, *, session=None, services=None):
+    def __init__(self, config: DaemonConfig, *, session=None, services=None):
         self.config = config
         self.instance_id = _imds("meta-data/instance-id")
         document = json.loads(_imds("dynamic/instance-identity/document"))

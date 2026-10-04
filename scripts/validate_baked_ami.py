@@ -14,7 +14,7 @@ def validate(image, snapshots, owner, digest):
         if image.get(key) != value:
             raise ValueError(f'AMI {key} must be {value!r}')
     tags = {t['Key']: t['Value'] for t in image.get('Tags', [])}
-    for key, value in {'project': 'cloud-glider', 'purpose': 'agent-image', 'agent-sha256': digest}.items():
+    for key, value in {'project': 'cloud-glider', 'purpose': 'daemon-image', 'daemon-sha256': digest}.items():
         if tags.get(key) != value:
             raise ValueError(f'AMI tag {key} differs')
     blocks = image.get('BlockDeviceMappings', [])
@@ -38,7 +38,7 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--image-id', required=True)
     p.add_argument('--expected-owner', required=True)
-    p.add_argument('--agent-sha256', required=True)
+    p.add_argument('--daemon-sha256', required=True)
     a = p.parse_args()
     def aws(*args):
         return json.loads(subprocess.check_output(['aws', *args, '--region', 'us-west-2', '--output', 'json']))
@@ -49,7 +49,7 @@ def main():
     if len(ids) != 1:
         raise ValueError('expected exactly one root snapshot')
     snapshots = aws('ec2', 'describe-snapshots', '--snapshot-ids', ids[0])['Snapshots']
-    result = validate(images[0], snapshots, a.expected_owner, a.agent_sha256)
+    result = validate(images[0], snapshots, a.expected_owner, a.daemon_sha256)
     permissions = aws('ec2', 'describe-image-attribute', '--image-id', a.image_id,
                       '--attribute', 'launchPermission').get('LaunchPermissions', [])
     if permissions:

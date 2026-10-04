@@ -1,4 +1,4 @@
-# Install into the agent interpreter during AMI baking, never during boot.
+# Install into the daemon interpreter during AMI baking, never during boot.
 # SDK pair tested together; Python 3.9+ (3.10+ preferred for current urllib3).
 boto3==1.42.97
 botocore==1.42.97

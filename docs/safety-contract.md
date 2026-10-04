@@ -5,7 +5,7 @@ merged or deployed, even if it makes a happy-path propagation test pass.
 
 ## System invariants
 
-1. **Fresh operator control.** The agent must transactionally read `CONTROL/GLOBAL`, `BOOTSTRAP/REQUEST`, and
+1. **Fresh operator control.** The daemon must transactionally read `CONTROL/GLOBAL`, `BOOTSTRAP/REQUEST`, and
    `HOLD/ACTIVE` immediately before every `CreateStack` or `ExecuteChangeSet`
    operation that can provision successor compute. `propagation_enabled=false`
    or the existence of `HOLD/ACTIVE` stops successor provisioning.
@@ -70,12 +70,12 @@ operations can finish. Missing or ambiguous evidence blocks additional work.
   subnet, internet-gateway route, and no-inbound security group. Its subnet and
   security-group IDs are supplied to the foundation stack. Each generation
   receives one ephemeral public IPv4 address at launch solely through the
-  approved generation template. Generation agents cannot create or mutate
+  approved generation template. Generation daemons cannot create or mutate
   VPCs, subnets, routes, gateways, or security groups.
 - Generation instances accept no inbound traffic: the approved security group
   has no ingress rules, no SSH path is created, and IMDSv2 remains required.
   Outbound access is limited to what is required for HTTPS AWS API calls.
-- Public IPv4 assignment is a property of the primary launch ENI. Agents cannot
+- Public IPv4 assignment is a property of the primary launch ENI. Daemons cannot
   allocate or associate Elastic IPs or directly create, delete, or modify
   network interfaces.
 - `t4g.micro` is the only initially approved instance type. The AMI and every
@@ -101,11 +101,11 @@ operations can finish. Missing or ambiguous evidence blocks additional work.
   its CloudFormation `SSEEnabled` option selects this key, not plaintext storage.
 - The approved generation definition is the template bucket/key, immutable S3
   VersionId, SHA-256 digest, template version, and Git commit or build ID. The
-  agent executable is independently approved by bucket/key, immutable S3
+  daemon executable is independently approved by bucket/key, immutable S3
   VersionId, and SHA-256 digest. Any mismatch is terminal.
 - A terminal policy, identity, ownership, or invariant error atomically records
   `ERROR`, creates `HOLD/ACTIVE`, and preserves the recoverable generation. The
-  agent invokes a dedicated function that can create but not delete the record;
+  daemon invokes a dedicated function that can create but not delete the record;
   only an operator can clear it.
 - DynamoDB tables, CloudWatch log groups, and audit archives are retained on
   stack deletion and replacement.
@@ -117,7 +117,7 @@ operations can finish. Missing or ambiguous evidence blocks additional work.
 - `CONTROL/GLOBAL`: propagation disabled, maximum generation 2, ceiling 3,
   `us-west-2`, `t4g.micro`, `arm64`, readiness values, and the complete immutable
   template identity tuple.
-- `CONTROL/GLOBAL` also carries the immutable agent artifact identity tuple.
+- `CONTROL/GLOBAL` also carries the immutable daemon artifact identity tuple.
 - `CURRENT/GLOBAL`: no authoritative running generation and status
   `UNINITIALIZED`.
 - `AUDIT#PROPAGATION/EVENT#...`: attribution for the initialization operation.
@@ -148,7 +148,7 @@ audit values.
 
 - Disable propagation between the cycle read and final provisioning read; no
   create or execute call occurs.
-- Start duplicate agents for one generation; only one lease owner and at most
+- Start duplicate daemons for one generation; only one lease owner and at most
   one successor result.
 - Inject a timeout after CloudFormation request submission; reconciliation does
   not create a duplicate stack.
@@ -156,10 +156,10 @@ audit values.
 - Fail the conditional handoff; the predecessor is not deleted.
 - Attempt arbitrary `iam:PassRole`, IAM mutation, direct EC2 creation or
   termination, unrelated stack creation, and foundation deletion; all fail.
-- Attempt direct Elastic IP and network-interface mutation from the agent role;
+- Attempt direct Elastic IP and network-interface mutation from the daemon role;
   all fail. Confirm the approved template launches exactly one primary ENI with
   one ephemeral public IPv4 address and the no-inbound security group.
-- Change the template version, digest, or parameters; the agent rejects it.
+- Change the template version, digest, or parameters; the daemon rejects it.
 - Keep propagation enabled at `max_generation`; the chain stops.
 - Delay N deletion while N+2 launches; permit overlap only after all handoff
   gates and never admit a fourth instance. Test a configured ceiling of two.

@@ -12,10 +12,10 @@
 
 ### Architecture and lifecycle invariants
 
-- The operator-approved EC2 backend in `docs/decisions/0019-direct-ec2-propagation.md` supersedes the CloudFormation-only rules below for explicitly selected EC2 cycles. CloudFormation retains the control plane, persistent launch template and seed; successor agents use direct EC2 APIs with a pinned numeric launch-template version and digest, cycle-fenced DynamoDB state, and EC2 dry-run continuation. EC2 launch may overlap accepted predecessor retirement; ownership remains with the retiring predecessor’s successor until termination is confirmed. See decision 0020. Legacy CloudFormation cycles retain the rules below. Never switch a live cycle's backend.
+- The operator-approved EC2 backend in `docs/decisions/0019-direct-ec2-propagation.md` supersedes the CloudFormation-only rules below for explicitly selected EC2 cycles. CloudFormation retains the control plane, persistent launch template and seed; successor daemons use direct EC2 APIs with a pinned numeric launch-template version and digest, cycle-fenced DynamoDB state, and EC2 dry-run continuation. EC2 launch may overlap accepted predecessor retirement; ownership remains with the retiring predecessor’s successor until termination is confirmed. See decision 0020. Legacy CloudFormation cycles retain the rules below. Never switch a live cycle's backend.
 
 - Manage generation creation and deletion through **CloudFormation**. Prefer declarative changes over direct AWS resource mutations.
-- A generation template creates one EC2 generation. A small Python agent on that generation coordinates propagation.
+- A generation template creates one EC2 generation. A small Python daemon on that generation coordinates propagation.
 - Store propagation control and basic generation state in **DynamoDB**.
 - Generation `N` may create `N+1` only from the approved, versioned generation template and only after confirming that propagation is enabled.
 - Read DynamoDB again immediately before provisioning. If `propagation_enabled` is false or `emergency_hold` is true, do not create another generation.
@@ -27,7 +27,7 @@
 
 ### Health and readiness
 
-- For EC2 source releases implementing operator-approved decision 0021, successor-produced functional agent readiness replaces the fixed two-heartbeat observation wait. Preserve exact identity, bounded freshness, successor-executed continuation, final controls and conditional handoff; the agent remains the only workload. Legacy CloudFormation readiness is unchanged. See `docs/decisions/0021-successor-functional-readiness.md`.
+- For EC2 source releases implementing operator-approved decision 0021, successor-produced functional daemon readiness replaces the fixed two-heartbeat observation wait. Preserve exact identity, bounded freshness, successor-executed continuation, final controls and conditional handoff; the daemon remains the only workload. Legacy CloudFormation readiness is unchanged. See `docs/decisions/0021-successor-functional-readiness.md`.
 
 - Never treat EC2 `running` state as proof that a generation is healthy.
 - Authoritative readiness must verify the expected generation and approved template, current control state, and valid handoff ownership in addition to workload health.
@@ -36,10 +36,10 @@
 
 ### IAM and AWS safety
 
-- For EC2 cycles, the agent may launch only through the approved template and terminate only verified Glider generations; it may pass only its existing agent role to EC2. Runtime IAM and template mutation remain prohibited. See decision 0019 for the explicitly approved change to the legacy rules below.
+- For EC2 cycles, the daemon may launch only through the approved template and terminate only verified Glider generations; it may pass only its existing daemon role to EC2. Runtime IAM and template mutation remain prohibited. See decision 0019 for the explicitly approved change to the legacy rules below.
 
-- `CloudGliderAgentRole` may read and update only Cloud Glider DynamoDB records and operate only approved CloudFormation generation stacks.
-- The agent may pass only the designated CloudFormation service role. Restrict `iam:PassRole` to that role and the CloudFormation service.
+- `CloudGliderDaemonRole` may read and update only Cloud Glider DynamoDB records and operate only approved CloudFormation generation stacks.
+- The daemon may pass only the designated CloudFormation service role. Restrict `iam:PassRole` to that role and the CloudFormation service.
 - The CloudFormation service role may create and delete only resources required by the approved generation template.
 - Generation instances must never create or modify IAM roles, policies, permissions, or trust relationships.
 - Apply least privilege to every role and policy. Do not broaden permissions merely to make a deployment pass.

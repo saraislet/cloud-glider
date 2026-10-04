@@ -11,9 +11,9 @@ It should provide defense in depth for the Cloud Glider account by:
 
 - denying IAM role, policy, instance-profile, permission-boundary, and
   Organizations mutations to Cloud Glider generation principals
-- denying direct `ec2:RunInstances` and `ec2:TerminateInstances` to the agent
+- denying direct `ec2:RunInstances` and `ec2:TerminateInstances` to the daemon
   role while allowing the approved CloudFormation generation service role
-- denying `iam:PassRole` except the approved agent and generation service-role
+- denying `iam:PassRole` except the approved daemon and generation service-role
   relationships
 - denying Cloud Glider operations outside the approved Region, except global
   services and explicitly reviewed administrative operations

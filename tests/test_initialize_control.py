@@ -23,10 +23,10 @@ class InitializeControlTests(unittest.TestCase):
             "template_s3_version_id": "version-1",
             "template_sha256": "a" * 64,
             "template_build_id": "abcdef123456",
-            "agent_artifact_bucket": "cloud-glider-artifacts",
-            "agent_artifact_key": "generation/cloud-glider-agent.tar.gz",
-            "agent_artifact_version_id": "agent-version-1",
-            "agent_artifact_sha256": "b" * 64,
+            "daemon_artifact_bucket": "cloud-glider-artifacts",
+            "daemon_artifact_key": "generation/cloud-glider-daemon.tar.gz",
+            "daemon_artifact_version_id": "daemon-version-1",
+            "daemon_artifact_sha256": "b" * 64,
             "environment": "sandbox",
             "max_generation": 2,
             "max_live_generations": 3,
@@ -54,8 +54,8 @@ class InitializeControlTests(unittest.TestCase):
         self.assertEqual(control["template_s3_key"], {"S": "generation/template.yaml"})
         self.assertEqual(control["template_build_id"], {"S": "abcdef123456"})
         self.assertEqual(control["desired_bootstrap_version"], {"S": "bootstrap-v1"})
-        self.assertEqual(control["agent_artifact_version_id"], {"S": "agent-version-1"})
-        self.assertEqual(control["agent_artifact_sha256"], {"S": "b" * 64})
+        self.assertEqual(control["daemon_artifact_version_id"], {"S": "daemon-version-1"})
+        self.assertEqual(control["daemon_artifact_sha256"], {"S": "b" * 64})
 
     def test_ec2_initialization_uses_one_second_readiness_with_unchanged_health_gate(self):
         transaction = initialize_control.build_transaction(
@@ -113,10 +113,10 @@ class InitializeControlTests(unittest.TestCase):
                 event_id="event-1",
             )
 
-    def test_rejects_invalid_agent_digest(self):
+    def test_rejects_invalid_daemon_digest(self):
         with self.assertRaises(ValueError):
             initialize_control.build_transaction(
-                self.args(agent_artifact_sha256="not-a-digest"),
+                self.args(daemon_artifact_sha256="not-a-digest"),
                 now="2026-08-24T00:00:00.000Z",
                 event_id="event-1",
             )

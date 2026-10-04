@@ -10,25 +10,25 @@
       ],
       "Resource": [
         "arn:aws:iam::123456789012:role/cloud-glider-sandbox-generation-cfn",
-        "arn:aws:iam::123456789012:role/cloud-glider-sandbox-agent",
+        "arn:aws:iam::123456789012:role/cloud-glider-sandbox-daemon",
         "arn:aws:iam::123456789012:role/cloud-glider-sandbox-emergency-hold"
       ]
     },
     {
-      "Sid": "ReconcileAgentInstanceProfile",
+      "Sid": "ReconcileDaemonInstanceProfile",
       "Effect": "Allow",
       "Action": [
         "iam:RemoveRoleFromInstanceProfile",
         "iam:DeleteInstanceProfile",
         "iam:UntagInstanceProfile"
       ],
-      "Resource": "arn:aws:iam::123456789012:instance-profile/cloud-glider/cloud-glider-sandbox-agent"
+      "Resource": "arn:aws:iam::123456789012:instance-profile/cloud-glider/cloud-glider-sandbox-daemon"
     },
     {
-      "Sid": "PassAgentRoleToEc2InstanceProfileOnly",
+      "Sid": "PassDaemonRoleToEc2InstanceProfileOnly",
       "Effect": "Allow",
       "Action": "iam:PassRole",
-      "Resource": "arn:aws:iam::123456789012:role/cloud-glider-sandbox-agent",
+      "Resource": "arn:aws:iam::123456789012:role/cloud-glider-sandbox-daemon",
       "Condition": {
         "StringEquals": {
           "iam:PassedToService": "ec2.amazonaws.com"

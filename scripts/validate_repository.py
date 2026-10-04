@@ -62,9 +62,9 @@ def main() -> int:
     contract_path = ROOT / "docs" / "safety-contract.md"
     initializer_path = ROOT / "scripts" / "initialize_control.py"
     clear_hold_path = ROOT / "scripts" / "clear_emergency_hold.py"
-    agent_path = ROOT / "agent" / "cloud_glider" / "agent.py"
-    gateway_path = ROOT / "agent" / "cloud_glider" / "aws_sdk.py"
-    builder_path = ROOT / "scripts" / "build_agent_artifact.py"
+    daemon_path = ROOT / "daemon" / "cloud_glider" / "daemon.py"
+    gateway_path = ROOT / "daemon" / "cloud_glider" / "aws_sdk.py"
+    builder_path = ROOT / "scripts" / "build_daemon_artifact.py"
     foundation = foundation_path.read_text()
     billing = billing_path.read_text()
     network = network_path.read_text()
@@ -72,7 +72,7 @@ def main() -> int:
     contract = contract_path.read_text()
     initializer = initializer_path.read_text()
     clear_hold = clear_hold_path.read_text()
-    agent = agent_path.read_text()
+    daemon = daemon_path.read_text()
     gateway = gateway_path.read_text()
     builder = builder_path.read_text()
 
@@ -172,8 +172,8 @@ def main() -> int:
         "conditional_handoff",
         "delete_stack",
     ):
-        require(agent, marker, str(agent_path))
-    if "create_change_set" in gateway or "continuation_preflight" in agent:
+        require(daemon, marker, str(daemon_path))
+    if "create_change_set" in gateway or "continuation_preflight" in daemon:
         raise SystemExit("propagation must not create disposable continuation previews")
     for marker in (
         "transact_write_items",

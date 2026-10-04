@@ -35,8 +35,8 @@ class BootstrapTests(unittest.TestCase):
             '--bootstrap-version', 'bootstrap-v1', '--template-bucket', 'bucket',
             '--template-key', 'generation/generation.yaml', '--template-s3-version-id', 'template-version',
             '--template-sha256', hashlib.sha256(b'template').hexdigest(), '--template-build-id', 'abcdefg',
-            '--agent-artifact-bucket', 'bucket', '--agent-artifact-key', 'generation/agent.tar.gz',
-            '--agent-artifact-version-id', 'agent-version', '--agent-artifact-sha256', hashlib.sha256(b'agent').hexdigest()])
+            '--daemon-artifact-bucket', 'bucket', '--daemon-artifact-key', 'generation/daemon.tar.gz',
+            '--daemon-artifact-version-id', 'daemon-version', '--daemon-artifact-sha256', hashlib.sha256(b'daemon').hexdigest()])
         initial = initializer.build_transaction(args, now='now', event_id='id')
         self.control = initial[0]['Put']['Item']
         self.current = initial[1]['Put']['Item']
@@ -64,7 +64,7 @@ class BootstrapTests(unittest.TestCase):
         self.ec2.describe_images.return_value = {'Images': [{'Architecture': 'arm64', 'State': 'available',
                                                             'RootDeviceType': 'ebs', 'RootDeviceName': '/dev/xvda'}]}
         self.s3.get_object.side_effect = lambda **kw: {'VersionId': kw['VersionId'],
-            'Body': io.BytesIO(b'template' if kw['VersionId'] == 'template-version' else b'agent')}
+            'Body': io.BytesIO(b'template' if kw['VersionId'] == 'template-version' else b'daemon')}
 
     def run_request(self):
         bootstrap.process(self.event, self.ddb, self.cfn, self.s3, self.ec2, self.env)

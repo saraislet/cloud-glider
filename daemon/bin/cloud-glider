@@ -11,7 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from cloud_glider.agent import Agent, AgentConfig  # noqa: E402
+from cloud_glider.daemon import Daemon, DaemonConfig  # noqa: E402
 from cloud_glider.aws_sdk import AwsSdkGateway  # noqa: E402
 
 
@@ -23,20 +23,20 @@ def main() -> int:
         "propagation_backend", "cloudformation"
     )
     if backend == "ec2":
-        from cloud_glider.ec2_agent import Ec2Agent, Ec2AgentConfig
+        from cloud_glider.ec2_daemon import Ec2Daemon, Ec2DaemonConfig
         from cloud_glider.ec2_sdk import Ec2SdkGateway
 
-        config = Ec2AgentConfig.load(args.config)
+        config = Ec2DaemonConfig.load(args.config)
         gateway = Ec2SdkGateway(config)
-        agent_type = Ec2Agent
+        daemon_type = Ec2Daemon
     elif backend == "cloudformation":
-        config = AgentConfig.load(args.config)
+        config = DaemonConfig.load(args.config)
         gateway = AwsSdkGateway(config)
-        agent_type = Agent
+        daemon_type = Daemon
     else:
         raise ValueError("unknown propagation backend")
     try:
-        return agent_type(config, gateway).run()
+        return daemon_type(config, gateway).run()
     finally:
         gateway.close()
 

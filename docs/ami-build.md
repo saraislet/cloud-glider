@@ -6,14 +6,14 @@ Packer plugin patches; no changes are made to that checkout. Use the dedicated
 `glider-image-build` profile, existing builder instance profile, zero-ingress
 sandbox subnet/security group, pinned Canonical source image and SSM checksum.
 
-Run `scripts/build_agent_artifact.py`, record its archive SHA-256, and fill the
+Run `scripts/build_daemon_artifact.py`, record its archive SHA-256, and fill the
 ignored `.artifacts/ami/build.pkrvars.json` with the full source commit and archive
 path. Install/verify the local patched plugin using
 `scripts/install_packer_amazon.py` and `ami/packer-plugin/README.md` when needed.
 Then run Packer init, validate and build with cleanup on error. Preserve build
 logs, the Packer manifest and the exact inputs with the release evidence.
 
-The candidate contains the current request/table lifecycle agent, pinned SDK
+The candidate contains the current request/table lifecycle daemon, pinned SDK
 packages in its venv, integrity manifest, verifier and disabled systemd service.
 It is private, ARM64, UEFI, IMDSv2, encrypted and has a 2 GiB gp3 root. It contains
 no AWS CLI, credentials or generation state. Review metadata with
@@ -24,7 +24,7 @@ through the operator CloudFormation path. It launches one t4g.micro with no
 instance profile or propagation configuration. Inspect console output for the
 smoke PASS and absence of FAIL; stack creation alone is insufficient. The helper
 checks integrity, pinned SDK versions, current request/table/delivery contract,
-disabled agent, empty state and at least 384 MiB free space. Successful tests
+disabled daemon, empty state and at least 384 MiB free space. Successful tests
 shut down the instance. Collect evidence and delete the smoke stack through
 CloudFormation to end storage charges. Preserve the AMI and its root snapshot.
 

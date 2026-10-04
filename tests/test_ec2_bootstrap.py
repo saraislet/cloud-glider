@@ -11,30 +11,30 @@ from test_ec2_sdk import template_data
 class Ec2BootstrapTests(unittest.TestCase):
     def setUp(self):
         self.params = dict(
-            AgentDeliveryMode="baked",
+            DaemonDeliveryMode="baked",
             RootDeviceName="/dev/sda1",
             RootVolumeGiB="2",
             ApprovedImageId="ami-approved",
-            AgentInstanceProfileName="cloud-glider-sandbox-agent",
+            DaemonInstanceProfileName="cloud-glider-sandbox-daemon",
             GenerationTableName="cloud-glider-sandbox-generations",
             SubnetId="subnet-approved",
             SecurityGroupId="sg-approved",
             OperationalAlertsTopicArn="arn:aws:sns:us-west-2:111122223333:cloud-glider-sandbox-operational-alerts",
             TemplateSha256="a" * 64,
             TemplateS3VersionId="seed-version",
-            AgentArtifactSha256="b" * 64,
-            AgentArtifactVersionId="agent-version",
+            DaemonArtifactSha256="b" * 64,
+            DaemonArtifactVersionId="daemon-version",
             BootstrapVersion="v1",
             TemplateVersion="v1",
         )
         raw = dict(
             propagation_backend="ec2",
-            agent_delivery_mode="baked",
+            daemon_delivery_mode="baked",
             generation_table_name=self.params["GenerationTableName"],
             template_sha256=self.params["TemplateSha256"],
             template_s3_version_id="seed-version",
-            agent_artifact_sha256=self.params["AgentArtifactSha256"],
-            agent_artifact_version_id="agent-version",
+            daemon_artifact_sha256=self.params["DaemonArtifactSha256"],
+            daemon_artifact_version_id="daemon-version",
             bootstrap_version="v1",
             template_version="v1",
         )
@@ -61,8 +61,8 @@ class Ec2BootstrapTests(unittest.TestCase):
                 {
                     "Tags": [
                         {"Key": "project", "Value": "cloud-glider"},
-                        {"Key": "purpose", "Value": "agent-image"},
-                        {"Key": "agent-sha256", "Value": "b" * 64},
+                        {"Key": "purpose", "Value": "daemon-image"},
+                        {"Key": "daemon-sha256", "Value": "b" * 64},
                     ]
                 }
             ]
@@ -99,5 +99,5 @@ class Ec2BootstrapTests(unittest.TestCase):
             fixtures.controller.verify_ec2_template(
                 self.ec2,
                 self.control,
-                {**self.params, "AgentArtifactVersionId": "other"},
+                {**self.params, "DaemonArtifactVersionId": "other"},
             )

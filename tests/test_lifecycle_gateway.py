@@ -5,18 +5,18 @@ from pathlib import Path
 from unittest.mock import Mock
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "agent"))
+sys.path.insert(0, str(ROOT / "daemon"))
 try:
     from cloud_glider.aws_sdk import AwsSdkGateway
 except ModuleNotFoundError as exc:
     if exc.name not in ("boto3", "botocore"):
         raise
     AwsSdkGateway = None
-from cloud_glider.agent import SafetyViolation, TransientFailure
-from test_agent import config, control
+from cloud_glider.daemon import SafetyViolation, TransientFailure
+from test_daemon import config, control
 
 
-@unittest.skipIf(AwsSdkGateway is None, "Install agent/requirements.txt for SDK tests")
+@unittest.skipIf(AwsSdkGateway is None, "Install daemon/requirements.txt for SDK tests")
 class GatewayLifecycleTests(unittest.TestCase):
     def gateway(self):
         gateway = object.__new__(AwsSdkGateway)
