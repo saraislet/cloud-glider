@@ -1,0 +1,159 @@
+{
+  "repository": "saraislet/cloud-glider",
+  "region": "us-west-2",
+  "account_id": "482268323955",
+  "source_commit": "a32e6c90d7ba41596a72f2514be69cc0774cf243",
+  "integrated_timing_commit": "fb64c696b1d29715a75c8a57844ae90f40c5896a",
+  "image_id": "ami-03ec56175b8fec828",
+  "snapshot_id": "snap-06ac03b7214ea7c90",
+  "daemon_sha256": "963886e50a97f926e09f548954b5d2dc0874011ffbd778b40e3f79f1dd6432cc",
+  "daemon_delivery_mode": "baked",
+  "root_volume_gib": 2,
+  "architecture": "arm64",
+  "root_encrypted": true,
+  "metadata_checks_passed": true,
+  "release_approved": true,
+  "deployment_status": "DEPLOYED_BOUNDED_TEST_PASSED_CLEANED",
+  "artifacts": {
+    "daemon": {
+      "bucket": "cloud-glider-sandbox-482268323955-us-west-2-artifacts",
+      "key": "generation/daemon-rename-963886e50a97f926e09f548954b5d2dc0874011ffbd778b40e3f79f1dd6432cc-cloud-glider-daemon.tar.gz",
+      "version_id": "bmiv96pjppgI3m2F6K3GoM8vAKWYcABg",
+      "sha256": "963886e50a97f926e09f548954b5d2dc0874011ffbd778b40e3f79f1dd6432cc",
+      "url": "https://cloud-glider-sandbox-482268323955-us-west-2-artifacts.s3.us-west-2.amazonaws.com/generation/daemon-rename-963886e50a97f926e09f548954b5d2dc0874011ffbd778b40e3f79f1dd6432cc-cloud-glider-daemon.tar.gz?versionId=bmiv96pjppgI3m2F6K3GoM8vAKWYcABg"
+    },
+    "seed": {
+      "bucket": "cloud-glider-sandbox-482268323955-us-west-2-artifacts",
+      "key": "generation/daemon-rename-5892f833320087442f69de630a7c8b046f3298368dd3f82844c7952eaa85f605-ec2-seed.yaml",
+      "version_id": "Nxvtc98_nG_WhvzKahZ1w_PP_B4T_q.G",
+      "sha256": "5892f833320087442f69de630a7c8b046f3298368dd3f82844c7952eaa85f605",
+      "url": "https://cloud-glider-sandbox-482268323955-us-west-2-artifacts.s3.us-west-2.amazonaws.com/generation/daemon-rename-5892f833320087442f69de630a7c8b046f3298368dd3f82844c7952eaa85f605-ec2-seed.yaml?versionId=Nxvtc98_nG_WhvzKahZ1w_PP_B4T_q.G"
+    },
+    "foundation": {
+      "bucket": "cloud-glider-sandbox-482268323955-us-west-2-artifacts",
+      "key": "generation/daemon-rename-a2952f98d8e9b9ae78bd6a8d00aa4a11692628cafa819d34183d0414e1b1c389-foundation.yaml",
+      "version_id": "1CpCvPoprU4QjqFlcjY4vRio2vom9.d5",
+      "sha256": "a2952f98d8e9b9ae78bd6a8d00aa4a11692628cafa819d34183d0414e1b1c389",
+      "url": "https://cloud-glider-sandbox-482268323955-us-west-2-artifacts.s3.us-west-2.amazonaws.com/generation/daemon-rename-a2952f98d8e9b9ae78bd6a8d00aa4a11692628cafa819d34183d0414e1b1c389-foundation.yaml?versionId=1CpCvPoprU4QjqFlcjY4vRio2vom9.d5"
+    },
+    "bootstrap": {
+      "bucket": "cloud-glider-sandbox-482268323955-us-west-2-artifacts",
+      "key": "generation/daemon-rename-07b92ce9e28fc4d99c11457dbff0faf39a28d08bd44704d7044da5d87c2ccdf2-bootstrap.yaml",
+      "version_id": "VT7LHn3wCtrExqqzTwzsDyxDxiY4rpQc",
+      "sha256": "07b92ce9e28fc4d99c11457dbff0faf39a28d08bd44704d7044da5d87c2ccdf2",
+      "url": "https://cloud-glider-sandbox-482268323955-us-west-2-artifacts.s3.us-west-2.amazonaws.com/generation/daemon-rename-07b92ce9e28fc4d99c11457dbff0faf39a28d08bd44704d7044da5d87c2ccdf2-bootstrap.yaml?versionId=VT7LHn3wCtrExqqzTwzsDyxDxiY4rpQc"
+    },
+    "launch-template": {
+      "bucket": "cloud-glider-sandbox-482268323955-us-west-2-artifacts",
+      "key": "generation/daemon-rename-1308c20a55d76ea920a5a25a86d8a74448d172234741961ba090d8b2075e1d81-launch-template.yaml",
+      "version_id": "4vWBDDfsE9GK5x8H5DAX4qkr_4hJIcvz",
+      "sha256": "1308c20a55d76ea920a5a25a86d8a74448d172234741961ba090d8b2075e1d81",
+      "url": "https://cloud-glider-sandbox-482268323955-us-west-2-artifacts.s3.us-west-2.amazonaws.com/generation/daemon-rename-1308c20a55d76ea920a5a25a86d8a74448d172234741961ba090d8b2075e1d81-launch-template.yaml?versionId=4vWBDDfsE9GK5x8H5DAX4qkr_4hJIcvz"
+    },
+    "boundary-final": {
+      "bucket": "cloud-glider-sandbox-482268323955-us-west-2-artifacts",
+      "key": "generation/daemon-rename-4582f857d2fe65cac7ed0ee3b8d3fb7f8b09246ddd907510874fca8d42950ee9-permission-boundaries.json",
+      "version_id": "eeAQ1LRuCH0xf8PKVulG.6vql4yM3pGj",
+      "sha256": "4582f857d2fe65cac7ed0ee3b8d3fb7f8b09246ddd907510874fca8d42950ee9",
+      "url": "https://cloud-glider-sandbox-482268323955-us-west-2-artifacts.s3.us-west-2.amazonaws.com/generation/daemon-rename-4582f857d2fe65cac7ed0ee3b8d3fb7f8b09246ddd907510874fca8d42950ee9-permission-boundaries.json?versionId=eeAQ1LRuCH0xf8PKVulG.6vql4yM3pGj"
+    }
+  },
+  "launch_template": {
+    "id": "lt-09e12d4ca882601db",
+    "version": "5",
+    "sha256": "a7fde0927ce5323ee3795a2bd4d1071547a69b8dbd0966e3a9d5846650e36413"
+  },
+  "smoke": {
+    "result": "CLOUD_GLIDER_AMI_SMOKE_PASS",
+    "ec2_contract": "EC2_BAKED_CONTRACT_PASS",
+    "free_bytes": 632463360,
+    "instance_profile": null,
+    "runtime_daemon_started": false,
+    "stack_deleted": true,
+    "verification": "Explicit CloudFormation WaitCondition success payload; console API returned no output."
+  },
+  "validation": {
+    "tests_passed": 298,
+    "cfn_lint": "PASS",
+    "repository_checks": "PASS",
+    "rendered_bootstrap": "PASS",
+    "live_propagation": "PASS_GENERATIONS_0_THROUGH_2"
+  },
+  "aws_naming": {
+    "daemon_role": "cloud-glider-sandbox-daemon",
+    "daemon_instance_profile": "cloud-glider-sandbox-daemon",
+    "daemon_boundary": "cloud-glider-sandbox-daemon-boundary",
+    "daemon_log_group": "/cloud-glider/sandbox/operations/daemon",
+    "old_role_deleted": true,
+    "old_instance_profile_deleted": true,
+    "old_log_group_retained": true,
+    "old_boundary_retained": true
+  },
+  "migration": {
+    "conditional_audited_transaction_verified": true,
+    "request_id": "12",
+    "cycle_and_command_counters_preserved": true,
+    "current_preserved": true,
+    "hold_preserved": true
+  },
+  "first_trial": {
+    "result": "BOOTSTRAP_DEFINITIVELY_DENIED_BEFORE_LAUNCH",
+    "cause": "Boundaries stack retained its previous ApprovedGenerationTemplateUrl parameter; the new daemon seed was denied by the bootstrap boundary.",
+    "cloudtrail_event_id": "491883c1-3efa-4c20-8d11-687d7758e1f6",
+    "request_id": "12",
+    "generation_launches": 0,
+    "recovery": "Audited conditional recovery after delivery was disabled, CloudTrail proved AccessDenied, no generation stack existed and AWS generation inventory was empty. Only the matching provisioning marker was removed; cycle and command counters were preserved."
+  },
+  "cleanup": {
+    "successful_builder_terminated": true,
+    "smoke_instance_terminated": true,
+    "build_and_smoke_volumes_remaining": 0,
+    "temporary_keypair_deleted": true,
+    "legacy_runtime_deployment_grants_removed": true,
+    "three_final_inline_policies_verified": true,
+    "test_generations_deleted": true
+  },
+  "remaining_work": [],
+  "limitations": [
+    "Timing records remain local; no live timing result or speedup is claimed.",
+    "The first combined bake lost its provisioning connection and was cleanly canceled; the diagnostic retry succeeded.",
+    "Historical agent logs, boundary policy, receipts and recovery/import snapshots remain for evidence; SSM Agent and AGENTS.md names are unchanged."
+  ],
+  "second_trial": {
+    "result": "SEED_INSTANCE_DENIED_BEFORE_LAUNCH",
+    "cause": "Boundary AllowedImageId retained the previous image pin. Corrected to ami-03ec56175b8fec828 without broadening permissions.",
+    "recovery": "Supported lifecycle cleanup completed; request advanced from 12 to 13."
+  },
+  "bounded_trial": {
+    "request_id": "13",
+    "result": "PASS",
+    "final_current_generation": "000002",
+    "final_instance_id": "i-041a8285d5e05420e",
+    "predecessor_instances": [
+      "i-0c63c54206cf961e9",
+      "i-0f8b134529c1ccb40"
+    ],
+    "predecessors_terminated": true,
+    "successor_functional_continuation": "DRY_RUN_PASSED",
+    "final_ownership_verified": true,
+    "peak_live_generations": "Not continuously sampled; no peak claim."
+  },
+  "final_state": {
+    "propagation_enabled": false,
+    "bootstrap_requested": false,
+    "bootstrap_trigger_enabled": true,
+    "max_generation": 2,
+    "current_status": "UNINITIALIZED",
+    "request_status": "READY",
+    "request_id": "14",
+    "cleanup_status": "COMPLETE",
+    "operation_status": "COMPLETE",
+    "active_command": "NONE",
+    "lifecycle_locks": 0,
+    "live_generation_instances": 0,
+    "generation_records": 0,
+    "seed_stack_exists": false,
+    "cleanup_retry_schedules": 0
+  },
+  "completion_note": "All deployed stack, boundary, image, network, profile, artifact and control pins agree. Supported stop refreshed stale completion feedback after authoritative cleanup had completed. Timing remains unmeasured."
+}

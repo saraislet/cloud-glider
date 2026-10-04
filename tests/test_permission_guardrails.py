@@ -18,7 +18,7 @@ ACCOUNT = "111122223333"
 ORG = "o-a1b2c3d4e5"
 PREFIX = "cloud-glider-sandbox"
 ROLE = "arn:aws:iam::" + ACCOUNT + ":role/"
-AGENT, GENERATION, HOLD = [ROLE + PREFIX + suffix for suffix in ["-agent", "-generation-cfn", "-emergency-hold"]]
+DAEMON, GENERATION, HOLD = [ROLE + PREFIX + suffix for suffix in ["-daemon", "-generation-cfn", "-emergency-hold"]]
 BOOTSTRAP = ROLE + PREFIX + "-bootstrap-BootstrapRole-abc"
 ADMIN, RECOVERY, FOUNDATION = [ROLE + name for name in ["BoundaryAdmin", "Recovery", PREFIX + "-foundation-cfn"]]
 TABLE = "arn:aws:dynamodb:us-west-2:" + ACCOUNT + ":table/" + PREFIX + "-state"
@@ -126,12 +126,12 @@ class GuardrailTests(unittest.TestCase):
     def boundary(self, name, action, resource, context=None):
         return decision(self.boundaries[name + "Boundary"], action, resource, context)
 
-    def scp(self, action, resource, principal=AGENT, **context):
+    def scp(self, action, resource, principal=DAEMON, **context):
         ctx = {"aws:PrincipalArn": principal, "aws:RequestedRegion": "us-west-2", **context}
         return any(decision(p, action, resource, ctx) == "explicitDeny" for name, p in self.organization.items() if name.startswith("scp-"))
 
     def test_ec2_backend_requires_pinned_template_and_preserves_passrole_limits(self):
-        policy = resolve(self.template['Resources']['AgentBoundary']['Properties']['PolicyDocument'], {**VALUES, 'PropagationBackend': 'ec2'})
+        policy = resolve(self.template['Resources']['DaemonBoundary']['Properties']['PolicyDocument'], {**VALUES, 'PropagationBackend': 'ec2'})
         lt = 'arn:aws:ec2:us-west-2:' + ACCOUNT + ':launch-template/lt-approved'
         ctx = {'aws:PrincipalTag/propagation-backend': 'ec2', 'ec2:LaunchTemplate': lt,
             'ec2:IsLaunchTemplateResource': True}
@@ -141,14 +141,14 @@ class GuardrailTests(unittest.TestCase):
         self.assertEqual(decision(policy, 'ec2:RunInstances', image, {**ctx, 'ec2:IsLaunchTemplateResource': False}), 'explicitDeny')
         self.assertEqual(decision(policy, 'ec2:RunInstances', image, {**ctx, 'ec2:LaunchTemplate': lt + '-other'}), 'explicitDeny')
         self.assertEqual(decision(policy, 'ec2:RunInstances', image), 'explicitDeny')
-        self.assertEqual(decision(policy, 'iam:PassRole', AGENT, {**ctx, 'iam:PassedToService': 'ec2.amazonaws.com'}), 'allowed')
+        self.assertEqual(decision(policy, 'iam:PassRole', DAEMON, {**ctx, 'iam:PassedToService': 'ec2.amazonaws.com'}), 'allowed')
         self.assertEqual(decision(policy, 'iam:PassRole', GENERATION, {**ctx, 'iam:PassedToService': 'cloudformation.amazonaws.com'}), 'implicitDeny')
-        self.assertEqual(decision(policy, 'iam:PassRole', AGENT, {**ctx, 'iam:PassedToService': 'lambda.amazonaws.com'}), 'implicitDeny')
+        self.assertEqual(decision(policy, 'iam:PassRole', DAEMON, {**ctx, 'iam:PassedToService': 'lambda.amazonaws.com'}), 'implicitDeny')
         self.assertEqual(decision(policy, 'sts:AssumeRole', FOUNDATION, ctx), 'implicitDeny')
 
-    def test_ec2_agent_launch_requires_the_existing_profile_path(self):
-        policy = resolve(self.template['Resources']['AgentBoundary']['Properties']['PolicyDocument'], {**VALUES, 'PropagationBackend': 'ec2'})
-        profile = 'arn:aws:iam::' + ACCOUNT + ':instance-profile/cloud-glider/' + PREFIX + '-agent'
+    def test_ec2_daemon_launch_requires_the_existing_profile_path(self):
+        policy = resolve(self.template['Resources']['DaemonBoundary']['Properties']['PolicyDocument'], {**VALUES, 'PropagationBackend': 'ec2'})
+        profile = 'arn:aws:iam::' + ACCOUNT + ':instance-profile/cloud-glider/' + PREFIX + '-daemon'
         context = {
             'ec2:LaunchTemplate': 'arn:aws:ec2:us-west-2:' + ACCOUNT + ':launch-template/lt-approved',
             'ec2:InstanceType': 't4g.micro', 'ec2:MetadataHttpTokens': 'required',
@@ -160,10 +160,10 @@ class GuardrailTests(unittest.TestCase):
         for changed in (profile.replace('instance-profile/cloud-glider/', 'instance-profile/'), profile + '-other'):
             self.assertEqual(decision(policy, 'ec2:RunInstances', instance, {**context, 'ec2:InstanceProfile': changed}), 'implicitDeny')
         foundation = (ROOT / 'cfn/foundation.yaml').read_text()
-        self.assertIn("ec2:InstanceProfile: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:instance-profile/cloud-glider/cloud-glider-${Environment}-agent'", foundation)
+        self.assertIn("ec2:InstanceProfile: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:instance-profile/cloud-glider/cloud-glider-${Environment}-daemon'", foundation)
 
     def test_runtime_templates_require_the_corresponding_boundary(self):
-        for filename, roles in [("foundation.yaml", {"AgentRole": "agent", "GenerationServiceRole": "generation", "EmergencyHoldFunctionRole": "hold"}), ("bootstrap.yaml", {"BootstrapRole": "bootstrap"})]:
+        for filename, roles in [("foundation.yaml", {"DaemonRole": "daemon", "GenerationServiceRole": "generation", "EmergencyHoldFunctionRole": "hold"}), ("bootstrap.yaml", {"BootstrapRole": "bootstrap"})]:
             text = (ROOT / "cfn" / filename).read_text()
             for logical_id, suffix in roles.items():
                 block = text.split("  " + logical_id + ":\n", 1)[1].split("      AssumeRolePolicyDocument:", 1)[0]
@@ -180,7 +180,7 @@ class GuardrailTests(unittest.TestCase):
 
     def test_cleanup_boundaries_keep_operator_and_deletion_limits(self):
         context = {"dynamodb:LeadingKeys": ["BOOTSTRAP"]}
-        for role in ("Agent", "Hold"):
+        for role in ("Daemon", "Hold"):
             self.assertEqual(self.boundary(role, "dynamodb:ConditionCheckItem", TABLE, context), "allowed")
             self.assertNotEqual(self.boundary(role, "dynamodb:UpdateItem", TABLE, context), "allowed")
         self.assertEqual(self.boundary("Bootstrap", "dynamodb:UpdateItem", TABLE, {"dynamodb:LeadingKeys": ["CONTROL"]}), "allowed")
@@ -192,7 +192,7 @@ class GuardrailTests(unittest.TestCase):
         self.assertNotEqual(self.boundary("Bootstrap", "cloudformation:DeleteStack", STACK.replace("-gen-000001", "-foundation"), tags), "allowed")
 
     def test_creation_requires_exact_release_and_service_role(self):
-        for boundary, stack in [("Agent", STACK), ("Bootstrap", STACK.replace("000001", "000000"))]:
+        for boundary, stack in [("Daemon", STACK), ("Bootstrap", STACK.replace("000001", "000000"))]:
             for url, expected in [(URL, "allowed"), (URL + "-different", "explicitDeny"), (None, "explicitDeny")]:
                 ctx = {"cloudformation:RoleARN": GENERATION}
                 if url is not None:
@@ -205,13 +205,13 @@ class GuardrailTests(unittest.TestCase):
 
     def test_preflight_requires_release_but_retirement_does_not(self):
         ctx = {"cloudformation:RoleARN": GENERATION, "cloudformation:TemplateUrl": URL}
-        self.assertEqual(self.boundary("Agent", "cloudformation:CreateChangeSet", STACK, ctx), "allowed")
-        self.assertEqual(self.boundary("Agent", "cloudformation:DeleteStack", STACK, {"cloudformation:RoleARN": GENERATION}), "allowed")
-        self.assertEqual(self.boundary("Agent", "cloudformation:DeleteChangeSet", STACK), "allowed")
-        self.assertNotEqual(self.boundary("Agent", "cloudformation:DeleteStack", STACK.replace("-gen-000001", "-foundation"), {"cloudformation:RoleARN": GENERATION}), "allowed")
+        self.assertEqual(self.boundary("Daemon", "cloudformation:CreateChangeSet", STACK, ctx), "allowed")
+        self.assertEqual(self.boundary("Daemon", "cloudformation:DeleteStack", STACK, {"cloudformation:RoleARN": GENERATION}), "allowed")
+        self.assertEqual(self.boundary("Daemon", "cloudformation:DeleteChangeSet", STACK), "allowed")
+        self.assertNotEqual(self.boundary("Daemon", "cloudformation:DeleteStack", STACK.replace("-gen-000001", "-foundation"), {"cloudformation:RoleARN": GENERATION}), "allowed")
 
     def test_empty_release_disables_creation_without_blocking_retirement(self):
-        p = resolve(self.template["Resources"]["AgentBoundary"]["Properties"]["PolicyDocument"], {**VALUES, "ApprovedGenerationTemplateUrl": ""})
+        p = resolve(self.template["Resources"]["DaemonBoundary"]["Properties"]["PolicyDocument"], {**VALUES, "ApprovedGenerationTemplateUrl": ""})
         self.assertEqual(decision(p, "cloudformation:CreateStack", STACK, {"cloudformation:RoleARN": GENERATION, "cloudformation:TemplateUrl": URL}), "explicitDeny")
         self.assertEqual(decision(p, "cloudformation:DeleteStack", STACK, {"cloudformation:RoleARN": GENERATION}), "allowed")
 
@@ -227,20 +227,20 @@ class GuardrailTests(unittest.TestCase):
         self.assertEqual(self.boundary("Generation", "ec2:CreateTags", ec2 + "instance/i-new", {**ctx, "ec2:CreateAction": "RunInstances"}), "allowed")
         self.assertNotEqual(self.boundary("Generation", "ec2:CreateTags", ec2 + "instance/i-existing", ctx), "allowed")
 
-    def test_agent_cannot_change_operator_state_but_can_check_it(self):
+    def test_daemon_cannot_change_operator_state_but_can_check_it(self):
         for key in ["CONTROL", "HOLD", "BOOTSTRAP"]:
             for action in ["dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:BatchWriteItem"]:
-                self.assertEqual(self.boundary("Agent", action, TABLE, {"dynamodb:LeadingKeys": [key]}), "explicitDeny")
-        self.assertEqual(self.boundary("Agent", "dynamodb:ConditionCheckItem", TABLE, {"dynamodb:LeadingKeys": ["CONTROL", "HOLD"]}), "allowed")
+                self.assertEqual(self.boundary("Daemon", action, TABLE, {"dynamodb:LeadingKeys": [key]}), "explicitDeny")
+        self.assertEqual(self.boundary("Daemon", "dynamodb:ConditionCheckItem", TABLE, {"dynamodb:LeadingKeys": ["CONTROL", "HOLD"]}), "allowed")
         for key in ["CURRENT", "LOCK", "AUDIT#PROPAGATION"]:
-            self.assertEqual(self.boundary("Agent", "dynamodb:UpdateItem", TABLE, {"dynamodb:LeadingKeys": [key]}), "allowed")
-        self.assertEqual(self.boundary("Agent", "dynamodb:PutItem", TABLE, {"dynamodb:LeadingKeys": ["CURRENT", "CONTROL"]}), "explicitDeny")
+            self.assertEqual(self.boundary("Daemon", "dynamodb:UpdateItem", TABLE, {"dynamodb:LeadingKeys": [key]}), "allowed")
+        self.assertEqual(self.boundary("Daemon", "dynamodb:PutItem", TABLE, {"dynamodb:LeadingKeys": ["CURRENT", "CONTROL"]}), "explicitDeny")
         self.assertEqual(self.boundary("Hold", "dynamodb:PutItem", TABLE, {"dynamodb:LeadingKeys": ["HOLD"]}), "allowed")
         self.assertEqual(self.boundary("Hold", "dynamodb:DeleteItem", TABLE, {"dynamodb:LeadingKeys": ["HOLD"]}), "explicitDeny")
 
     def test_generation_table_permissions_are_separate(self):
         generations = TABLE.replace("-state", "-generations")
-        for role, action in [("Agent", "dynamodb:UpdateItem"), ("Hold", "dynamodb:UpdateItem"), ("Bootstrap", "dynamodb:PutItem"), ("Bootstrap", "dynamodb:DeleteItem")]:
+        for role, action in [("Daemon", "dynamodb:UpdateItem"), ("Hold", "dynamodb:UpdateItem"), ("Bootstrap", "dynamodb:PutItem"), ("Bootstrap", "dynamodb:DeleteItem")]:
             self.assertEqual(self.boundary(role, action, generations, {"dynamodb:LeadingKeys": ["GEN#000001"]}), "allowed")
             self.assertNotEqual(self.boundary(role, action, TABLE, {"dynamodb:LeadingKeys": ["GEN#000001"]}), "allowed")
             for key in ("CONTROL", "CURRENT", "HOLD", "BOOTSTRAP"):
@@ -248,18 +248,18 @@ class GuardrailTests(unittest.TestCase):
 
     def test_s3_metadata_reads_and_artifact_immutability(self):
         for action in ["s3:GetBucketLocation", "s3:GetBucketVersioning"]:
-            self.assertEqual(self.boundary("Agent", action, BUCKET), "allowed")
-        self.assertEqual(self.boundary("Agent", "s3:ListBucket", BUCKET, {"s3:prefix": "generation/"}), "allowed")
-        self.assertNotEqual(self.boundary("Agent", "s3:ListBucket", BUCKET, {"s3:prefix": "other/"}), "allowed")
+            self.assertEqual(self.boundary("Daemon", action, BUCKET), "allowed")
+        self.assertEqual(self.boundary("Daemon", "s3:ListBucket", BUCKET, {"s3:prefix": "generation/"}), "allowed")
+        self.assertNotEqual(self.boundary("Daemon", "s3:ListBucket", BUCKET, {"s3:prefix": "other/"}), "allowed")
         for action in ["s3:PutObject", "s3:DeleteObjectVersion"]:
-            self.assertNotEqual(self.boundary("Agent", action, BUCKET + "/generation/agent.tar.gz"), "allowed")
+            self.assertNotEqual(self.boundary("Daemon", action, BUCKET + "/generation/daemon.tar.gz"), "allowed")
 
     def test_foundation_cannot_escape_via_child_roles_or_edit_own_ceiling(self):
-        policy_arn = "arn:aws:iam::" + ACCOUNT + ":policy/" + PREFIX + "-agent-boundary"
+        policy_arn = "arn:aws:iam::" + ACCOUNT + ":policy/" + PREFIX + "-daemon-boundary"
         for action in ["iam:CreateRole", "iam:PutRolePermissionsBoundary"]:
-            self.assertEqual(self.boundary("Foundation", action, AGENT, {"iam:PermissionsBoundary": policy_arn}), "allowed")
-            self.assertNotEqual(self.boundary("Foundation", action, AGENT), "allowed")
-            self.assertNotEqual(self.boundary("Foundation", action, AGENT, {"iam:PermissionsBoundary": policy_arn.replace("agent-boundary", "generation-boundary")}), "allowed")
+            self.assertEqual(self.boundary("Foundation", action, DAEMON, {"iam:PermissionsBoundary": policy_arn}), "allowed")
+            self.assertNotEqual(self.boundary("Foundation", action, DAEMON), "allowed")
+            self.assertNotEqual(self.boundary("Foundation", action, DAEMON, {"iam:PermissionsBoundary": policy_arn.replace("daemon-boundary", "generation-boundary")}), "allowed")
         for action, resource in [("iam:CreatePolicyVersion", policy_arn), ("iam:DeleteRolePermissionsBoundary", FOUNDATION), ("iam:PutRolePolicy", FOUNDATION), ("iam:UpdateAssumeRolePolicy", ADMIN), ("dynamodb:UpdateItem", TABLE), ("cloudformation:UpdateStack", STACK)]:
             self.assertNotEqual(self.boundary("Foundation", action, resource), "allowed")
 
@@ -267,23 +267,23 @@ class GuardrailTests(unittest.TestCase):
         profile = "arn:aws:iam::" + ACCOUNT + ":instance-profile/"
         actions = ["iam:GetInstanceProfile", "iam:RemoveRoleFromInstanceProfile", "iam:DeleteInstanceProfile"]
         for action in actions:
-            for path in [PREFIX + "-agent", "cloud-glider/" + PREFIX + "-agent"]:
+            for path in [PREFIX + "-daemon", "cloud-glider/" + PREFIX + "-daemon"]:
                 with self.subTest(action=action, path=path):
                     self.assertEqual(self.boundary("Foundation", action, profile + path), "allowed")
-            for path in [PREFIX + "-unrelated", "other/" + PREFIX + "-agent", "cloud-glider/" + PREFIX + "-unrelated"]:
+            for path in [PREFIX + "-unrelated", "other/" + PREFIX + "-daemon", "cloud-glider/" + PREFIX + "-unrelated"]:
                 with self.subTest(action=action, path=path):
                     self.assertNotEqual(self.boundary("Foundation", action, profile + path), "allowed")
         for action in ["iam:CreateInstanceProfile", "iam:AddRoleToInstanceProfile", "iam:TagInstanceProfile", "iam:UntagInstanceProfile"]:
             with self.subTest(action=action):
-                self.assertNotEqual(self.boundary("Foundation", action, profile + PREFIX + "-agent"), "allowed")
+                self.assertNotEqual(self.boundary("Foundation", action, profile + PREFIX + "-daemon"), "allowed")
 
     def test_runtime_scp_blocks_escalation_and_preserves_expected_passrole(self):
-        for principal in [AGENT, GENERATION, HOLD, BOOTSTRAP]:
+        for principal in [DAEMON, GENERATION, HOLD, BOOTSTRAP]:
             for action in ["iam:CreateRole", "iam:PutRolePolicy", "organizations:LeaveOrganization", "sts:AssumeRole", "ec2:CreateNetworkInterface"]:
-                self.assertTrue(self.scp(action, AGENT, principal))
-        self.assertTrue(self.scp("ec2:RunInstances", "*", AGENT))
+                self.assertTrue(self.scp(action, DAEMON, principal))
+        self.assertTrue(self.scp("ec2:RunInstances", "*", DAEMON))
         self.assertFalse(self.scp("ec2:RunInstances", "*", GENERATION))
-        for principal, target, service in [(AGENT, GENERATION, "cloudformation.amazonaws.com"), (BOOTSTRAP, GENERATION, "cloudformation.amazonaws.com"), (GENERATION, AGENT, "ec2.amazonaws.com")]:
+        for principal, target, service in [(DAEMON, GENERATION, "cloudformation.amazonaws.com"), (BOOTSTRAP, GENERATION, "cloudformation.amazonaws.com"), (GENERATION, DAEMON, "ec2.amazonaws.com")]:
             self.assertFalse(self.scp("iam:PassRole", target, principal, **{"iam:PassedToService": service, "aws:RequestedRegion": "us-east-1"}))
             self.assertTrue(self.scp("iam:PassRole", ADMIN, principal, **{"iam:PassedToService": service}))
             self.assertTrue(self.scp("iam:PassRole", target, principal, **{"iam:PassedToService": "lambda.amazonaws.com"}))
@@ -291,19 +291,19 @@ class GuardrailTests(unittest.TestCase):
         self.assertTrue(self.scp("iam:PassRole", GENERATION, HOLD, **{"iam:PassedToService": "cloudformation.amazonaws.com"}))
 
     def test_runtime_region_deny_does_not_disable_billing_administration(self):
-        self.assertTrue(self.scp("cloudformation:CreateStack", STACK, AGENT, **{"aws:RequestedRegion": "us-east-1"}))
+        self.assertTrue(self.scp("cloudformation:CreateStack", STACK, DAEMON, **{"aws:RequestedRegion": "us-east-1"}))
         self.assertFalse(self.scp("cloudwatch:PutMetricAlarm", "arn:aws:cloudwatch:us-east-1:" + ACCOUNT + ":alarm:cloud-glider-estimated-charges-15", FOUNDATION, **{"aws:RequestedRegion": "us-east-1"}))
 
     def test_boundary_protection_and_recovery_are_independent_of_foundation(self):
-        boundary = "arn:aws:iam::" + ACCOUNT + ":policy/" + PREFIX + "-agent-boundary"
+        boundary = "arn:aws:iam::" + ACCOUNT + ":policy/" + PREFIX + "-daemon-boundary"
         for action in ["iam:CreatePolicy", "iam:CreatePolicyVersion", "iam:SetDefaultPolicyVersion", "iam:DeletePolicy"]:
             self.assertTrue(self.scp(action, boundary, FOUNDATION))
             self.assertFalse(self.scp(action, boundary, ADMIN))
             self.assertFalse(self.scp(action, boundary, RECOVERY))
-        self.assertTrue(self.scp("iam:CreateRole", AGENT, FOUNDATION))
-        self.assertFalse(self.scp("iam:CreateRole", AGENT, FOUNDATION, **{"iam:PermissionsBoundary": boundary}))
-        self.assertTrue(self.scp("iam:CreateRole", AGENT, FOUNDATION, **{"iam:PermissionsBoundary": boundary.replace("agent-boundary", "generation-boundary")}))
-        self.assertTrue(self.scp("iam:DeleteRolePermissionsBoundary", AGENT, FOUNDATION))
+        self.assertTrue(self.scp("iam:CreateRole", DAEMON, FOUNDATION))
+        self.assertFalse(self.scp("iam:CreateRole", DAEMON, FOUNDATION, **{"iam:PermissionsBoundary": boundary}))
+        self.assertTrue(self.scp("iam:CreateRole", DAEMON, FOUNDATION, **{"iam:PermissionsBoundary": boundary.replace("daemon-boundary", "generation-boundary")}))
+        self.assertTrue(self.scp("iam:DeleteRolePermissionsBoundary", DAEMON, FOUNDATION))
         self.assertTrue(self.scp("iam:UpdateAssumeRolePolicy", FOUNDATION, FOUNDATION))
         self.assertTrue(self.scp("iam:UpdateAssumeRolePolicy", RECOVERY, FOUNDATION))
 
@@ -331,7 +331,7 @@ class GuardrailTests(unittest.TestCase):
         self.assertNotEqual(decision(p, "s3:GetObject", "arn:aws:s3:::unrelated/object", {}), "explicitDeny")
 
     def test_private_renderer_rejects_unsafe_or_incomplete_configuration(self):
-        for key, value in [("account_id", "123456789012"), ("organization_id", "REQUIRED"), ("environment", "sandbox*"), ("boundary_admin_role_arn", AGENT), ("recovery_role_arn", ADMIN), ("recovery_role_arn", ROLE + "*"), ("foundation_role_arn", FOUNDATION.replace(ACCOUNT, "999988887777")), ("boundary_admin_role_arn", ADMIN.replace(":iam:", ":sts:"))]:
+        for key, value in [("account_id", "123456789012"), ("organization_id", "REQUIRED"), ("environment", "sandbox*"), ("boundary_admin_role_arn", DAEMON), ("recovery_role_arn", ADMIN), ("recovery_role_arn", ROLE + "*"), ("foundation_role_arn", FOUNDATION.replace(ACCOUNT, "999988887777")), ("boundary_admin_role_arn", ADMIN.replace(":iam:", ":sts:"))]:
             with self.subTest(key=key, value=value), self.assertRaises(ValueError):
                 renderer.render_policies({**CONFIG, key: value})
         with self.assertRaises(ValueError):

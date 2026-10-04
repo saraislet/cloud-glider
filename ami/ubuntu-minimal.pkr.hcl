@@ -13,12 +13,12 @@ variable "source_ami" { type = string }
 variable "subnet_id" { type = string }
 variable "security_group_id" { type = string }
 variable "builder_instance_profile" { type = string }
-variable "agent_artifact" { type = string }
-variable "agent_sha256" {
+variable "daemon_artifact" { type = string }
+variable "daemon_sha256" {
   type = string
   validation {
-    condition     = can(regex("^[a-f0-9]{64}$", var.agent_sha256))
-    error_message = "Provide the exact lowercase SHA-256 of the agent artifact."
+    condition     = can(regex("^[a-f0-9]{64}$", var.daemon_sha256))
+    error_message = "Provide the exact lowercase SHA-256 of the daemon artifact."
   }
 }
 variable "source_commit" {
@@ -114,14 +114,14 @@ source "amazon-ebssurrogate" "ubuntu" {
     Name    = "cloud-glider-image-builder"
   }
   run_volume_tags = { project = "cloud-glider", purpose = "image-build" }
-  snapshot_tags   = { project = "cloud-glider", purpose = "agent-image" }
+  snapshot_tags   = { project = "cloud-glider", purpose = "daemon-image" }
   tags = {
     project       = "cloud-glider"
-    purpose       = "agent-image"
+    purpose       = "daemon-image"
     approval      = "candidate"
     source-commit = var.source_commit
     source-ami    = var.source_ami
-    agent-sha256  = var.agent_sha256
+    daemon-sha256  = var.daemon_sha256
   }
 }
 
@@ -133,12 +133,12 @@ build {
     destination = "/tmp/glider-image/"
   }
   provisioner "file" {
-    source      = var.agent_artifact
-    destination = "/tmp/glider-image/agent.tar.gz"
+    source      = var.daemon_artifact
+    destination = "/tmp/glider-image/daemon.tar.gz"
   }
   provisioner "shell" {
     environment_vars = [
-      "AGENT_SHA256=${var.agent_sha256}", "SOURCE_COMMIT=${var.source_commit}"
+      "DAEMON_SHA256=${var.daemon_sha256}", "SOURCE_COMMIT=${var.source_commit}"
     ]
     execute_command = "chmod +x {{ .Path }}; sudo env {{ .Vars }} bash {{ .Path }}"
     script          = "${path.root}/files/install.sh"
@@ -150,7 +150,7 @@ build {
     output     = ".artifacts/ami/ami-build-manifest.json"
     strip_path = true
     custom_data = {
-      agent_sha256  = var.agent_sha256
+      daemon_sha256  = var.daemon_sha256
       source_commit = var.source_commit
       source_ami    = var.source_ami
       root_gib      = "2"

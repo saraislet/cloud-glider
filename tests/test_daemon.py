@@ -5,9 +5,9 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "agent"))
+sys.path.insert(0, str(ROOT / "daemon"))
 
-from cloud_glider.agent import Agent, AgentConfig, SafetyViolation, TransientFailure  # noqa: E402
+from cloud_glider.daemon import Daemon, DaemonConfig, SafetyViolation, TransientFailure  # noqa: E402
 
 
 class FakeClock:
@@ -22,7 +22,7 @@ class FakeClock:
 
 
 def config():
-    return AgentConfig(
+    return DaemonConfig(
         request_id="1",
         environment="sandbox",
         generation="000001",
@@ -38,13 +38,13 @@ def config():
         template_s3_version_id="template-object-v1",
         template_sha256="a" * 64,
         template_build_id="abcdef123456",
-        agent_artifact_bucket="artifacts",
-        agent_artifact_key="generation/agent.tar.gz",
-        agent_artifact_version_id="agent-object-v1",
-        agent_artifact_sha256="b" * 64,
+        daemon_artifact_bucket="artifacts",
+        daemon_artifact_key="generation/daemon.tar.gz",
+        daemon_artifact_version_id="daemon-object-v1",
+        daemon_artifact_sha256="b" * 64,
         emergency_hold_function_name="cloud-glider-sandbox-emergency-hold",
         propagation_audit_log_group="/cloud-glider/sandbox/audit/propagation",
-        agent_operations_log_group="/cloud-glider/sandbox/agent/operations",
+        daemon_operations_log_group="/cloud-glider/sandbox/daemon/operations",
     )
 
 
@@ -60,10 +60,10 @@ def control(**overrides):
         "template_s3_version_id": "template-object-v1",
         "template_sha256": "a" * 64,
         "template_build_id": "abcdef123456",
-        "agent_artifact_bucket": "artifacts",
-        "agent_artifact_key": "generation/agent.tar.gz",
-        "agent_artifact_version_id": "agent-object-v1",
-        "agent_artifact_sha256": "b" * 64,
+        "daemon_artifact_bucket": "artifacts",
+        "daemon_artifact_key": "generation/daemon.tar.gz",
+        "daemon_artifact_version_id": "daemon-object-v1",
+        "daemon_artifact_sha256": "b" * 64,
         "max_generation": 2,
         "max_live_generations": 3,
         "concurrency_model": "PREFLIGHT_THEN_RETIRE",
@@ -144,17 +144,17 @@ class FakeGateway:
             "PredecessorStackId": self.cfg.predecessor_stack_id,
             "HandoffToken": self.cfg.handoff_token,
             "ApprovedImageId": "ami-approved",
-            "AgentDeliveryMode": "s3",
+            "DaemonDeliveryMode": "s3",
             "InstanceType": "t4g.micro",
             "ImageArchitecture": "arm64",
             "SubnetId": "subnet-approved",
             "SecurityGroupId": "sg-approved",
-            "AgentInstanceProfileName": "cloud-glider-sandbox-agent",
+            "DaemonInstanceProfileName": "cloud-glider-sandbox-daemon",
             "StateTableName": self.cfg.state_table_name,
-            "AgentArtifactBucket": self.cfg.agent_artifact_bucket,
-            "AgentArtifactKey": self.cfg.agent_artifact_key,
-            "AgentArtifactVersionId": self.cfg.agent_artifact_version_id,
-            "AgentArtifactSha256": self.cfg.agent_artifact_sha256,
+            "DaemonArtifactBucket": self.cfg.daemon_artifact_bucket,
+            "DaemonArtifactKey": self.cfg.daemon_artifact_key,
+            "DaemonArtifactVersionId": self.cfg.daemon_artifact_version_id,
+            "DaemonArtifactSha256": self.cfg.daemon_artifact_sha256,
             "BootstrapVersion": self.cfg.bootstrap_version,
             "TemplateVersion": self.cfg.template_version,
             "TemplateBucket": self.cfg.template_bucket,
@@ -163,7 +163,7 @@ class FakeGateway:
             "TemplateSha256": self.cfg.template_sha256,
             "TemplateBuildId": self.cfg.template_build_id,
             "PropagationAuditLogGroupName": self.cfg.propagation_audit_log_group,
-            "AgentOperationsLogGroupName": self.cfg.agent_operations_log_group,
+            "DaemonOperationsLogGroupName": self.cfg.daemon_operations_log_group,
             "EmergencyHoldFunctionName": self.cfg.emergency_hold_function_name,
             "OperationalAlertsTopicArn": "arn:aws:sns:us-west-2:111122223333:alerts",
             "RootDeviceName": "/dev/xvda",
@@ -219,8 +219,8 @@ class FakeGateway:
             "template_sha256": parameters["TemplateSha256"],
             "template_build_id": parameters["TemplateBuildId"],
             "bootstrap_version": parameters["BootstrapVersion"],
-            "agent_artifact_version_id": parameters["AgentArtifactVersionId"],
-            "agent_artifact_sha256": parameters["AgentArtifactSha256"],
+            "daemon_artifact_version_id": parameters["DaemonArtifactVersionId"],
+            "daemon_artifact_sha256": parameters["DaemonArtifactSha256"],
             "status": "CANDIDATE",
             "workload_healthy": True,
             "observed_propagation_enabled": True,
@@ -253,35 +253,35 @@ class FakeGateway:
         self.calls.append("hold")
 
 
-class AgentTests(unittest.TestCase):
-    def make_agent(self, gateway, clock):
-        agent = Agent(config(), gateway, clock=clock, sleep=clock.sleep, logger=lambda value: None)
-        agent.verify_self()
-        return agent
+class DaemonTests(unittest.TestCase):
+    def make_daemon(self, gateway, clock):
+        daemon = Daemon(config(), gateway, clock=clock, sleep=clock.sleep, logger=lambda value: None)
+        daemon.verify_self()
+        return daemon
 
-    def test_generation_table_change_blocks_agent_activity(self):
+    def test_generation_table_change_blocks_daemon_activity(self):
         clock = FakeClock()
         gateway = FakeGateway(config(), clock, [control(generation_table_name="foreign-table")])
-        agent = Agent(config(), gateway, clock=clock, sleep=clock.sleep)
+        daemon = Daemon(config(), gateway, clock=clock, sleep=clock.sleep)
         with self.assertRaises(SafetyViolation) as caught:
-            agent.cycle()
+            daemon.cycle()
         self.assertEqual(caught.exception.code, "GENERATION_TABLE_MISMATCH")
 
-    def test_active_cleanup_blocks_all_agent_activity(self):
+    def test_active_cleanup_blocks_all_daemon_activity(self):
         clock = FakeClock()
         gateway = FakeGateway(config(), clock, [control(cleanup_requested=True, cleanup_status="QUIESCING")])
-        agent = self.make_agent(gateway, clock)
+        daemon = self.make_daemon(gateway, clock)
         with self.assertRaises(TransientFailure):
-            agent.cycle()
+            daemon.cycle()
         self.assertNotIn("heartbeat", gateway.calls)
         self.assertNotIn("create", gateway.calls)
 
-    def test_stale_request_id_blocks_all_agent_activity(self):
+    def test_stale_request_id_blocks_all_daemon_activity(self):
         clock = FakeClock()
         gateway = FakeGateway(config(), clock, [control(request_id="2")])
-        agent = self.make_agent(gateway, clock)
+        daemon = self.make_daemon(gateway, clock)
         with self.assertRaises(TransientFailure):
-            agent.cycle()
+            daemon.cycle()
         self.assertNotIn("heartbeat", gateway.calls)
         self.assertNotIn("create", gateway.calls)
 
@@ -289,14 +289,14 @@ class AgentTests(unittest.TestCase):
         clock = FakeClock()
         gateway = FakeGateway(config(), clock)
         parameters = gateway.own_parameters()
-        parameters.update(AgentDeliveryMode="baked", ApprovedImageId="ami-minimal",
+        parameters.update(DaemonDeliveryMode="baked", ApprovedImageId="ami-minimal",
                           RootDeviceName="/dev/sda1", RootVolumeGiB="2")
         gateway.own_parameters = lambda: parameters
-        agent = self.make_agent(gateway, clock)
-        self.assertEqual(agent.cycle(), "HANDOFF_COMPLETE")
+        daemon = self.make_daemon(gateway, clock)
+        self.assertEqual(daemon.cycle(), "HANDOFF_COMPLETE")
         for generation in (2, 3):
-            successor = agent._successor_parameters(control(), generation, config().stack_id, "token")
-            for name in ("AgentDeliveryMode", "ApprovedImageId", "RootDeviceName", "RootVolumeGiB"):
+            successor = daemon._successor_parameters(control(), generation, config().stack_id, "token")
+            for name in ("DaemonDeliveryMode", "ApprovedImageId", "RootDeviceName", "RootVolumeGiB"):
                 self.assertEqual(successor[name], parameters[name])
 
     def test_baked_mode_preserves_stop_and_hold_gates(self):
@@ -306,20 +306,20 @@ class AgentTests(unittest.TestCase):
                 clock = FakeClock()
                 gateway = FakeGateway(config(), clock, [approved])
                 parameters = gateway.own_parameters()
-                parameters.update(AgentDeliveryMode="baked", RootDeviceName="/dev/sda1",
+                parameters.update(DaemonDeliveryMode="baked", RootDeviceName="/dev/sda1",
                                   RootVolumeGiB="2")
                 gateway.own_parameters = lambda: parameters
                 gateway.hold_active = hold
-                agent = self.make_agent(gateway, clock)
-                self.assertEqual(agent.cycle(), "STOPPED_BY_OPERATOR")
+                daemon = self.make_daemon(gateway, clock)
+                self.assertEqual(daemon.cycle(), "STOPPED_BY_OPERATOR")
                 self.assertNotIn("create", gateway.calls)
                 self.assertNotIn("handoff", gateway.calls)
 
     def test_disabled_propagation_only_heartbeats(self):
         clock = FakeClock()
         gateway = FakeGateway(config(), clock, [control(propagation_enabled=False)])
-        agent = self.make_agent(gateway, clock)
-        self.assertEqual(agent.cycle(), "STOPPED_BY_OPERATOR")
+        daemon = self.make_daemon(gateway, clock)
+        self.assertEqual(daemon.cycle(), "STOPPED_BY_OPERATOR")
         self.assertNotIn("acquire", gateway.calls)
         self.assertNotIn("create", gateway.calls)
 
@@ -327,8 +327,8 @@ class AgentTests(unittest.TestCase):
         clock = FakeClock()
         gateway = FakeGateway(config(), clock)
         gateway.hold_active = True
-        agent = self.make_agent(gateway, clock)
-        self.assertEqual(agent.cycle(), "STOPPED_BY_OPERATOR")
+        daemon = self.make_daemon(gateway, clock)
+        self.assertEqual(daemon.cycle(), "STOPPED_BY_OPERATOR")
         self.assertNotIn("acquire", gateway.calls)
         self.assertNotIn("create", gateway.calls)
 
@@ -339,11 +339,11 @@ class AgentTests(unittest.TestCase):
                 clock = FakeClock()
                 gateway = FakeGateway(config(), clock, [values])
                 gateway.hold_active = hold
-                agent = self.make_agent(gateway, clock)
-                agent.cycle()
+                daemon = self.make_daemon(gateway, clock)
+                daemon.cycle()
                 self.assertEqual(gateway.calls, ["control", "heartbeat"])
                 self.assertEqual(gateway.current_reads, 1)
-                self.assertEqual(agent._poll_seconds, 60)
+                self.assertEqual(daemon._poll_seconds, 60)
 
     def test_candidate_keeps_fast_readiness_cadence(self):
         for limit in (1, 2):
@@ -351,20 +351,20 @@ class AgentTests(unittest.TestCase):
                 clock = FakeClock()
                 gateway = FakeGateway(config(), clock, [control(max_generation=limit)])
                 gateway.current["instance_id"] = "i-predecessor"
-                agent = self.make_agent(gateway, clock)
-                self.assertEqual(agent.cycle(), "CANDIDATE")
-                self.assertEqual(agent._poll_seconds, 5)
+                daemon = self.make_daemon(gateway, clock)
+                self.assertEqual(daemon.cycle(), "CANDIDATE")
+                self.assertEqual(daemon._poll_seconds, 5)
                 self.assertNotIn("create", gateway.calls)
 
     def test_idle_owner_resumes_with_fresh_stop_gate(self):
         clock = FakeClock()
         gateway = FakeGateway(config(), clock, [control(propagation_enabled=False)])
-        agent = self.make_agent(gateway, clock)
-        agent.cycle()
+        daemon = self.make_daemon(gateway, clock)
+        daemon.cycle()
         gateway.controls = [control(), control(propagation_enabled=False)]
         with self.assertRaisesRegex(TransientFailure, "operator stop"):
-            agent.cycle()
-        self.assertEqual(agent._poll_seconds, 5)
+            daemon.cycle()
+        self.assertEqual(daemon._poll_seconds, 5)
         self.assertNotIn("create", gateway.calls)
 
     def test_generation_limit_exits_without_sleep_or_more_polling(self):
@@ -377,11 +377,11 @@ class AgentTests(unittest.TestCase):
                 logs = []
 
                 def unexpected_sleep(seconds):
-                    self.fail("completed agent must not sleep or poll again")
+                    self.fail("completed daemon must not sleep or poll again")
 
-                agent = Agent(config(), gateway, clock=clock,
+                daemon = Daemon(config(), gateway, clock=clock,
                               sleep=unexpected_sleep, logger=logs.append)
-                self.assertEqual(agent.run(), 0)
+                self.assertEqual(daemon.run(), 0)
                 self.assertEqual(gateway.calls.count("control"), 1)
                 self.assertEqual(gateway.calls.count("heartbeat"), 1)
                 for operation in ("acquire", "create", "handoff", "delete-predecessor"):
@@ -391,16 +391,16 @@ class AgentTests(unittest.TestCase):
     def test_incomplete_control_read_does_not_retain_idle_delay(self):
         clock = FakeClock()
         gateway = FakeGateway(config(), clock, [control(propagation_enabled=False)])
-        agent = self.make_agent(gateway, clock)
-        agent.cycle()
+        daemon = self.make_daemon(gateway, clock)
+        daemon.cycle()
 
         def incomplete():
             raise TransientFailure("control read was incomplete")
 
         gateway.read_control_and_hold = incomplete
         with self.assertRaisesRegex(TransientFailure, "incomplete"):
-            agent.cycle()
-        self.assertEqual(agent._poll_seconds, 5)
+            daemon.cycle()
+        self.assertEqual(daemon._poll_seconds, 5)
         self.assertNotIn("create", gateway.calls)
 
     def test_run_logs_transitions_without_extra_control_reads(self):
@@ -414,43 +414,43 @@ class AgentTests(unittest.TestCase):
                 gateway.controls = [control(max_generation=1)]
             clock.sleep(seconds)
 
-        agent = Agent(config(), gateway, clock=clock, sleep=sleep, logger=logs.append)
-        self.assertEqual(agent.run(), 0)
+        daemon = Daemon(config(), gateway, clock=clock, sleep=sleep, logger=logs.append)
+        self.assertEqual(daemon.run(), 0)
         self.assertEqual(waits, [60, 60])
         self.assertEqual(gateway.calls.count("control"), 3)
         results = [json.loads(line)["result"] for line in logs]
         self.assertEqual(results, ["STOPPED_BY_OPERATOR", "MAX_GENERATION_REACHED"])
 
-    def test_duplicate_agent_without_lease_does_not_create(self):
+    def test_duplicate_daemon_without_lease_does_not_create(self):
         clock = FakeClock()
         gateway = FakeGateway(config(), clock)
         gateway.lease_result = False
-        agent = self.make_agent(gateway, clock)
-        self.assertEqual(agent.cycle(), "LEASE_NOT_ACQUIRED")
+        daemon = self.make_daemon(gateway, clock)
+        self.assertEqual(daemon.cycle(), "LEASE_NOT_ACQUIRED")
         self.assertNotIn("create", gateway.calls)
 
     def test_ownership_change_after_lease_does_not_create(self):
         clock = FakeClock()
         gateway = FakeGateway(config(), clock)
         gateway.change_owner_on_acquire = True
-        agent = self.make_agent(gateway, clock)
-        self.assertEqual(agent.cycle(), "OWNERSHIP_CHANGED")
+        daemon = self.make_daemon(gateway, clock)
+        self.assertEqual(daemon.cycle(), "OWNERSHIP_CHANGED")
         self.assertNotIn("create", gateway.calls)
 
     def test_fresh_stop_before_create_prevents_provisioning(self):
         clock = FakeClock()
         gateway = FakeGateway(config(), clock, [control(), control(propagation_enabled=False)])
-        agent = self.make_agent(gateway, clock)
+        daemon = self.make_daemon(gateway, clock)
         with self.assertRaises(TransientFailure):
-            agent.cycle()
+            daemon.cycle()
         self.assertNotIn("create", gateway.calls)
         self.assertEqual(gateway.calls[-1], "release")
 
     def test_handoff_precedes_predecessor_retirement(self):
         clock = FakeClock()
         gateway = FakeGateway(config(), clock)
-        agent = self.make_agent(gateway, clock)
-        self.assertEqual(agent.cycle(), "HANDOFF_COMPLETE")
+        daemon = self.make_daemon(gateway, clock)
+        self.assertEqual(daemon.cycle(), "HANDOFF_COMPLETE")
         self.assertLess(gateway.calls.index("handoff"), gateway.calls.index("delete-predecessor"))
         self.assertGreaterEqual(gateway.heartbeat_reads, 2)
 
@@ -458,26 +458,26 @@ class AgentTests(unittest.TestCase):
         clock = FakeClock()
         gateway = FakeGateway(config(), clock)
         gateway.create_timeout_once = True
-        agent = self.make_agent(gateway, clock)
+        daemon = self.make_daemon(gateway, clock)
         with self.assertRaisesRegex(TransientFailure, "simulated timeout"):
-            agent.cycle()
-        self.assertEqual(agent.cycle(), "HANDOFF_COMPLETE")
+            daemon.cycle()
+        self.assertEqual(daemon.cycle(), "HANDOFF_COMPLETE")
         self.assertEqual(gateway.calls.count("create"), 1)
 
     def test_failed_handoff_preserves_predecessor(self):
         clock = FakeClock()
         gateway = FakeGateway(config(), clock)
         gateway.handoff_result = False
-        agent = self.make_agent(gateway, clock)
+        daemon = self.make_daemon(gateway, clock)
         with self.assertRaisesRegex(SafetyViolation, "CURRENT or lease"):
-            agent.cycle()
+            daemon.cycle()
         self.assertNotIn("delete-predecessor", gateway.calls)
 
     def test_handoff_creates_only_real_successor_without_preview(self):
         clock = FakeClock()
         gateway = FakeGateway(config(), clock, [control(max_generation=3)])
-        agent = self.make_agent(gateway, clock)
-        self.assertEqual(agent.cycle(), "HANDOFF_COMPLETE")
+        daemon = self.make_daemon(gateway, clock)
+        self.assertEqual(daemon.cycle(), "HANDOFF_COMPLETE")
         self.assertIn("capacity", gateway.calls)
         self.assertEqual(gateway.calls.count("create"), 1)
         self.assertNotIn("preflight", gateway.calls)
@@ -488,8 +488,8 @@ class AgentTests(unittest.TestCase):
             with self.subTest(mutation=mutation):
                 clock = FakeClock()
                 gateway = FakeGateway(config(), clock)
-                agent = self.make_agent(gateway, clock)
-                wait = agent.wait_for_healthy_successor
+                daemon = self.make_daemon(gateway, clock)
+                wait = daemon.wait_for_healthy_successor
 
                 def wait_then_change(*args):
                     state = wait(*args)
@@ -523,9 +523,9 @@ class AgentTests(unittest.TestCase):
                         gateway.read_generation_state = changed_health
                     return state
 
-                agent.wait_for_healthy_successor = wait_then_change
+                daemon.wait_for_healthy_successor = wait_then_change
                 with self.assertRaises((SafetyViolation, TransientFailure)):
-                    agent.cycle()
+                    daemon.cycle()
                 self.assertNotIn("handoff", gateway.calls)
                 self.assertNotIn("delete-predecessor", gateway.calls)
 
@@ -533,9 +533,9 @@ class AgentTests(unittest.TestCase):
         clock = FakeClock()
         gateway = FakeGateway(config(), clock, [control(readiness_timeout_seconds=3)])
         gateway.successor_status = "CREATE_IN_PROGRESS"
-        agent = self.make_agent(gateway, clock)
+        daemon = self.make_daemon(gateway, clock)
         with self.assertRaisesRegex(TransientFailure, "readiness timed out"):
-            agent.cycle()
+            daemon.cycle()
         self.assertNotIn("handoff", gateway.calls)
         self.assertNotIn("delete-predecessor", gateway.calls)
 
@@ -543,8 +543,8 @@ class AgentTests(unittest.TestCase):
         clock = FakeClock()
         gateway = FakeGateway(config(), clock)
         gateway.stack_instance_id = lambda stack_id: "i-wrong"
-        agent = Agent(config(), gateway, clock=clock, sleep=clock.sleep, logger=lambda value: None)
-        self.assertEqual(agent.run(), 2)
+        daemon = Daemon(config(), gateway, clock=clock, sleep=clock.sleep, logger=lambda value: None)
+        self.assertEqual(daemon.run(), 2)
         self.assertIn("hold", gateway.calls)
 
 

@@ -44,7 +44,7 @@ incorrect event; existing entries are never edited.
 These should remain separate because their retention, volume, and responders
 differ from change evidence:
 
-1. **Agent operations** — retries, latency, SDK errors, and diagnostic output.
+1. **Daemon operations** — retries, latency, SDK errors, and diagnostic output.
 2. **Security findings** — IAM Access Analyzer, AWS Config, GuardDuty, Security
    Hub, and policy-validation results.
 3. **Cost alerts** — Budgets, estimated charges, anomaly detection, and quota

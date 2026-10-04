@@ -48,9 +48,9 @@ def parameters(control, env, request_id):
         'BootstrapVersion': 'desired_bootstrap_version', 'TemplateVersion': 'desired_template_version',
         'TemplateBucket': 'template_s3_bucket', 'TemplateKey': 'template_s3_key',
         'TemplateS3VersionId': 'template_s3_version_id', 'TemplateSha256': 'template_sha256',
-        'TemplateBuildId': 'template_build_id', 'AgentArtifactBucket': 'agent_artifact_bucket',
-        'AgentArtifactKey': 'agent_artifact_key', 'AgentArtifactVersionId': 'agent_artifact_version_id',
-        'AgentArtifactSha256': 'agent_artifact_sha256',
+        'TemplateBuildId': 'template_build_id', 'DaemonArtifactBucket': 'daemon_artifact_bucket',
+        'DaemonArtifactKey': 'daemon_artifact_key', 'DaemonArtifactVersionId': 'daemon_artifact_version_id',
+        'DaemonArtifactSha256': 'daemon_artifact_sha256',
     }
     result.update({target: control[source]['S'] for target, source in fields.items()})
     if control.get('propagation_backend') == {'S': 'ec2'}:
@@ -106,7 +106,7 @@ def guard(control, current, hold, request, event_request, env, status):
 
 def verify_artifacts(s3, control, env):
     for fields in [('template_s3_bucket', 'template_s3_key', 'template_s3_version_id', 'template_sha256'),
-                   ('agent_artifact_bucket', 'agent_artifact_key', 'agent_artifact_version_id', 'agent_artifact_sha256')]:
+                   ('daemon_artifact_bucket', 'daemon_artifact_key', 'daemon_artifact_version_id', 'daemon_artifact_sha256')]:
         bucket, path, version, digest = [control[field]['S'] for field in fields]
         require(bucket == env['ARTIFACT_BUCKET'] and path.startswith('generation/'), 'Artifact location not approved')
         require(version and version != 'null' and re.fullmatch('[0-9a-f]{64}', digest), 'Invalid artifact identity')
@@ -117,7 +117,7 @@ def verify_artifacts(s3, control, env):
 
 def verify_ec2_template(ec2, control, params):
     require(control.get('approved_account_id') == {'S': params['OperationalAlertsTopicArn'].split(':')[4]}, 'Approved account mismatch')
-    require(params.get('AgentDeliveryMode') == 'baked' and str(params.get('RootVolumeGiB')) == '2'
+    require(params.get('DaemonDeliveryMode') == 'baked' and str(params.get('RootVolumeGiB')) == '2'
         and params.get('RootDeviceName') == '/dev/sda1', 'EC2 requires the baked 2 GiB image')
     template_id = control['launch_template_id']['S']
     version = control['launch_template_version']['S']
@@ -130,7 +130,7 @@ def verify_ec2_template(ec2, control, params):
     digest = hashlib.sha256(json.dumps(data, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
     require(control.get('launch_template_sha256') == {'S': digest}, 'Launch template digest mismatch')
     require(data.get('ImageId') == params['ApprovedImageId'] and data.get('InstanceType') == 't4g.micro'
-        and data.get('IamInstanceProfile') == {'Name': params['AgentInstanceProfileName']}
+        and data.get('IamInstanceProfile') == {'Name': params['DaemonInstanceProfileName']}
         and data.get('MetadataOptions') == {'HttpEndpoint': 'enabled', 'HttpTokens': 'required',
             'HttpPutResponseHopLimit': 1, 'InstanceMetadataTags': 'enabled'}, 'Launch template configuration mismatch')
     networks = data.get('NetworkInterfaces', [])
@@ -147,15 +147,15 @@ def verify_ec2_template(ec2, control, params):
     images = ec2.describe_images(ImageIds=[params['ApprovedImageId']])['Images']
     require(len(images) == 1, 'Approved baked image missing')
     tags = {t['Key']: t['Value'] for t in images[0].get('Tags', [])}
-    require(tags.get('project') == 'cloud-glider' and tags.get('purpose') == 'agent-image'
-        and tags.get('agent-sha256') == params['AgentArtifactSha256'], 'Baked image artifact mismatch')
+    require(tags.get('project') == 'cloud-glider' and tags.get('purpose') == 'daemon-image'
+        and tags.get('daemon-sha256') == params['DaemonArtifactSha256'], 'Baked image artifact mismatch')
     # Static bootstrap pins must agree with the versioned seed and artifact.
     import base64
     userdata = base64.b64decode(data['UserData']).decode()
     raw = json.loads(userdata.split("<<'JSON'", 1)[1].split('JSON', 1)[0])
-    require(raw.get('propagation_backend') == 'ec2' and raw.get('agent_delivery_mode') == 'baked' and raw.get('generation_table_name') == params['GenerationTableName'], 'Launch template backend mismatch')
+    require(raw.get('propagation_backend') == 'ec2' and raw.get('daemon_delivery_mode') == 'baked' and raw.get('generation_table_name') == params['GenerationTableName'], 'Launch template backend mismatch')
     for field, param in {'template_sha256': 'TemplateSha256', 'template_s3_version_id': 'TemplateS3VersionId',
-            'agent_artifact_sha256': 'AgentArtifactSha256', 'agent_artifact_version_id': 'AgentArtifactVersionId',
+            'daemon_artifact_sha256': 'DaemonArtifactSha256', 'daemon_artifact_version_id': 'DaemonArtifactVersionId',
             'bootstrap_version': 'BootstrapVersion', 'template_version': 'TemplateVersion'}.items():
         require(raw.get(field) == params[param], 'Launch template artifact mismatch: ' + field)
 

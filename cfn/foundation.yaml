@@ -381,12 +381,12 @@ Resources:
         - Key: purpose
           Value: propagation-audit
 
-  AgentOperationsLogGroup:
+  DaemonOperationsLogGroup:
     Type: AWS::Logs::LogGroup
     DeletionPolicy: Retain
     UpdateReplacePolicy: Retain
     Properties:
-      LogGroupName: !Sub '/cloud-glider/${Environment}/operations/agent'
+      LogGroupName: !Sub '/cloud-glider/${Environment}/operations/daemon'
       RetentionInDays: 90
       Tags:
         - Key: project
@@ -396,7 +396,7 @@ Resources:
         - Key: owner
           Value: !Ref Owner
         - Key: purpose
-          Value: agent-diagnostics
+          Value: daemon-diagnostics
 
   SecurityFindingsLogGroup:
     Type: AWS::Logs::LogGroup
@@ -1117,10 +1117,10 @@ Resources:
                 Effect: Allow
                 Action: cloudwatch:DescribeAlarms
                 Resource: '*'
-              - Sid: PassOnlyAgentRoleToEc2
+              - Sid: PassOnlyDaemonRoleToEc2
                 Effect: Allow
                 Action: iam:PassRole
-                Resource: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider-${Environment}-agent'
+                Resource: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider-${Environment}-daemon'
                 Condition:
                   StringEquals:
                     iam:PassedToService: ec2.amazonaws.com
@@ -1134,11 +1134,11 @@ Resources:
         - Key: purpose
           Value: generation-cloudformation-service-role
 
-  AgentRole:
+  DaemonRole:
     Type: AWS::IAM::Role
     Properties:
-      PermissionsBoundary: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/cloud-glider-${Environment}-agent-boundary'
-      RoleName: !Sub 'cloud-glider-${Environment}-agent'
+      PermissionsBoundary: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/cloud-glider-${Environment}-daemon-boundary'
+      RoleName: !Sub 'cloud-glider-${Environment}-daemon'
       Description: Orchestration role for a Cloud Glider generation instance.
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
@@ -1206,7 +1206,7 @@ Resources:
                 - logs:CreateLogStream
                 - logs:PutLogEvents
                 Resource:
-                - !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/cloud-glider/${Environment}/operations/agent:log-stream:*'
+                - !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/cloud-glider/${Environment}/operations/daemon:log-stream:*'
                 - !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/cloud-glider/${Environment}/audit/propagation:log-stream:*'
               - Effect: Allow
                 Action: cloudwatch:PutMetricData
@@ -1262,7 +1262,7 @@ Resources:
                   StringEquals:
                     ec2:InstanceType: t4g.micro
                     ec2:MetadataHttpTokens: required
-                    ec2:InstanceProfile: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:instance-profile/cloud-glider/cloud-glider-${Environment}-agent'
+                    ec2:InstanceProfile: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:instance-profile/cloud-glider/cloud-glider-${Environment}-daemon'
                     aws:RequestTag/project: cloud-glider
                     aws:RequestTag/environment: !Ref Environment
                     aws:RequestTag/purpose: generation-compute
@@ -1295,7 +1295,7 @@ Resources:
                     ec2:ResourceTag/purpose: generation-compute
               - Effect: Allow
                 Action: iam:PassRole
-                Resource: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider-${Environment}-agent'
+                Resource: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider-${Environment}-daemon'
                 Condition:
                   StringEquals:
                     iam:PassedToService: ec2.amazonaws.com
@@ -1447,13 +1447,13 @@ Resources:
                 Condition:
                   StringLike:
                     s3:prefix: generation/*
-              - Sid: WriteAgentAndPropagationLogs
+              - Sid: WriteDaemonAndPropagationLogs
                 Effect: Allow
                 Action:
                 - logs:CreateLogStream
                 - logs:PutLogEvents
                 Resource:
-                - !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/cloud-glider/${Environment}/operations/agent:log-stream:*'
+                - !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/cloud-glider/${Environment}/operations/daemon:log-stream:*'
                 - !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/cloud-glider/${Environment}/audit/propagation:log-stream:*'
               - Sid: PublishCloudGliderMetrics
                 Effect: Allow
@@ -1551,13 +1551,13 @@ Resources:
         - Key: propagation-backend
           Value: !Ref PropagationBackend
 
-  AgentInstanceProfile:
+  DaemonInstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Properties:
-      InstanceProfileName: !Sub 'cloud-glider-${Environment}-agent'
+      InstanceProfileName: !Sub 'cloud-glider-${Environment}-daemon'
       Path: /cloud-glider/
       Roles:
-        - !Ref AgentRole
+        - !Ref DaemonRole
 
 Outputs:
   StateTableStreamArn:
@@ -1572,10 +1572,10 @@ Outputs:
     Value: !Ref GenerationTable
   AuditArchiveBucketName:
     Value: !Ref AuditArchiveBucket
-  AgentRoleArn:
-    Value: !GetAtt AgentRole.Arn
-  AgentInstanceProfileName:
-    Value: !Ref AgentInstanceProfile
+  DaemonRoleArn:
+    Value: !GetAtt DaemonRole.Arn
+  DaemonInstanceProfileName:
+    Value: !Ref DaemonInstanceProfile
   GenerationServiceRoleArn:
     Value: !GetAtt GenerationServiceRole.Arn
   InfrastructureAuditLogGroupName:
@@ -1586,8 +1586,8 @@ Outputs:
     Value: !Ref NetworkAuditLogGroup
   PropagationAuditLogGroupName:
     Value: !Ref PropagationAuditLogGroup
-  AgentOperationsLogGroupName:
-    Value: !Ref AgentOperationsLogGroup
+  DaemonOperationsLogGroupName:
+    Value: !Ref DaemonOperationsLogGroup
   EmergencyHoldFunctionName:
     Value: !Ref EmergencyHoldFunction
   EmergencyHoldFunctionArn:

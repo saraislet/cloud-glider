@@ -30,7 +30,7 @@ func TestGliderRegisterImageTags(t *testing.T) {
 		t.Run(map[bool]string{false: "required_tags_at_creation", true: "invalid_tag_prevents_registration"}[invalid], func(t *testing.T) {
 			config := &Config{}
 			config.AMIName = "cloud-glider-test"
-			config.AMITags = map[string]string{"project": "cloud-glider", "purpose": "agent-image", "approval": "candidate", "region": "{{ .BuildRegion }}"}
+			config.AMITags = map[string]string{"project": "cloud-glider", "purpose": "daemon-image", "approval": "candidate", "region": "{{ .BuildRegion }}"}
 			if invalid {
 				config.AMITags["project"] = "{{"
 			}
@@ -62,7 +62,7 @@ func TestGliderRegisterImageTags(t *testing.T) {
 			for _, tag := range specs[0].Tags {
 				got[aws.ToString(tag.Key)] = aws.ToString(tag.Value)
 			}
-			want := map[string]string{"project": "cloud-glider", "purpose": "agent-image", "approval": "candidate", "region": "us-west-2"}
+			want := map[string]string{"project": "cloud-glider", "purpose": "daemon-image", "approval": "candidate", "region": "us-west-2"}
 			if !reflect.DeepEqual(got, want) {
 				t.Fatalf("tags: %#v", got)
 			}

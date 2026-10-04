@@ -7,8 +7,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agent"))
-from test_ec2_agent import config, control, FakeClock, FakeGateway, Agent
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "daemon"))
+from test_ec2_daemon import config, control, FakeClock, FakeGateway, Daemon
 
 if importlib.util.find_spec("boto3"):
     import boto3
@@ -16,14 +16,14 @@ if importlib.util.find_spec("boto3"):
     from cloud_glider.ec2_sdk import Ec2SdkGateway, template_digest
 else:
     boto3 = None
-from cloud_glider.agent import TransientFailure, SafetyViolation
+from cloud_glider.daemon import TransientFailure, SafetyViolation
 
 
 def template_data():
     return {
         "ImageId": "ami-approved",
         "InstanceType": "t4g.micro",
-        "IamInstanceProfile": {"Name": "cloud-glider-sandbox-agent"},
+        "IamInstanceProfile": {"Name": "cloud-glider-sandbox-daemon"},
         "MetadataOptions": {
             "HttpTokens": "required",
             "HttpEndpoint": "enabled",
@@ -74,7 +74,7 @@ class Ec2SdkTests(unittest.TestCase):
             )
         self.addCleanup(self.g.close)
         self.assertNotIn("cloudformation", self.g._clients)
-        self.spec = Agent(self.cfg, FakeGateway(self.cfg, FakeClock()))._specification(
+        self.spec = Daemon(self.cfg, FakeGateway(self.cfg, FakeClock()))._specification(
             control(), 1, self.cfg.instance_id, "token"
         )
         self.calls = []
@@ -331,7 +331,7 @@ class Ec2SdkTests(unittest.TestCase):
             "SubnetId": "subnet-approved",
             "SecurityGroups": [{"GroupId": "sg-approved"}],
             "IamInstanceProfile": {
-                "Arn": "arn:aws:iam::111122223333:instance-profile/cloud-glider/cloud-glider-sandbox-agent"
+                "Arn": "arn:aws:iam::111122223333:instance-profile/cloud-glider/cloud-glider-sandbox-daemon"
             },
             "MetadataOptions": template_data()["MetadataOptions"],
         }
@@ -360,8 +360,8 @@ class Ec2SdkTests(unittest.TestCase):
                     {
                         "Tags": [
                             {"Key": "project", "Value": "cloud-glider"},
-                            {"Key": "purpose", "Value": "agent-image"},
-                            {"Key": "agent-sha256", "Value": "b" * 64},
+                            {"Key": "purpose", "Value": "daemon-image"},
+                            {"Key": "daemon-sha256", "Value": "b" * 64},
                         ],
                         "Architecture": "arm64",
                         "State": "available",

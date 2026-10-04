@@ -415,7 +415,7 @@ subsequently recovered from retained AWS records.
 | Continuation preflight timeout | Separate 600-second wait for an unexecuted CREATE change set |
 
 Source: [runtime defaults](../config/runtime-defaults.json) and
-[agent implementation](../agent/cloud_glider/agent.py). These are settings,
+[agent implementation](../daemon/cloud_glider/daemon.py). These are settings,
 not measured generation times. The source checkout had older 30/15-second
 README values and described the timeout as starting after CREATE_COMPLETE.
 Current cloud-glider main documents the 5/2-second settings and the timeout
@@ -462,3 +462,59 @@ data, and raw logs; follow the [audit logging contract](audit-logging.md).
   the predecessor; include retries and failed hops in timing summaries.
 - Compare hop intervals and overlap across repeated comparable runs; report
   sample count and median/range before proposing timing targets.
+
+Boot and per-API collection boundaries and the pre-retirement capture procedure
+are described in [boot/API timing collection](boot-api-timing.md). Instrumented
+source alone does not establish a performance improvement.
+
+## 2026-10-04 combined daemon/timing single-successor benchmark
+
+Run D: ten total generations (0–9), nine handoffs, EC2 backend, ARM64
+`t4g.micro`, baked 2 GiB image, source `a32e6c9`. Existing readiness and
+retirement gates remained active; maximum live generations was three.
+Internal boot, SDK-call and phase journals were not collected through an
+approved access path and are **not measured**. No causal speedup is claimed.
+
+Ownership boundaries use successor-written UTC `CURRENT.updated_at`; EC2
+launch times use EC2 `LaunchTime`. Readiness is the first observer sample of
+successor-produced live STATE; this observation can lag readiness by about
+two seconds and does not independently prove parent acceptance. Conditional
+CURRENT handoff provides the acceptance endpoint. Cross-host clock skew can
+affect timestamp differences. Observer scans and EC2 reads are sequential,
+not an atomic snapshot.
+
+| Generation | Launch→observed readiness (s) | Launch→ownership (s) | Ownership hop (s) |
+| --- | ---: | ---: | ---: |
+| 0 | 36.178 | 34.453 | — |
+| 1 | 32.243 | 32.236 | 33.783 |
+| 2 | 32.314 | 32.813 | 34.577 |
+| 3 | 27.375 | 27.864 | 30.051 |
+| 4 | 25.430 | 26.184 | 28.320 |
+| 5 | 26.496 | 26.974 | 29.790 |
+| 6 | 27.557 | 31.626 | 33.652 |
+| 7 | 25.614 | 25.599 | 27.973 |
+| 8 | 29.668 | 31.623 | 34.024 |
+| 9 | 31.735 | 30.579 | 32.956 |
+
+Nine ownership intervals: mean **31.681s**, median
+**32.956s**, range **27.973–34.577s**.
+Seed stack creation→initial ownership: **38.585s**;
+seed creation→generation 9 ownership: **323.711s**.
+Initial ownership→generation 9: **285.126s**.
+Sampled live peak: **3**; observed instances: **10**. No failed ownership
+hops or replacement instances were observed; SDK retries are not measured.
+Median observer cadence was **2.005s**, maximum
+**2.006s**. All predecessors disappeared from the
+live inventory before cleanup; termination is verified separately.
+
+Against the earlier 31.012s mean / 310.247s seed-to-final functional baseline,
+this single run was about 2.2% higher in mean interval and 4.3% higher in total.
+This is an observational comparison, not evidence of a causal regression or
+improvement. Instance boot variation and collection boundaries limit inference.
+
+Supported stop and cleanup completed. All ten EC2 instances are confirmed
+terminated; generation disks, records and seed stack are absent. The lifecycle
+is READY, propagation disabled, and the prior generation limit of 2 restored.
+No pending cleanup retry token remains. Scheduler inventory was not independently
+queried after this run because the CLI lacks that permission and the browser
+was unavailable.

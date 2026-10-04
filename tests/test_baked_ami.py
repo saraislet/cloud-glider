@@ -28,9 +28,9 @@ class ImageIntegrityTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         (self.root / 'etc/cloud-glider').mkdir(parents=True)
-        (self.root / 'agent').write_bytes(b'approved agent')
-        self.manifest = {'agent_sha256': 'a' * 64,
-                         'files': {'agent': hashlib.sha256(b'approved agent').hexdigest()}}
+        (self.root / 'daemon').write_bytes(b'approved daemon')
+        self.manifest = {'daemon_sha256': 'a' * 64,
+                         'files': {'daemon': hashlib.sha256(b'approved daemon').hexdigest()}}
         self.write_manifest()
 
     def write_manifest(self):
@@ -43,13 +43,13 @@ class ImageIntegrityTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'approved artifact'):
             verifier.verify(self.root, 'b' * 64)
 
-    def test_modified_agent_is_rejected(self):
-        (self.root / 'agent').write_bytes(b'changed')
+    def test_modified_daemon_is_rejected(self):
+        (self.root / 'daemon').write_bytes(b'changed')
         with self.assertRaisesRegex(ValueError, 'baked file differs'):
             verifier.verify(self.root, 'a' * 64)
 
     def test_missing_file_is_rejected(self):
-        (self.root / 'agent').unlink()
+        (self.root / 'daemon').unlink()
         with self.assertRaises(FileNotFoundError):
             verifier.verify(self.root, 'a' * 64)
 
@@ -68,7 +68,7 @@ class ImageMetadataTests(unittest.TestCase):
                       'RootDeviceName': '/dev/sda1', 'VirtualizationType': 'hvm',
                       'BootMode': 'uefi', 'EnaSupport': True, 'ImdsSupport': 'v2.0', 'Public': False,
                       'Tags': [{'Key': k, 'Value': v} for k, v in {
-                          'project': 'cloud-glider', 'purpose': 'agent-image', 'agent-sha256': 'a'*64}.items()],
+                          'project': 'cloud-glider', 'purpose': 'daemon-image', 'daemon-sha256': 'a'*64}.items()],
                       'BlockDeviceMappings': [{'DeviceName': '/dev/sda1', 'Ebs': {
                           'SnapshotId': 'snap-root', 'VolumeSize': 2, 'VolumeType': 'gp3',
                           'DeleteOnTermination': True}}]}
@@ -130,7 +130,7 @@ class BakedRuntimeTests(unittest.TestCase):
 
     def test_wrong_python_environment_rejected(self):
         with patch.object(self.smoke.sys, 'prefix', '/usr'), patch.object(self.smoke.shutil, 'which', side_effect=lambda name: None if name == 'aws' else '/usr/bin/'+name):
-            with self.assertRaisesRegex(AssertionError, 'agent venv'):
+            with self.assertRaisesRegex(AssertionError, 'daemon venv'):
                 self.smoke.verify_runtime()
 
     def test_installed_current_contract_passes(self):
@@ -140,8 +140,8 @@ class BakedRuntimeTests(unittest.TestCase):
         import dataclasses
         import types
         legacy = types.SimpleNamespace(
-            AgentConfig=dataclasses.make_dataclass('LegacyConfig', [('environment', str)]),
+            DaemonConfig=dataclasses.make_dataclass('LegacyConfig', [('environment', str)]),
             GENERATION_PARAMETER_NAMES={'Generation'})
-        with patch.dict(sys.modules, {'cloud_glider.agent': legacy}):
-            with self.assertRaisesRegex(AssertionError, 'legacy agent configuration'):
+        with patch.dict(sys.modules, {'cloud_glider.daemon': legacy}):
+            with self.assertRaisesRegex(AssertionError, 'legacy daemon configuration'):
                 self.smoke.verify_lifecycle_contract()

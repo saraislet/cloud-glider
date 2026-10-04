@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a deterministic Cloud Glider agent tarball."""
+"""Build a deterministic Cloud Glider daemon tarball."""
 
 from __future__ import annotations
 
@@ -13,13 +13,14 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-AGENT_ROOT = ROOT / "agent"
+DAEMON_ROOT = ROOT / "daemon"
 SOURCE_FILES = (
     Path("bin/cloud-glider"),
     Path("cloud_glider/__init__.py"),
-    Path("cloud_glider/agent.py"),
+    Path("cloud_glider/daemon.py"),
     Path("cloud_glider/aws_sdk.py"),
-    Path("cloud_glider/ec2_agent.py"),
+    Path("cloud_glider/timing.py"),
+    Path("cloud_glider/ec2_daemon.py"),
     Path("cloud_glider/ec2_sdk.py"),
     Path("requirements.txt"),
 )
@@ -30,7 +31,7 @@ def build(output: Path) -> dict[str, object]:
     buffer = io.BytesIO()
     with tarfile.open(fileobj=buffer, mode="w", format=tarfile.PAX_FORMAT) as archive:
         for relative in SOURCE_FILES:
-            source = AGENT_ROOT / relative
+            source = DAEMON_ROOT / relative
             data = source.read_bytes()
             info = tarfile.TarInfo(str(relative))
             info.size = len(data)

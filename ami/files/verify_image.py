@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
-"""Fail closed if the baked release differs from the requested agent or files."""
+"""Fail closed if the baked release differs from the requested daemon or files."""
 import argparse
 import hashlib
 import json
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 
 def verify(root: Path, expected_digest: str) -> dict:
     manifest = json.loads((root / 'etc/cloud-glider/image.json').read_text())
-    if manifest['agent_sha256'] != expected_digest.lower():
-        raise ValueError('baked agent differs from approved artifact')
+    if manifest['daemon_sha256'] != expected_digest.lower():
+        raise ValueError('baked daemon differs from approved artifact')
     if not manifest['files']:
         raise ValueError('empty image manifest')
     for relative, expected in manifest['files'].items():
@@ -29,10 +31,32 @@ def main():
     args = parser.parse_args()
     expected = args.expected_sha256
     if args.config:
-        expected = json.loads(args.config.read_text())['agent_artifact_sha256']
+        expected = json.loads(args.config.read_text())['daemon_artifact_sha256']
     if not expected:
         parser.error('a config or expected digest is required')
-    print(json.dumps(verify(Path('/'), expected), sort_keys=True))
+    started = time.monotonic()
+    outcome = 'FAILED'
+    try:
+        manifest = verify(Path('/'), expected)
+        outcome = 'PASSED'
+        print(json.dumps(manifest, sort_keys=True))
+    finally:
+        # Runs in user data and ExecStartPre, before the agent package is imported.
+        try:
+            uptime = float(Path('/proc/uptime').read_text().split()[0])
+        except (OSError, ValueError, IndexError):
+            uptime = None
+        try:
+            print(json.dumps({
+                'schema_version': 1, 'event': 'boot_timing',
+                'phase': 'baked_image_verification',
+                'timestamp': datetime.now(timezone.utc).isoformat(),
+                'boot_elapsed_seconds': uptime,
+                'duration_seconds': round(time.monotonic() - started, 6),
+                'outcome': outcome,
+            }, sort_keys=True))
+        except Exception:
+            pass
 
 
 if __name__ == '__main__':

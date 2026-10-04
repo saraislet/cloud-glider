@@ -8,7 +8,7 @@ CloudFormation template and only after configuration, security, health,
 coordination, concurrency, and cost-safety gates pass.
 
 The repository implements the safety foundation and the first-pass propagation
-agent. Propagation is disabled by default, and the first trial is bounded
+daemon. Propagation is disabled by default, and the first trial is bounded
 through generation `2`.
 
 ## Project goals
@@ -37,9 +37,9 @@ through generation `2`.
   stream triggers; see [the bootstrap runbook](docs/bootstrap.md).
 - `cfn/generation.yaml` defines one generation EC2 instance. It deliberately
   contains no IAM or networking resources.
-- `agent/` contains the Python propagation state machine and
+- `daemon/` contains the Python propagation state machine and
   its persistent boto3 SDK adapter.
-- `scripts/build_agent_artifact.py` creates the deterministic tarball consumed
+- `scripts/build_daemon_artifact.py` creates the deterministic tarball consumed
   by generation user data.
 - `scripts/initialize_control.py` creates the initial DynamoDB control records
   transactionally. It is dry-run unless `--apply` is supplied.
@@ -106,7 +106,7 @@ all checks (transport tests are skipped if boto3 is absent):
 
 ```sh
 python3 -m venv /tmp/cloud-glider-tests
-/tmp/cloud-glider-tests/bin/python -m pip install -r agent/requirements.txt
+/tmp/cloud-glider-tests/bin/python -m pip install -r daemon/requirements.txt
 /tmp/cloud-glider-tests/bin/python -m unittest discover -s tests -v
 ```
 
@@ -117,10 +117,10 @@ python3 -m unittest discover -s tests -v
 python3 scripts/validate_repository.py
 ```
 
-Build the agent artifact and record the printed SHA-256 digest:
+Build the daemon artifact and record the printed SHA-256 digest:
 
 ```sh
-python3 scripts/build_agent_artifact.py --output dist/cloud-glider-agent.tar.gz
+python3 scripts/build_daemon_artifact.py --output dist/cloud-glider-daemon.tar.gz
 ```
 
 The tarball includes `requirements.txt`, not installed third-party packages.
@@ -163,10 +163,10 @@ It separates the reviewed import of surviving resources from normal deployment.
    [the guardrail runbook](iam/permission-guardrails.md), then deploy
    `cfn/foundation.yaml` using those outputs from an administrative deployment
    principal, not from a generation instance.
-4. Upload immutable generation template and agent artifacts to the versioned
+4. Upload immutable generation template and daemon artifacts to the versioned
    artifact bucket.
 5. Initialize DynamoDB with `scripts/initialize_control.py`, including both
-   template and agent artifact identity tuples; inspect the dry run before
+   template and daemon artifact identity tuples; inspect the dry run before
    using `--apply`.
 6. Deploy the reviewed bootstrap trigger and prepare the separate bootstrap
    record, then toggle its `bootstrap_requested` Boolean to start generation `000000` using [the bootstrap runbook](docs/bootstrap.md).
@@ -176,7 +176,7 @@ It separates the reviewed import of surviving resources from normal deployment.
 Do not enable propagation until the negative-security and failure-path tests in
 the safety contract pass in the sandbox account.
 
-See `docs/propagation-agent.md` for the state machine, record shapes, failure
+See `docs/propagation-daemon.md` for the state machine, record shapes, failure
 classification, and first-trial procedure.
 
 Minimal AMI propagation supports baked startup and 2 GiB roots. See the
@@ -184,3 +184,5 @@ Minimal AMI propagation supports baked startup and 2 GiB roots. See the
 and the separate historical deployed release.
 
 Direct EC2 propagation is available as an explicit offline transition. See [the EC2 runbook](docs/ec2-propagation.md) and decision 0019. Existing CloudFormation cycles retain their current behavior.
+
+For the coordinated agent-to-daemon release, follow [the migration runbook](docs/daemon-migration.md).

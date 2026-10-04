@@ -44,7 +44,7 @@
         "iam:UntagRole"
       ],
       "Resource": [
-        "arn:aws:iam::${AccountId}:role/cloud-glider-${Environment}-agent",
+        "arn:aws:iam::${AccountId}:role/cloud-glider-${Environment}-daemon",
         "arn:aws:iam::${AccountId}:role/cloud-glider-${Environment}-generation-cfn",
         "arn:aws:iam::${AccountId}:role/cloud-glider-${Environment}-emergency-hold",
         "arn:aws:iam::${AccountId}:role/cloud-glider-${Environment}-bootstrap-BootstrapRole-*"

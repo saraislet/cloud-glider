@@ -1,4 +1,4 @@
-# Propagation agent runbook
+# Propagation daemon runbook
 
 ## Bootstrap
 
@@ -42,7 +42,7 @@ and stronger in-flight accounting remain separate design work.
 Control and coordination stay in `cloud-glider-{environment}-state`; generation state and stack inventory use `cloud-glider-{environment}-generations`.
 
 - `CONTROL/GLOBAL`: operator control, limits, timing, and approved immutable
-  template/bootstrap/agent identities.
+  template/bootstrap/daemon identities.
 - `BOOTSTRAP/REQUEST`: shared lifecycle switches, incremental cycle identity, bootstrap status, and latest cleanup progress.
 - `CURRENT/GLOBAL`: authoritative generation, stack, instance, status, and
   handoff token.
@@ -99,7 +99,7 @@ creation is in flight, then inspect and clean up generation resources through
 CloudFormation before preparing a fresh run. Reconcile retained CURRENT and
 bootstrap records through an explicitly reviewed operator path; do not merely
 flip the old request Boolean or overwrite ownership. Preserve incident evidence
-when a hold is active. Exiting the agent leaves the instance running for inspection;
+when a hold is active. Exiting the daemon leaves the instance running for inspection;
 operator cleanup is still needed to end instance and storage charges.
 
 ## Stop and incident response
@@ -120,7 +120,7 @@ CloudFormation events first. Clear a hold only with
 
 ## SDK runtime and AMI integration
 
-The agent creates six persistent boto3 clients (DynamoDB, CloudFormation, EC2,
+The daemon creates six persistent boto3 clients (DynamoDB, CloudFormation, EC2,
 Service Quotas, S3 and Lambda) in the IMDS-reported Region. Instance-profile
 credentials use the normal refreshable SDK provider chain. Network calls have
 2-second connect and 5-second read timeouts; SDK automatic retries are disabled
@@ -129,7 +129,7 @@ control gates. This setting applies to reads as well as writes. It is not a
 global wall-clock deadline. Errors remain TransientFailure or the existing
 conditional-write safety/conflict outcomes.
 
-Install `agent/requirements.txt` during AMI baking into the exact Python
+Install `daemon/requirements.txt` during AMI baking into the exact Python
 interpreter selected by the service. The artifact includes the manifest but
 not dependencies. With a virtual environment, configure the service to invoke
 its Python explicitly; the existing executable otherwise uses `env python3`.
@@ -140,7 +140,7 @@ required for the current user-data S3 download and operator scripts.
 
 Run the full tests with the manifest installed and check that SDK tests are not
 skipped. Rebuild and approve the immutable artifact hash along with a compatible
-AMI before rollout. Old images containing only AWS CLI cannot run this agent.
+AMI before rollout. Old images containing only AWS CLI cannot run this daemon.
 See [decision 0007](decisions/0007-persistent-sdk-clients.md).
 
 ## Artifact release
@@ -148,7 +148,7 @@ See [decision 0007](decisions/0007-persistent-sdk-clients.md).
 Run:
 
 ```sh
-python3 scripts/build_agent_artifact.py --output dist/cloud-glider-agent.tar.gz
+python3 scripts/build_daemon_artifact.py --output dist/cloud-glider-daemon.tar.gz
 ```
 
 Upload the artifact and `cfn/generation.yaml` as immutable versioned objects.
@@ -160,7 +160,7 @@ approved in control before it can propagate.
 ## Chain cleanup
 
 See [the lifecycle decision](decisions/0012-shared-chain-lifecycle.md) and
-[operator runbook](bootstrap.md). Agents inherit RequestId through the approved
+[operator runbook](bootstrap.md). Daemons inherit RequestId through the approved
 template and reject a stale cycle or active cleanup. Provisioning claims a durable
 marker transactionally with lifecycle/HOLD checks. Heartbeats, CURRENT claims,
 leases, and handoffs are fenced by the same cycle. Normal stop keeps instances
@@ -168,17 +168,17 @@ running; only explicit cleanup authorizes generation deletion without handoff.
 
 ## Minimal baked AMI
 
-Use `AgentDeliveryMode=baked`, `/dev/sda1` and a 2 GiB root only with an image
-containing the current lifecycle agent. The previously deployed minimal image
+Use `DaemonDeliveryMode=baked`, `/dev/sda1` and a 2 GiB root only with an image
+containing the current lifecycle daemon. The previously deployed minimal image
 predates the current request/table contract. Follow the [reconciliation and
 release runbook](minimal-ami.md) before a coordinated image/controller release.
 
-## Applying the agent update
+## Applying the daemon update
 
-Existing baked AMIs contain the old agent. Build a new immutable agent artifact
+Existing baked AMIs contain the old daemon. Build a new immutable daemon artifact
 and rebuild the private ARM64 minimal AMI from this source using the AMI build
 runbook. Validate baked delivery and the 2 GiB root; publish the new approved
-image/template and agent version/digest through the existing operator release
+image/template and daemon version/digest through the existing operator release
 path. Verify the release fingerprint and all runtime stacks before bootstrap.
 Keep propagation disabled and the existing hold until cleanup is independently
 verified and an operator explicitly approves the next observed run. Updating

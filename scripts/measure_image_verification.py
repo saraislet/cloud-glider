@@ -14,7 +14,7 @@ import sys
 import tarfile
 import tempfile
 import time
-from build_agent_artifact import build
+from build_daemon_artifact import build
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -27,7 +27,7 @@ def main():
         parser.error("samples must be positive")
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
-        archive = root / "opt/cloud-glider/agent.tar.gz"
+        archive = root / "opt/cloud-glider/daemon.tar.gz"
         artifact = build(archive)
         with tarfile.open(archive) as source:
             source.extractall(archive.parent, filter="data")
@@ -49,7 +49,7 @@ def main():
         manifest.write_text(
             json.dumps(
                 {
-                    "agent_sha256": artifact["sha256"],
+                    "daemon_sha256": artifact["sha256"],
                     "files": {
                         str(p.relative_to(root)): hashlib.sha256(
                             p.read_bytes()

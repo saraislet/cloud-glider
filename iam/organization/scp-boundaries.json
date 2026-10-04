@@ -26,7 +26,7 @@
       "Effect": "Deny",
       "Action": "iam:DeleteRolePermissionsBoundary",
       "Resource": [
-        "arn:aws:iam::${AccountId}:role/cloud-glider-${Environment}-agent",
+        "arn:aws:iam::${AccountId}:role/cloud-glider-${Environment}-daemon",
         "arn:aws:iam::${AccountId}:role/cloud-glider-${Environment}-generation-cfn",
         "arn:aws:iam::${AccountId}:role/cloud-glider-${Environment}-emergency-hold",
         "arn:aws:iam::${AccountId}:role/cloud-glider-${Environment}-bootstrap-BootstrapRole-*",
@@ -42,13 +42,13 @@
       }
     },
     {
-      "Sid": "RequireAgentBoundary",
+      "Sid": "RequireDaemonBoundary",
       "Effect": "Deny",
       "Action": [
         "iam:CreateRole",
         "iam:PutRolePermissionsBoundary"
       ],
-      "Resource": "arn:aws:iam::${AccountId}:role/cloud-glider-${Environment}-agent",
+      "Resource": "arn:aws:iam::${AccountId}:role/cloud-glider-${Environment}-daemon",
       "Condition": {
         "ArnNotEquals": {
           "aws:PrincipalArn": [
@@ -57,7 +57,7 @@
           ]
         },
         "ArnNotEqualsIfExists": {
-          "iam:PermissionsBoundary": "arn:aws:iam::${AccountId}:policy/cloud-glider-${Environment}-agent-boundary"
+          "iam:PermissionsBoundary": "arn:aws:iam::${AccountId}:policy/cloud-glider-${Environment}-daemon-boundary"
         }
       }
     },

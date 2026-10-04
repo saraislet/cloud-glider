@@ -7,7 +7,7 @@ import re
 from typing import Any
 import boto3
 from botocore.config import Config
-from .agent import SafetyViolation, TransientFailure
+from .daemon import SafetyViolation, TransientFailure
 from .aws_sdk import AwsSdkGateway, _av, _ddb_item, _imds
 
 
@@ -191,7 +191,7 @@ class Ec2SdkGateway(AwsSdkGateway):
         networks = data.get("NetworkInterfaces", [])
         disks = data.get("BlockDeviceMappings", [])
         profile = data.get("IamInstanceProfile", {})
-        profile_name = f"cloud-glider-{self.config.environment}-agent"
+        profile_name = f"cloud-glider-{self.config.environment}-daemon"
         if (
             data.get("InstanceType") != "t4g.micro"
             or metadata.get("HttpTokens") != "required"
@@ -232,12 +232,12 @@ class Ec2SdkGateway(AwsSdkGateway):
         tags = {t["Key"]: t["Value"] for t in image[0].get("Tags", [])}
         if (
             tags.get("project") != "cloud-glider"
-            or tags.get("purpose") != "agent-image"
-            or tags.get("agent-sha256") != control["agent_artifact_sha256"]
+            or tags.get("purpose") != "daemon-image"
+            or tags.get("daemon-sha256") != control["daemon_artifact_sha256"]
         ):
             raise SafetyViolation(
                 "BAKED_IMAGE_IDENTITY_MISMATCH",
-                "AMI does not contain the approved agent",
+                "AMI does not contain the approved daemon",
             )
         self._template_data = data
 

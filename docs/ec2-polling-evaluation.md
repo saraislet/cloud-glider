@@ -14,7 +14,7 @@ its unit-count estimates must not be reused as a forecast for the new protocol.
 
 ## Changes and local evidence
 
-EC2 agents observe ownership every second instead of coupling observations to
+EC2 daemons observe ownership every second instead of coupling observations to
 heartbeat spacing. Each observation still reads transactional control/lifecycle/
 HOLD and exact CURRENT. Heartbeats use monotonic elapsed time and publish at
 most once per configured heartbeat interval (five seconds). Lease acquisition,
@@ -90,7 +90,7 @@ October 3, 2026: [AWS pricing](https://aws.amazon.com/dynamodb/pricing/),
 [request-unit sizes](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Constraints.html).
 
 Before deployment, explicitly review this request-cost increase, bake the changed
-agent into a matching verified image, review immutable artifact/template pins,
+daemon into a matching verified image, review immutable artifact/template pins,
 and apply the operator-approved EC2 readiness polling value of 1. Keep heartbeat interval 5,
 required heartbeats 2 and all readiness/continuation/retirement gates. Any future
 bounded benchmark needs separate operator authorization and comparable trials

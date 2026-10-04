@@ -34,10 +34,10 @@ REQUIRED_CONTROL_FIELDS = {
     "template_s3_version_id",
     "template_sha256",
     "template_build_id",
-    "agent_artifact_bucket",
-    "agent_artifact_key",
-    "agent_artifact_version_id",
-    "agent_artifact_sha256",
+    "daemon_artifact_bucket",
+    "daemon_artifact_key",
+    "daemon_artifact_version_id",
+    "daemon_artifact_sha256",
     "max_generation",
     "max_live_generations",
     "concurrency_model",
@@ -56,11 +56,11 @@ REQUIRED_CONTROL_FIELDS = {
 }
 
 
-from .agent import SafetyViolation, TransientFailure
+from .daemon import SafetyViolation, TransientFailure
 
 
 @dataclasses.dataclass(frozen=True)
-class Ec2AgentConfig:
+class Ec2DaemonConfig:
     environment: str
     request_id: str
     generation_table_name: str
@@ -79,18 +79,18 @@ class Ec2AgentConfig:
     template_s3_version_id: str
     template_sha256: str
     template_build_id: str
-    agent_artifact_bucket: str
-    agent_artifact_key: str
-    agent_artifact_version_id: str
-    agent_artifact_sha256: str
+    daemon_artifact_bucket: str
+    daemon_artifact_key: str
+    daemon_artifact_version_id: str
+    daemon_artifact_sha256: str
     emergency_hold_function_name: str
     propagation_audit_log_group: str
-    agent_operations_log_group: str
+    daemon_operations_log_group: str
     operational_alerts_topic_arn: str
-    agent_delivery_mode: str = "baked"
+    daemon_delivery_mode: str = "baked"
 
     @classmethod
-    def load(cls, path: str | Path) -> "Ec2AgentConfig":
+    def load(cls, path: str | Path) -> "Ec2DaemonConfig":
         # Launch-template user data is static. Only lineage comes from creation tags;
         # the template identity comes from EC2, never a mutable $Default/$Latest alias.
         from .ec2_sdk import load_instance_config
@@ -104,7 +104,7 @@ class Ec2AgentConfig:
         return config
 
     def validate(self) -> None:
-        if self.agent_delivery_mode != "baked":
+        if self.daemon_delivery_mode != "baked":
             raise ValueError("EC2 propagation requires an approved baked image")
         if self.generation_table_name != f"cloud-glider-{self.environment}-generations":
             raise ValueError("unexpected generation table")
@@ -130,7 +130,7 @@ class Ec2AgentConfig:
             )
         if not self.handoff_token or len(self.handoff_token) > 128:
             raise ValueError("invalid handoff token")
-        for name in ("template_sha256", "agent_artifact_sha256"):
+        for name in ("template_sha256", "daemon_artifact_sha256"):
             if not SHA256_RE.fullmatch(getattr(self, name)):
                 raise ValueError(f"{name} must be a lowercase SHA-256 digest")
 
@@ -154,10 +154,10 @@ def control_fingerprint(control: dict) -> str:
     ).hexdigest()
 
 
-class Ec2Agent:
+class Ec2Daemon:
     def __init__(
         self,
-        config: Ec2AgentConfig,
+        config: Ec2DaemonConfig,
         gateway: Any,
         *,
         clock: Callable = time.time,
@@ -211,14 +211,14 @@ class Ec2Agent:
                 "GENERATION_TABLE_MISMATCH", "unexpected generation table"
             )
         if control["request_id"] != self.config.request_id:
-            raise TransientFailure("stale chain identity; agent is fenced")
+            raise TransientFailure("stale chain identity; daemon is fenced")
         if type(control["cleanup_requested"]) is not bool:
             raise SafetyViolation("LIFECYCLE_SCHEMA_INVALID", "invalid cleanup switch")
         if control["cleanup_requested"] or control["cleanup_status"] not in (
             "IDLE",
             "COMPLETE",
         ):
-            raise TransientFailure("cleanup fences agent activity")
+            raise TransientFailure("cleanup fences daemon activity")
         if control["propagation_backend"] != "ec2":
             raise SafetyViolation("BACKEND_MISMATCH", "offline EC2 migration required")
         numeric = {
@@ -290,7 +290,7 @@ class Ec2Agent:
                 )
         for field in (
             "template_sha256",
-            "agent_artifact_sha256",
+            "daemon_artifact_sha256",
             "launch_template_sha256",
         ):
             if not SHA256_RE.fullmatch(control[field]):
@@ -321,10 +321,10 @@ class Ec2Agent:
             "template_s3_version_id": c.template_s3_version_id,
             "template_sha256": c.template_sha256,
             "template_build_id": c.template_build_id,
-            "agent_artifact_bucket": c.agent_artifact_bucket,
-            "agent_artifact_key": c.agent_artifact_key,
-            "agent_artifact_version_id": c.agent_artifact_version_id,
-            "agent_artifact_sha256": c.agent_artifact_sha256,
+            "daemon_artifact_bucket": c.daemon_artifact_bucket,
+            "daemon_artifact_key": c.daemon_artifact_key,
+            "daemon_artifact_version_id": c.daemon_artifact_version_id,
+            "daemon_artifact_sha256": c.daemon_artifact_sha256,
         }
 
     def _identity(self) -> dict:
@@ -340,8 +340,8 @@ class Ec2Agent:
             "template_sha256": c.template_sha256,
             "template_build_id": c.template_build_id,
             "bootstrap_version": c.bootstrap_version,
-            "agent_artifact_version_id": c.agent_artifact_version_id,
-            "agent_artifact_sha256": c.agent_artifact_sha256,
+            "daemon_artifact_version_id": c.daemon_artifact_version_id,
+            "daemon_artifact_sha256": c.daemon_artifact_sha256,
         }
 
     def verify_self(self) -> None:
@@ -417,7 +417,8 @@ class Ec2Agent:
         ):
             if refresh_readiness:
                 try:
-                    proof = self.prove_functional_readiness(control, current)
+                    with self.phase("candidate_functional_probe"):
+                        proof = self.prove_functional_readiness(control, current)
                     self._last_readiness_at = self.timing_clock()
                 except TransientFailure as exc:
                     # Replace a prior proof before retrying a failed probe.
@@ -431,7 +432,7 @@ class Ec2Agent:
                 "status": "CURRENT" if self.is_current_owner(current) else "CANDIDATE",
                 "predecessor_instance_id": self.config.predecessor_instance_id,
                 "handoff_token": self.config.handoff_token,
-                "agent_live": True,
+                "daemon_live": True,
                 "functional_readiness": proof,
                 "observed_propagation_enabled": control["propagation_enabled"],
                 "observed_hold_active": hold,
@@ -606,14 +607,14 @@ class Ec2Agent:
             "predecessor_instance_id": spec["tags"]["predecessor-instance-id"],
             "handoff_token": spec["tags"]["handoff-token"],
             "status": "CANDIDATE",
-            "agent_live": True,
+            "daemon_live": True,
             "observed_propagation_enabled": True,
             "observed_hold_active": False,
         }
         if not all(state.get(k) == v for k, v in expected.items()) or any(
             type(state.get(key)) is not bool
             for key in (
-                "agent_live",
+                "daemon_live",
                 "observed_propagation_enabled",
                 "observed_hold_active",
             )
@@ -873,13 +874,17 @@ class Ec2Agent:
             outcome = "FAILED"
             raise
         finally:
-            self.log(
-                "phase_timing",
-                phase=name,
-                started_at=started_at,
-                duration_seconds=round(self.timing_clock() - started, 6),
-                outcome=outcome,
-            )
+            try:
+                self.log(
+                    "phase_timing",
+                    phase=name,
+                    started_at=started_at,
+                    duration_seconds=round(self.timing_clock() - started, 6),
+                    outcome=outcome,
+                )
+            except Exception:
+                # Timing output must not mask a lifecycle result or error.
+                pass
 
     def cycle(self) -> str:
         self._poll_seconds = 1

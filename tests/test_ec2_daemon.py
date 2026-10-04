@@ -5,11 +5,11 @@ from pathlib import Path
 from unittest.mock import Mock
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "agent"))
-from cloud_glider.ec2_agent import control_fingerprint
-from cloud_glider.ec2_agent import (
-    Ec2Agent as Agent,
-    Ec2AgentConfig as AgentConfig,
+sys.path.insert(0, str(ROOT / "daemon"))
+from cloud_glider.ec2_daemon import control_fingerprint
+from cloud_glider.ec2_daemon import (
+    Ec2Daemon as Daemon,
+    Ec2DaemonConfig as DaemonConfig,
     SafetyViolation,
     TransientFailure,
 )
@@ -50,16 +50,16 @@ def config(**overrides):
         template_s3_version_id="template-object-v1",
         template_sha256="a" * 64,
         template_build_id="abcdef123456",
-        agent_artifact_bucket="artifacts",
-        agent_artifact_key="generation/agent.tar.gz",
-        agent_artifact_version_id="agent-object-v1",
-        agent_artifact_sha256="b" * 64,
+        daemon_artifact_bucket="artifacts",
+        daemon_artifact_key="generation/daemon.tar.gz",
+        daemon_artifact_version_id="daemon-object-v1",
+        daemon_artifact_sha256="b" * 64,
         emergency_hold_function_name="cloud-glider-sandbox-emergency-hold",
         propagation_audit_log_group="/cloud-glider/sandbox/audit/propagation",
-        agent_operations_log_group="/cloud-glider/sandbox/agent/operations",
+        daemon_operations_log_group="/cloud-glider/sandbox/daemon/operations",
         operational_alerts_topic_arn="arn:aws:sns:us-west-2:111122223333:cloud-glider-sandbox-operational-alerts",
     )
-    return AgentConfig(**{**values, **overrides})
+    return DaemonConfig(**{**values, **overrides})
 
 
 def control(**overrides):
@@ -77,10 +77,10 @@ def control(**overrides):
         template_s3_version_id="template-object-v1",
         template_sha256="a" * 64,
         template_build_id="abcdef123456",
-        agent_artifact_bucket="artifacts",
-        agent_artifact_key="generation/agent.tar.gz",
-        agent_artifact_version_id="agent-object-v1",
-        agent_artifact_sha256="b" * 64,
+        daemon_artifact_bucket="artifacts",
+        daemon_artifact_key="generation/daemon.tar.gz",
+        daemon_artifact_version_id="daemon-object-v1",
+        daemon_artifact_sha256="b" * 64,
         max_generation=2,
         max_live_generations=3,
         concurrency_model="EC2_DRY_RUN_THEN_RETIRE",
@@ -239,10 +239,10 @@ class FakeGateway:
             "template_sha256": c.template_sha256,
             "template_build_id": c.template_build_id,
             "bootstrap_version": c.bootstrap_version,
-            "agent_artifact_version_id": c.agent_artifact_version_id,
-            "agent_artifact_sha256": c.agent_artifact_sha256,
+            "daemon_artifact_version_id": c.daemon_artifact_version_id,
+            "daemon_artifact_sha256": c.daemon_artifact_sha256,
             "status": "CANDIDATE",
-            "agent_live": True,
+            "daemon_live": True,
             "functional_readiness": {
                 "schema_version": "1",
                 "producer_instance_id": self.successor_id,
@@ -288,12 +288,12 @@ class FakeGateway:
         self.calls.append("hold")
 
 
-class AgentTests(unittest.TestCase):
-    def setup_agent(self, cfg=None):
+class DaemonTests(unittest.TestCase):
+    def setup_daemon(self, cfg=None):
         cfg = cfg or config()
         clock = FakeClock()
         gateway = FakeGateway(cfg, clock)
-        agent = Agent(
+        daemon = Daemon(
             cfg,
             gateway,
             clock=clock,
@@ -301,30 +301,30 @@ class AgentTests(unittest.TestCase):
             logger=lambda _: None,
             timing_clock=clock,
         )
-        agent.verify_self()
+        daemon.verify_self()
         gateway.calls.clear()
-        return agent, gateway, clock
+        return daemon, gateway, clock
 
     def test_candidate_polls_each_second_but_heartbeats_remain_five_seconds_apart(self):
-        agent, gateway, clock = self.setup_agent()
+        daemon, gateway, clock = self.setup_daemon()
         gateway.current["instance_id"] = CHILD
         for second in range(6):
-            self.assertEqual(agent.cycle(), "CANDIDATE")
-            self.assertEqual(agent._poll_seconds, 1)
+            self.assertEqual(daemon.cycle(), "CANDIDATE")
+            self.assertEqual(daemon._poll_seconds, 1)
             clock.sleep(1)
         self.assertEqual(gateway.calls.count("control"), 6)
         self.assertEqual(gateway.calls.count("heartbeat"), 2)
-        self.assertEqual(agent.heartbeat_sequence, 2)
+        self.assertEqual(daemon.heartbeat_sequence, 2)
 
     def test_functional_readiness_removes_fixed_heartbeat_wait(self):
         for interval, expected in ((1, 0), (2, 0)):
             with self.subTest(interval=interval):
-                agent, gateway, clock = self.setup_agent()
+                daemon, gateway, clock = self.setup_daemon()
                 gateway.control["readiness_poll_seconds"] = interval
-                spec, identifier = agent.provision_successor(gateway.control)
+                spec, identifier = daemon.provision_successor(gateway.control)
                 gateway.calls.clear()
                 start = clock()
-                state = agent.wait_for_ready_successor(
+                state = daemon.wait_for_ready_successor(
                     gateway.control, spec, identifier
                 )
                 self.assertEqual(state["instance_id"], CHILD)
@@ -335,15 +335,15 @@ class AgentTests(unittest.TestCase):
     def test_stop_on_ownership_transition_is_seen_between_heartbeats(self):
         for hold in (False, True):
             with self.subTest(hold=hold):
-                agent, gateway, clock = self.setup_agent()
+                daemon, gateway, clock = self.setup_daemon()
                 current = dict(gateway.current)
                 gateway.current["instance_id"] = CHILD
-                self.assertEqual(agent.cycle(), "CANDIDATE")
+                self.assertEqual(daemon.cycle(), "CANDIDATE")
                 clock.sleep(1)
                 gateway.current = current
                 gateway.hold_active = hold
                 gateway.control["propagation_enabled"] = hold
-                self.assertEqual(agent.cycle(), "STOPPED_BY_OPERATOR")
+                self.assertEqual(daemon.cycle(), "STOPPED_BY_OPERATOR")
                 self.assertEqual(gateway.calls.count("heartbeat"), 1)
                 self.assertNotIn("acquire", gateway.calls)
                 self.assertFalse(gateway.created)
@@ -351,7 +351,7 @@ class AgentTests(unittest.TestCase):
     def test_phase_timing_keeps_success_deferred_and_failure_distinct(self):
         import json
 
-        a, _, _ = self.setup_agent()
+        a, _, _ = self.setup_daemon()
         records = []
         a.logger = lambda raw: records.append(json.loads(raw))
         for error, expected in (
@@ -371,22 +371,33 @@ class AgentTests(unittest.TestCase):
             self.assertEqual(records[-1]["duration_seconds"], 2.5)
             self.assertEqual(records[-1]["request_id"], a.config.request_id)
 
+    def test_phase_timing_sink_failure_preserves_result_and_original_error(self):
+        a, _, _ = self.setup_daemon()
+        def broken(raw):
+            raise OSError("journal unavailable")
+        a.logger = broken
+        with a.phase("fixture"):
+            pass
+        with self.assertRaisesRegex(TransientFailure, "original"):
+            with a.phase("fixture"):
+                raise TransientFailure("original")
+
     def test_disabled_or_hold_preserves_instances(self):
         for enabled, hold in ((False, False), (True, True), (False, True)):
-            a, g, _ = self.setup_agent()
+            a, g, _ = self.setup_daemon()
             g.control["propagation_enabled"], g.hold_active = enabled, hold
             self.assertEqual(a.cycle(), "STOPPED_BY_OPERATOR")
             self.assertEqual(g.calls, ["control", "heartbeat"])
             self.assertEqual(a._poll_seconds, 60)
 
     def test_duplicate_without_lease_does_not_create(self):
-        a, g, _ = self.setup_agent()
+        a, g, _ = self.setup_daemon()
         g.lease_result = False
         self.assertEqual(a.cycle(), "LEASE_NOT_ACQUIRED")
         self.assertNotIn("create", g.calls)
 
     def test_owner_change_after_acquire_preserves_instances(self):
-        a, g, _ = self.setup_agent()
+        a, g, _ = self.setup_daemon()
 
         def acquire(*args):
             g.current["instance_id"] = CHILD
@@ -398,7 +409,7 @@ class AgentTests(unittest.TestCase):
 
     def test_final_stop_or_hold_gate_blocks_ec2_submission(self):
         for hold in (False, True):
-            a, g, _ = self.setup_agent()
+            a, g, _ = self.setup_daemon()
 
             def stop():
                 if hold:
@@ -413,7 +424,7 @@ class AgentTests(unittest.TestCase):
             self.assertEqual(g.calls[-1], "release")
 
     def test_direct_launch_and_dry_run_precede_handoff(self):
-        a, g, _ = self.setup_agent()
+        a, g, _ = self.setup_daemon()
         self.assertEqual(a.cycle(), "HANDOFF_COMPLETE")
         self.assertLess(g.calls.index("dry-run"), g.calls.index("handoff"))
         self.assertNotIn("terminate", g.calls)
@@ -421,7 +432,7 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(g.current["predecessor_instance_id"], CURRENT)
 
     def test_lost_launch_response_reconciles_without_duplicate(self):
-        a, g, _ = self.setup_agent()
+        a, g, _ = self.setup_daemon()
         g.timeout_once = True
         with self.assertRaises(TransientFailure):
             a.cycle()
@@ -429,14 +440,14 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(g.calls.count("create"), 1)
 
     def test_ambiguous_submission_without_instance_is_not_resubmitted(self):
-        a, g, _ = self.setup_agent()
+        a, g, _ = self.setup_daemon()
         g.intent = {"old": "intent"}
         with self.assertRaises(TransientFailure):
             a.cycle()
         self.assertNotIn("create", g.calls)
 
     def test_conflicting_successor_preserves_parent(self):
-        a, g, _ = self.setup_agent()
+        a, g, _ = self.setup_daemon()
         spec, _ = a.provision_successor(g.control)
         g.instances[CHILD]["Tags"]["handoff-token"] = "foreign"
         with self.assertRaises(SafetyViolation):
@@ -444,7 +455,7 @@ class AgentTests(unittest.TestCase):
         self.assertNotIn("handoff", g.calls)
 
     def test_running_without_authoritative_health_cannot_handoff(self):
-        a, g, _ = self.setup_agent()
+        a, g, _ = self.setup_daemon()
         g.read_generation_state = lambda _: None
         with self.assertRaisesRegex(TransientFailure, "readiness timed out"):
             a.cycle()
@@ -452,8 +463,8 @@ class AgentTests(unittest.TestCase):
 
     def test_stale_or_ambiguous_heartbeat_cannot_handoff(self):
         for change in (
-            {"agent_live": False},
-            {"agent_live": 1},
+            {"daemon_live": False},
+            {"daemon_live": 1},
             {"observed_propagation_enabled": 1},
             {"observed_hold_active": 0},
             {"functional_readiness": None},
@@ -462,7 +473,7 @@ class AgentTests(unittest.TestCase):
             {"functional_readiness": {}},
             {"handoff_token": "foreign"},
         ):
-            a, g, _ = self.setup_agent()
+            a, g, _ = self.setup_daemon()
             original = g.read_generation_state
             g.read_generation_state = lambda n: {**original(n), **change}
             with self.assertRaises(TransientFailure):
@@ -476,7 +487,7 @@ class AgentTests(unittest.TestCase):
             predecessor_instance_id=CURRENT,
             handoff_token="candidate-token",
         )
-        a, g, clock = self.setup_agent(cfg)
+        a, g, clock = self.setup_daemon(cfg)
         g.current.update(generation="000000", instance_id=CURRENT)
         return a, g, clock
 
@@ -514,7 +525,7 @@ class AgentTests(unittest.TestCase):
         )
 
     def test_parent_accepts_actual_candidate_proof_and_preserves_it_in_current(self):
-        parent, pg, clock = self.setup_agent()
+        parent, pg, clock = self.setup_daemon()
         spec, child_id = parent.provision_successor(pg.control)
         cfg = dataclasses.replace(
             parent.config,
@@ -525,7 +536,7 @@ class AgentTests(unittest.TestCase):
         )
         cg = FakeGateway(cfg, clock)
         cg.current, cg.control, cg.instances = pg.current, pg.control, pg.instances
-        candidate = Agent(
+        candidate = Daemon(
             cfg,
             cg,
             clock=clock,
@@ -608,7 +619,7 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(spec["launch_template_version"], "1")
 
     def test_proof_expiring_during_final_controls_preserves_parent(self):
-        a, g, clock = self.setup_agent()
+        a, g, clock = self.setup_daemon()
         spec, child_id = a.provision_successor(g.control)
         state = g.read_generation_state(spec["generation"])
 
@@ -623,7 +634,7 @@ class AgentTests(unittest.TestCase):
         self.assertNotIn("terminate", g.calls)
 
     def test_parent_continuation_alone_cannot_substitute_for_candidate_proof(self):
-        a, g, _ = self.setup_agent()
+        a, g, _ = self.setup_daemon()
         original = g.read_generation_state
         g.read_generation_state = lambda n: {
             **original(n),
@@ -671,7 +682,7 @@ class AgentTests(unittest.TestCase):
             {"continuation_status": "BOUNDARY"},
             {"continuation_generation": "000004"},
         ):
-            a, g, _ = self.setup_agent()
+            a, g, _ = self.setup_daemon()
             original = g.read_generation_state
 
             def changed(n):
@@ -685,28 +696,28 @@ class AgentTests(unittest.TestCase):
             self.assertNotIn("handoff", g.calls)
 
     def test_failed_continuation_preserves_predecessor(self):
-        a, g, _ = self.setup_agent()
+        a, g, _ = self.setup_daemon()
         g.dry_run_instance = Mock(side_effect=TransientFailure("unauthorized"))
         with self.assertRaises(TransientFailure):
             a.cycle()
         self.assertNotIn("handoff", g.calls)
 
     def test_terminal_successor_does_not_require_next_generation(self):
-        a, g, _ = self.setup_agent()
+        a, g, _ = self.setup_daemon()
         g.control["max_generation"] = 1
         self.assertEqual(a.cycle(), "HANDOFF_COMPLETE")
         self.assertNotIn("dry-run", g.calls)
 
     def test_failed_handoff_preserves_parent(self):
-        a, g, _ = self.setup_agent()
+        a, g, _ = self.setup_daemon()
         g.handoff_result = False
         with self.assertRaisesRegex(TransientFailure, "handoff conditions"):
             a.cycle()
         self.assertNotIn("terminate", g.calls)
         self.assertEqual(g.current["instance_id"], CURRENT)
 
-    def child_agent(self):
-        a, g, clock = self.setup_agent(
+    def child_daemon(self):
+        a, g, clock = self.setup_daemon(
             config(
                 generation="000001",
                 instance_id=CHILD,
@@ -740,21 +751,21 @@ class AgentTests(unittest.TestCase):
         return a, g, clock
 
     def test_retirement_requires_durable_successor_functional_evidence(self):
-        a, g, _ = self.child_agent()
+        a, g, _ = self.child_daemon()
         g.current.pop("functional_readiness")
         with self.assertRaises(SafetyViolation):
             a.cycle()
         self.assertNotIn("terminate", g.calls)
 
     def test_delayed_retirement_keeps_authorization_after_proof_freshness_expires(self):
-        a, g, clock = self.child_agent()
+        a, g, clock = self.child_daemon()
         clock.sleep(60)
         with self.assertRaisesRegex(TransientFailure, "still in progress"):
             a.cycle()
         self.assertIn("terminate", g.calls)
 
     def test_child_retries_retirement_before_terminal_exit(self):
-        a, g, _ = self.child_agent()
+        a, g, _ = self.child_daemon()
         with self.assertRaisesRegex(TransientFailure, "still in progress"):
             a.cycle()
         self.assertNotIn("create", g.calls)
@@ -764,8 +775,8 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(a.cycle(), "MAX_GENERATION_REACHED")
         self.assertEqual(g.calls.count("terminate"), 1)
 
-    def overlap_agent(self):
-        a, g, clock = self.child_agent()
+    def overlap_daemon(self):
+        a, g, clock = self.child_daemon()
         g.control["max_generation"] = 3
         g.current.update(
             handoff_control_sha256=control_fingerprint(g.control),
@@ -778,13 +789,13 @@ class AgentTests(unittest.TestCase):
         return a, g, clock
 
     def test_launch_overlaps_retirement_but_handoff_waits_and_restart_recovers(self):
-        a, g, clock = self.overlap_agent()
+        a, g, clock = self.overlap_daemon()
         with self.assertRaisesRegex(TransientFailure, "still in progress"):
             a.cycle()
         self.assertLess(g.calls.index("terminate"), g.calls.index("create"))
         self.assertNotIn("handoff", g.calls)
         self.assertEqual(g.current["instance_id"], CHILD)
-        restarted = Agent(
+        restarted = Daemon(
             a.config,
             g,
             clock=clock,
@@ -801,7 +812,7 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(g.calls.count("create"), 1)
 
     def test_two_slot_limit_and_failed_retirement_block_launch(self):
-        a, g, _ = self.overlap_agent()
+        a, g, _ = self.overlap_daemon()
         g.control["max_live_generations"] = 2
         g.current["handoff_control_sha256"] = control_fingerprint(g.control)
         g.current["functional_readiness"]["control_sha256"] = control_fingerprint(
@@ -813,7 +824,7 @@ class AgentTests(unittest.TestCase):
 
     def test_stop_and_hold_after_overlap_preserve_owner_and_candidate(self):
         for hold in (False, True):
-            a, g, _ = self.overlap_agent()
+            a, g, _ = self.overlap_daemon()
             with self.assertRaises(TransientFailure):
                 a.cycle()
             g.calls.clear()
@@ -823,32 +834,32 @@ class AgentTests(unittest.TestCase):
             self.assertEqual(g.calls, ["control"])
 
     def test_child_stop_preserves_predecessor_even_at_terminal_generation(self):
-        a, g, _ = self.child_agent()
+        a, g, _ = self.child_daemon()
         g.control["propagation_enabled"] = False
         self.assertEqual(a.cycle(), "STOPPED_BY_OPERATOR")
         self.assertNotIn("terminate", g.calls)
 
     def test_unowned_retirement_is_rejected(self):
-        a, g, _ = self.child_agent()
+        a, g, _ = self.child_daemon()
         g.current["retirement_authorized"] = False
         with self.assertRaises(SafetyViolation):
             a.cycle()
         self.assertNotIn("terminate", g.calls)
 
     def test_foreign_predecessor_is_preserved(self):
-        a, g, _ = self.child_agent()
+        a, g, _ = self.child_daemon()
         g.instances[CURRENT]["Tags"]["generation"] = "000123"
         with self.assertRaises(SafetyViolation):
             a.cycle()
         self.assertNotIn("terminate", g.calls)
 
     def test_missing_or_failed_retirement_blocks_further_propagation(self):
-        a, g, _ = self.child_agent()
+        a, g, _ = self.child_daemon()
         g.instances.pop(CURRENT)
         with self.assertRaisesRegex(TransientFailure, "ambiguous"):
             a.cycle()
         self.assertNotIn("create", g.calls)
-        a, g, _ = self.child_agent()
+        a, g, _ = self.child_daemon()
         g.terminate_instance = Mock(side_effect=TransientFailure("termination failed"))
         with self.assertRaisesRegex(TransientFailure, "termination failed"):
             a.cycle()
@@ -856,20 +867,20 @@ class AgentTests(unittest.TestCase):
         self.assertNotIn("retirement_completed", g.current)
 
     def test_completed_retirement_survives_ec2_history_expiry(self):
-        a, g, _ = self.child_agent()
+        a, g, _ = self.child_daemon()
         g.current["retirement_completed"] = True
         g.instances.pop(CURRENT)
         self.assertEqual(a.cycle(), "MAX_GENERATION_REACHED")
 
     def test_stopped_or_foreign_child_cannot_retire_parent(self):
-        a, g, _ = self.child_agent()
+        a, g, _ = self.child_daemon()
         g.instances[CHILD]["State"]["Name"] = "stopped"
         with self.assertRaises(TransientFailure):
             a.cycle()
         self.assertNotIn("terminate", g.calls)
 
     def test_alarm_failure_after_launch_reconciles_existing_instance(self):
-        a, g, _ = self.setup_agent()
+        a, g, _ = self.setup_daemon()
         g.ensure_status_alarm = Mock(
             side_effect=[TransientFailure("alarm unavailable"), None]
         )
@@ -879,7 +890,7 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(g.calls.count("create"), 1)
 
     def test_malformed_control_types_trigger_safety_hold(self):
-        a, g, _ = self.setup_agent()
+        a, g, _ = self.setup_daemon()
         for change in (
             {"max_generation": True},
             {"readiness_poll_seconds": "2"},
@@ -889,19 +900,19 @@ class AgentTests(unittest.TestCase):
                 a._validated_control(control(**change))
 
     def test_changed_limit_or_missing_proof_preserves_predecessor_after_handoff(self):
-        a, g, _ = self.child_agent()
+        a, g, _ = self.child_daemon()
         g.control["max_generation"] = 2
         with self.assertRaisesRegex(TransientFailure, "changed since handoff"):
             a.cycle()
         self.assertNotIn("terminate", g.calls)
-        a, g, _ = self.child_agent()
+        a, g, _ = self.child_daemon()
         g.current.pop("continuation_status")
         with self.assertRaises(SafetyViolation):
             a.cycle()
         self.assertNotIn("terminate", g.calls)
 
     def test_template_alias_and_foreign_account_rejected(self):
-        a, g, _ = self.setup_agent()
+        a, g, _ = self.setup_daemon()
         for change in (
             {"launch_template_version": "$Latest"},
             {"approved_account_id": "999999999999"},
@@ -912,15 +923,15 @@ class AgentTests(unittest.TestCase):
                 a._validated_control(control(**change))
 
     def test_non_seed_cannot_claim_uninitialized_current(self):
-        a, g, _ = self.child_agent()
+        a, g, _ = self.child_daemon()
         g.current = {"status": "UNINITIALIZED"}
         with self.assertRaises(SafetyViolation):
             a.ensure_bootstrap_ownership()
 
     def test_parent_exits_after_handoff_and_identity_violation_holds(self):
-        a, g, _ = self.setup_agent()
+        a, g, _ = self.setup_daemon()
         self.assertEqual(a.run(), 0)
-        a, g, _ = self.setup_agent()
+        a, g, _ = self.setup_daemon()
         g.control["launch_template_version"] = "2"
         self.assertEqual(a.run(), 2)
         self.assertIn("hold", g.calls)

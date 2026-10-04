@@ -42,27 +42,27 @@ Parameters:
   SecurityGroupId:
     Type: AWS::EC2::SecurityGroup::Id
     Default: sg-0da9cdee2a98d8dc2
-  AgentInstanceProfileName:
+  DaemonInstanceProfileName:
     Type: String
   StateTableName:
     Type: String
   GenerationTableName:
     Type: String
     AllowedPattern: '^cloud-glider-[a-z][a-z0-9-]{1,15}-generations$'
-  AgentDeliveryMode:
+  DaemonDeliveryMode:
     Type: String
     Default: s3
     AllowedValues: [s3, baked]
     Description: Baked mode requires a matching approved Cloud Glider image release.
-  AgentArtifactBucket:
+  DaemonArtifactBucket:
     Type: String
-  AgentArtifactKey:
+  DaemonArtifactKey:
     Type: String
     AllowedPattern: '^generation/.+$'
-  AgentArtifactVersionId:
+  DaemonArtifactVersionId:
     Type: String
     MinLength: 1
-  AgentArtifactSha256:
+  DaemonArtifactSha256:
     Type: String
     AllowedPattern: '^[A-Fa-f0-9]{64}$'
   BootstrapVersion:
@@ -91,7 +91,7 @@ Parameters:
     MaxLength: 128
   PropagationAuditLogGroupName:
     Type: String
-  AgentOperationsLogGroupName:
+  DaemonOperationsLogGroupName:
     Type: String
   EmergencyHoldFunctionName:
     Type: String
@@ -113,7 +113,7 @@ Rules:
     Assertions:
       - Assert:
           Fn::Or:
-            - !Equals [!Ref AgentDeliveryMode, baked]
+            - !Equals [!Ref DaemonDeliveryMode, baked]
             - !Equals [!Ref RootVolumeGiB, '8']
             - !Equals [!Ref RootVolumeGiB, '16']
         AssertDescription: Roots below 8 GiB require an approved custom baked AMI.
@@ -134,7 +134,7 @@ Resources:
     Properties:
       ImageId: !Ref ApprovedImageId
       InstanceType: !Ref InstanceType
-      IamInstanceProfile: !Ref AgentInstanceProfileName
+      IamInstanceProfile: !Ref DaemonInstanceProfileName
       MetadataOptions:
         HttpEndpoint: enabled
         HttpPutResponseHopLimit: 1
@@ -202,32 +202,32 @@ Resources:
             "template_s3_version_id": "${TemplateS3VersionId}",
             "template_sha256": "${TemplateSha256}",
             "template_build_id": "${TemplateBuildId}",
-            "agent_artifact_bucket": "${AgentArtifactBucket}",
-            "agent_artifact_key": "${AgentArtifactKey}",
-            "agent_artifact_version_id": "${AgentArtifactVersionId}",
-            "agent_artifact_sha256": "${AgentArtifactSha256}",
+            "daemon_artifact_bucket": "${DaemonArtifactBucket}",
+            "daemon_artifact_key": "${DaemonArtifactKey}",
+            "daemon_artifact_version_id": "${DaemonArtifactVersionId}",
+            "daemon_artifact_sha256": "${DaemonArtifactSha256}",
             "propagation_audit_log_group": "${PropagationAuditLogGroupName}",
-            "agent_operations_log_group": "${AgentOperationsLogGroupName}",
+            "daemon_operations_log_group": "${DaemonOperationsLogGroupName}",
             "emergency_hold_function_name": "${EmergencyHoldFunctionName}"
           }
           JSON
           chmod 0640 /etc/cloud-glider/bootstrap.json
-          if [ '${AgentDeliveryMode}' = baked ]; then
+          if [ '${DaemonDeliveryMode}' = baked ]; then
             test -f /etc/cloud-glider/image.json
             /usr/bin/python3 /usr/local/lib/cloud-glider/verify_image.py --config /etc/cloud-glider/bootstrap.json
           else
             test ! -e /etc/cloud-glider/image.json
             aws s3api get-object \
-              --bucket '${AgentArtifactBucket}' \
-              --key '${AgentArtifactKey}' \
-              --version-id '${AgentArtifactVersionId}' \
-              /opt/cloud-glider/agent.tar.gz
-            echo '${AgentArtifactSha256}  /opt/cloud-glider/agent.tar.gz' | sha256sum -c -
-            tar -xzf /opt/cloud-glider/agent.tar.gz -C /opt/cloud-glider
+              --bucket '${DaemonArtifactBucket}' \
+              --key '${DaemonArtifactKey}' \
+              --version-id '${DaemonArtifactVersionId}' \
+              /opt/cloud-glider/daemon.tar.gz
+            echo '${DaemonArtifactSha256}  /opt/cloud-glider/daemon.tar.gz' | sha256sum -c -
+            tar -xzf /opt/cloud-glider/daemon.tar.gz -C /opt/cloud-glider
             test -x /opt/cloud-glider/bin/cloud-glider
             cat >/etc/systemd/system/cloud-glider.service <<'UNIT'
             [Unit]
-            Description=Cloud Glider propagation agent
+            Description=Cloud Glider propagation daemon
             After=network-online.target
             Wants=network-online.target
 

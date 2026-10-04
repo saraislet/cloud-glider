@@ -8,7 +8,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agent"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "daemon"))
 if importlib.util.find_spec("boto3") is not None:
     import boto3
     from botocore.exceptions import EndpointConnectionError
@@ -18,11 +18,11 @@ if importlib.util.find_spec("boto3") is not None:
     from cloud_glider.aws_sdk import AwsSdkGateway, _av, _unmarshal
 else:
     boto3 = None
-from cloud_glider.agent import SafetyViolation, TransientFailure
+from cloud_glider.daemon import SafetyViolation, TransientFailure
 
 
 @unittest.skipIf(
-    boto3 is None, "Install agent/requirements.txt to run SDK transport tests"
+    boto3 is None, "Install daemon/requirements.txt to run SDK transport tests"
 )
 class SdkTests(unittest.TestCase):
     def setUp(self):
@@ -66,6 +66,42 @@ class SdkTests(unittest.TestCase):
             attribute = _av(value)
             self.assertIn("NULL" if value is None else "M", attribute)
             self.assertEqual(_unmarshal(attribute), value)
+
+    def test_api_timings_preserve_dry_run_and_redact_parameters(self):
+        from botocore.exceptions import ClientError
+        records = []
+        client = Mock()
+        client.run_instances.side_effect = ClientError(
+            {"Error": {"Code": "DryRunOperation", "Message": "secret payload"}},
+            "RunInstances",
+        )
+        self.gateway._clients["ec2"] = client
+        with patch("cloud_glider.aws_sdk.emit", side_effect=lambda event, **kw: records.append((event, kw))):
+            result = self.gateway._call("ec2", "run_instances", allow_failure=True,
+                                        DryRun=True, UserData="secret payload")
+        self.assertEqual(result["_code"], "DryRunOperation")
+        event, record = records[0]
+        self.assertEqual(event, "api_timing")
+        self.assertTrue(record["dry_run"])
+        self.assertEqual(record["error_code"], "DryRunOperation")
+        self.assertNotIn("secret payload", json.dumps(record))
+        self.assertNotIn("UserData", record)
+
+    def test_api_timing_success_and_transport_failure(self):
+        records = []
+        client = Mock()
+        self.gateway._clients["ec2"] = client
+        client.describe_instances.return_value = {"Reservations": []}
+        from cloud_glider.timing import emit
+        def broken_sink(value):
+            raise OSError("sink unavailable")
+        with patch("cloud_glider.aws_sdk.emit", side_effect=lambda event, **kw: emit(event, sink=broken_sink, **kw)):
+            self.assertEqual(self.gateway._call("ec2", "describe_instances"), {"Reservations": []})
+        client.describe_instances.side_effect = EndpointConnectionError(endpoint_url="https://example.invalid")
+        with patch("cloud_glider.aws_sdk.emit", side_effect=lambda event, **kw: records.append(kw)):
+            with self.assertRaises(TransientFailure):
+                self.gateway._call("ec2", "describe_instances", allow_failure=True)
+        self.assertEqual(records[0]["outcome"], "TRANSPORT_ERROR")
 
     def test_reuses_regional_clients_and_bounded_config(self):
         stub = self.stub("dynamodb")

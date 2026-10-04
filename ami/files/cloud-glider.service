@@ -1,5 +1,5 @@
 [Unit]
-Description=Cloud Glider propagation agent
+Description=Cloud Glider propagation daemon
 After=network-online.target
 Wants=network-online.target
 ConditionPathExists=/etc/cloud-glider/bootstrap.json

@@ -10,7 +10,7 @@ Parameters:
   SecurityGroupId:
     Type: AWS::EC2::SecurityGroup::Id
     Default: sg-0da9cdee2a98d8dc2
-  ExpectedAgentSha256:
+  ExpectedDaemonSha256:
     Type: String
     AllowedPattern: '^[a-f0-9]{64}$'
 Rules:
@@ -84,7 +84,7 @@ Resources:
           PYRESULT
           }
           trap 'echo CLOUD_GLIDER_AMI_SMOKE_FAIL; signal_result FAILURE' ERR
-          /opt/cloud-glider/venv/bin/python /usr/local/lib/cloud-glider/smoke_test.py --expected-sha256 '${ExpectedAgentSha256}' | tee /var/log/cloud-glider-smoke-result.log
+          /opt/cloud-glider/venv/bin/python /usr/local/lib/cloud-glider/smoke_test.py --expected-sha256 '${ExpectedDaemonSha256}' | tee /var/log/cloud-glider-smoke-result.log
           signal_result SUCCESS
           # Bound successful-test spend. Delete this stack after collecting evidence.
           shutdown -h now

@@ -33,10 +33,10 @@ REQUIRED_CONTROL_FIELDS = {
     "template_s3_version_id",
     "template_sha256",
     "template_build_id",
-    "agent_artifact_bucket",
-    "agent_artifact_key",
-    "agent_artifact_version_id",
-    "agent_artifact_sha256",
+    "daemon_artifact_bucket",
+    "daemon_artifact_key",
+    "daemon_artifact_version_id",
+    "daemon_artifact_sha256",
     "max_generation",
     "max_live_generations",
     "concurrency_model",
@@ -52,11 +52,11 @@ REQUIRED_CONTROL_FIELDS = {
 GENERATION_PARAMETER_NAMES = {
     "Environment", "Owner", "Generation", "RequestId", "GenerationTableName", "PredecessorStackId", "HandoffToken",
     "ApprovedImageId", "InstanceType", "ImageArchitecture", "SubnetId", "SecurityGroupId",
-    "AgentInstanceProfileName", "StateTableName", "AgentArtifactBucket", "AgentArtifactKey",
-    "AgentArtifactVersionId", "AgentArtifactSha256", "BootstrapVersion", "TemplateVersion",
+    "DaemonInstanceProfileName", "StateTableName", "DaemonArtifactBucket", "DaemonArtifactKey",
+    "DaemonArtifactVersionId", "DaemonArtifactSha256", "BootstrapVersion", "TemplateVersion",
     "TemplateBucket", "TemplateKey", "TemplateS3VersionId", "TemplateSha256", "TemplateBuildId",
-    "PropagationAuditLogGroupName", "AgentOperationsLogGroupName", "EmergencyHoldFunctionName",
-    "OperationalAlertsTopicArn", "RootDeviceName", "RootVolumeGiB", "AgentDeliveryMode",
+    "PropagationAuditLogGroupName", "DaemonOperationsLogGroupName", "EmergencyHoldFunctionName",
+    "OperationalAlertsTopicArn", "RootDeviceName", "RootVolumeGiB", "DaemonDeliveryMode",
 }
 
 
@@ -73,7 +73,7 @@ class TransientFailure(RuntimeError):
 
 
 @dataclasses.dataclass(frozen=True)
-class AgentConfig:
+class DaemonConfig:
     environment: str
     request_id: str
     generation: str
@@ -89,16 +89,16 @@ class AgentConfig:
     template_s3_version_id: str
     template_sha256: str
     template_build_id: str
-    agent_artifact_bucket: str
-    agent_artifact_key: str
-    agent_artifact_version_id: str
-    agent_artifact_sha256: str
+    daemon_artifact_bucket: str
+    daemon_artifact_key: str
+    daemon_artifact_version_id: str
+    daemon_artifact_sha256: str
     emergency_hold_function_name: str
     propagation_audit_log_group: str
-    agent_operations_log_group: str
+    daemon_operations_log_group: str
 
     @classmethod
-    def load(cls, path: str | Path) -> "AgentConfig":
+    def load(cls, path: str | Path) -> "DaemonConfig":
         raw = json.loads(Path(path).read_text(encoding="utf-8"))
         expected = {field.name for field in dataclasses.fields(cls)}
         missing = expected - raw.keys()
@@ -123,7 +123,7 @@ class AgentConfig:
             raise ValueError("stack_id must be a regional CloudFormation ARN")
         if not self.handoff_token or len(self.handoff_token) > 128:
             raise ValueError("handoff_token is required and must not exceed 128 characters")
-        for name in ("template_sha256", "agent_artifact_sha256"):
+        for name in ("template_sha256", "daemon_artifact_sha256"):
             if not SHA256_RE.fullmatch(getattr(self, name).lower()):
                 raise ValueError(f"{name} must be a SHA-256 digest")
 
@@ -159,12 +159,12 @@ def stable_token(prefix: str, *parts: str) -> str:
     return f"{prefix}-{digest}"
 
 
-class Agent:
+class Daemon:
     """One-generation orchestrator with explicit fail-closed gates."""
 
     def __init__(
         self,
-        config: AgentConfig,
+        config: DaemonConfig,
         gateway: Gateway,
         *,
         clock: Callable[[], float] = time.time,
@@ -205,11 +205,11 @@ class Agent:
         if control["generation_table_name"] != self.config.generation_table_name:
             raise SafetyViolation("GENERATION_TABLE_MISMATCH", "generation table differs from approved control")
         if control["request_id"] != self.config.request_id:
-            raise TransientFailure("stale chain identity; agent is fenced")
+            raise TransientFailure("stale chain identity; daemon is fenced")
         if type(control["propagation_enabled"]) is not bool or type(control["cleanup_requested"]) is not bool:
             raise SafetyViolation("CONTROL_SCHEMA_INVALID", "lifecycle switches must be Boolean")
         if control["cleanup_requested"] or control["cleanup_status"] not in ("IDLE", "COMPLETE"):
-            raise TransientFailure("cleanup fences agent activity")
+            raise TransientFailure("cleanup fences daemon activity")
         if control["max_live_generations"] != 3:
             raise SafetyViolation("LIVE_GENERATION_LIMIT_INVALID", "absolute maximum must remain 3")
         # Legacy persisted identifier; decision 0018 removes preview creation.
@@ -230,8 +230,8 @@ class Agent:
                 raise SafetyViolation("CONTROL_TIMING_INVALID", f"{field} must be positive")
         if control["template_sha256"].lower() != control["template_sha256"]:
             raise SafetyViolation("TEMPLATE_IDENTITY_INVALID", "template digest must be lowercase")
-        if control["agent_artifact_sha256"].lower() != control["agent_artifact_sha256"]:
-            raise SafetyViolation("AGENT_IDENTITY_INVALID", "agent digest must be lowercase")
+        if control["daemon_artifact_sha256"].lower() != control["daemon_artifact_sha256"]:
+            raise SafetyViolation("DAEMON_IDENTITY_INVALID", "daemon digest must be lowercase")
         return control
 
     def _identity(self) -> dict[str, Any]:
@@ -245,8 +245,8 @@ class Agent:
             "template_sha256": self.config.template_sha256.lower(),
             "template_build_id": self.config.template_build_id,
             "bootstrap_version": self.config.bootstrap_version,
-            "agent_artifact_version_id": self.config.agent_artifact_version_id,
-            "agent_artifact_sha256": self.config.agent_artifact_sha256.lower(),
+            "daemon_artifact_version_id": self.config.daemon_artifact_version_id,
+            "daemon_artifact_sha256": self.config.daemon_artifact_sha256.lower(),
         }
 
     def verify_self(self) -> None:
@@ -275,10 +275,10 @@ class Agent:
             "TemplateS3VersionId": self.config.template_s3_version_id,
             "TemplateSha256": self.config.template_sha256,
             "TemplateBuildId": self.config.template_build_id,
-            "AgentArtifactBucket": self.config.agent_artifact_bucket,
-            "AgentArtifactKey": self.config.agent_artifact_key,
-            "AgentArtifactVersionId": self.config.agent_artifact_version_id,
-            "AgentArtifactSha256": self.config.agent_artifact_sha256,
+            "DaemonArtifactBucket": self.config.daemon_artifact_bucket,
+            "DaemonArtifactKey": self.config.daemon_artifact_key,
+            "DaemonArtifactVersionId": self.config.daemon_artifact_version_id,
+            "DaemonArtifactSha256": self.config.daemon_artifact_sha256,
         }
         mismatches = {key: (parameters.get(key), value) for key, value in expected.items() if parameters.get(key) != value}
         if mismatches:
@@ -350,10 +350,10 @@ class Agent:
                 "TemplateS3VersionId": control["template_s3_version_id"],
                 "TemplateSha256": control["template_sha256"],
                 "TemplateBuildId": control["template_build_id"],
-                "AgentArtifactBucket": control["agent_artifact_bucket"],
-                "AgentArtifactKey": control["agent_artifact_key"],
-                "AgentArtifactVersionId": control["agent_artifact_version_id"],
-                "AgentArtifactSha256": control["agent_artifact_sha256"],
+                "DaemonArtifactBucket": control["daemon_artifact_bucket"],
+                "DaemonArtifactKey": control["daemon_artifact_key"],
+                "DaemonArtifactVersionId": control["daemon_artifact_version_id"],
+                "DaemonArtifactSha256": control["daemon_artifact_sha256"],
             }
         )
         return parameters
@@ -455,8 +455,8 @@ class Agent:
             "template_sha256": control["template_sha256"],
             "template_build_id": control["template_build_id"],
             "bootstrap_version": control["desired_bootstrap_version"],
-            "agent_artifact_version_id": control["agent_artifact_version_id"],
-            "agent_artifact_sha256": control["agent_artifact_sha256"],
+            "daemon_artifact_version_id": control["daemon_artifact_version_id"],
+            "daemon_artifact_sha256": control["daemon_artifact_sha256"],
             "status": "CANDIDATE",
             "workload_healthy": True,
             "observed_propagation_enabled": True,

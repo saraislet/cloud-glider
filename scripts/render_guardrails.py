@@ -39,7 +39,7 @@ def validate_config(config):
         if not name or len(name) > 64:
             raise ValueError("Invalid IAM role name")
         prefix = "cloud-glider-" + config["environment"] + "-"
-        if name in {prefix + "agent", prefix + "generation-cfn", prefix + "emergency-hold"} or name.startswith(prefix + "bootstrap-BootstrapRole-"):
+        if name in {prefix + "daemon", prefix + "generation-cfn", prefix + "emergency-hold"} or name.startswith(prefix + "bootstrap-BootstrapRole-"):
             raise ValueError("A runtime role cannot administer guardrails or act as recovery/deployment")
     if len(set(roles)) != len(roles):
         raise ValueError("Boundary administration, recovery, and foundation deployment must be distinct roles")

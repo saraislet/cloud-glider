@@ -19,32 +19,32 @@ def verify_runtime():
                     'sha256sum', 'tar', 'gzip', 'systemctl'):
         assert shutil.which(command), f'missing command: {command}'
     assert not shutil.which('aws'), 'AWS CLI unexpectedly present in baked image'
-    assert Path(sys.prefix) == Path('/opt/cloud-glider/venv'), 'use the agent venv'
+    assert Path(sys.prefix) == Path('/opt/cloud-glider/venv'), 'use the daemon venv'
     # Import the actual SDK, not just its distribution metadata.
     importlib.import_module("boto3")
     importlib.import_module("botocore")
 
 
 def verify_lifecycle_contract():
-    # Import the installed agent itself; old smoke-passing archives lack these fields.
+    # Import the installed daemon itself; old smoke-passing archives lack these fields.
     sys.path.insert(0, '/opt/cloud-glider')
     import dataclasses
-    from cloud_glider.agent import AgentConfig, GENERATION_PARAMETER_NAMES
-    fields = {field.name for field in dataclasses.fields(AgentConfig)}
-    assert {'request_id', 'generation_table_name'} <= fields, 'legacy agent configuration'
-    assert {'RequestId', 'GenerationTableName', 'AgentDeliveryMode'} <= GENERATION_PARAMETER_NAMES, 'legacy generation parameter contract'
+    from cloud_glider.daemon import DaemonConfig, GENERATION_PARAMETER_NAMES
+    fields = {field.name for field in dataclasses.fields(DaemonConfig)}
+    assert {'request_id', 'generation_table_name'} <= fields, 'legacy daemon configuration'
+    assert {'RequestId', 'GenerationTableName', 'DaemonDeliveryMode'} <= GENERATION_PARAMETER_NAMES, 'legacy generation parameter contract'
 
 
 def verify_ec2_contract():
     import dataclasses
     from botocore.session import Session
     from botocore.validate import validate_parameters
-    from cloud_glider.ec2_agent import Ec2AgentConfig
+    from cloud_glider.ec2_daemon import Ec2DaemonConfig
     from cloud_glider.ec2_sdk import Ec2SdkGateway
-    fields = {field.name for field in dataclasses.fields(Ec2AgentConfig)}
+    fields = {field.name for field in dataclasses.fields(Ec2DaemonConfig)}
     assert {'request_id', 'generation_table_name', 'predecessor_instance_id',
-            'launch_template_id', 'launch_template_version', 'agent_delivery_mode'} <= fields
-    assert Ec2AgentConfig.__dataclass_fields__['agent_delivery_mode'].default == 'baked'
+            'launch_template_id', 'launch_template_version', 'daemon_delivery_mode'} <= fields
+    assert Ec2DaemonConfig.__dataclass_fields__['daemon_delivery_mode'].default == 'baked'
     spec = {'launch_template_id': 'lt-' + 'a' * 17, 'launch_template_version': '1',
             'client_token': 'isolated-smoke-only', 'tags': {'project': 'cloud-glider'}}
     request = Ec2SdkGateway._run_request(spec)
@@ -83,7 +83,7 @@ def main():
     free = disk.f_bavail * disk.f_frsize
     assert free >= 384 * 1024**2, 'less than 384 MiB free after boot'
     print(json.dumps({'result': 'CLOUD_GLIDER_AMI_SMOKE_PASS', 'free_bytes': free,
-                      'agent_sha256': manifest['agent_sha256'], 'python': platform.python_version(), 'ec2_contract': ec2_result}))
+                      'daemon_sha256': manifest['daemon_sha256'], 'python': platform.python_version(), 'ec2_contract': ec2_result}))
 
 
 if __name__ == '__main__':

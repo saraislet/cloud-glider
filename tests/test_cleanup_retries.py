@@ -166,7 +166,7 @@ class CleanupRetryTests(unittest.TestCase):
         self.assertTrue(controller.is_cleanup_trigger(record))
 
     @unittest.skipIf(importlib.util.find_spec('boto3') is None,
-        'Install agent/requirements.txt to run SDK transport tests')
+        'Install daemon/requirements.txt to run SDK transport tests')
     def test_scheduler_request_passes_sdk_model_validation(self):
         import boto3
         from botocore.stub import Stubber

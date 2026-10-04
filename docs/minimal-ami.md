@@ -1,14 +1,14 @@
 # Minimal AMI integration and deployed-release reconciliation
 
-Generation and bootstrap templates support `AgentDeliveryMode=baked`,
+Generation and bootstrap templates support `DaemonDeliveryMode=baked`,
 `RootDeviceName=/dev/sda1` and `RootVolumeGiB=2`. Baked boot writes the current
 request/generation configuration, verifies the installed release, and starts
-its existing systemd service. It does not download or overwrite the agent,
+its existing systemd service. It does not download or overwrite the daemon,
 install packages, or replace the baked unit. A missing manifest or failed
 integrity verification prevents startup. S3 mode rejects a baked image.
 Both templates require baked mode for roots below 8 GiB.
 
-The agent carries the AMI, delivery mode, root device and size through successor
+The daemon carries the AMI, delivery mode, root device and size through successor
 creation. RequestId,
 GenerationTableName, lifecycle fencing, cross-table handoff and operator
 controls remain part of the current contract. No IAM or security-policy
@@ -17,12 +17,12 @@ expansion is included in this source reconciliation.
 ## Current-source release requirements
 
 The approved image must contain an archive built from this branch/current
-contract, including AgentDeliveryMode, RequestId, GenerationTableName and the
-SDK transport. Bake the pinned `agent/requirements.txt` into the service's
+contract, including DaemonDeliveryMode, RequestId, GenerationTableName and the
+SDK transport. Bake the pinned `daemon/requirements.txt` into the service's
 `/opt/cloud-glider/venv` interpreter. The image must install the verifier at
 `/usr/local/lib/cloud-glider/verify_image.py`, the unit supplied in
 `ami/files/cloud-glider.service`, and a manifest at
-`/etc/cloud-glider/image.json` containing `agent_sha256` and hashes of the
+`/etc/cloud-glider/image.json` containing `daemon_sha256` and hashes of the
 installed release files. Do not include credentials or generation state.
 
 The reconciled repository includes the Packer recipe and the boot-copy fixes.
@@ -51,7 +51,7 @@ SHA-256 `03d6d617574a4d82ec3cd5307eed69e42029562cc7fdff10c3df05ff11063203`.
 Its isolated cold boot passed both runtime and EC2
 contract checks with Python 3.12.3 and 632,483,840 free bytes.
 All 262 tests and template/repository checks passed. The reviewed image-only
-runtime permission substitutions preserve the exact agent profile restriction.
+runtime permission substitutions preserve the exact daemon profile restriction.
 Launch Template version 2 and immutable archive pins are recorded in the
 [release receipt](../config/releases/2026-10-03-ec2-overlap-minimal-ami.json).
 
@@ -145,7 +145,7 @@ and free root space was 632,659,968 bytes. All 211 source tests passed.
 Builder and smoke instances were terminated and the smoke stack deleted.
 
 The operator explicitly authorized deployment and the ten-generation benchmark.
-Immutable agent/generation/bootstrap versions were uploaded and downloaded for
+Immutable daemon/generation/bootstrap versions were uploaded and downloaded for
 hash verification. The existing templates were retained; release change sets
 substituted only the exact image and generation-template URL, with no resource
 replacement or permission expansion. Boundary, foundation and bootstrap stacks
@@ -178,7 +178,7 @@ verified image remains deployed but paused; no further deployment is needed.
 [Candidate receipt](../config/releases/2026-10-03-ec2-integrated-minimal-ami.json)
 records private image `ami-01072534d8819af9f` and encrypted 2 GiB root snapshot
 `snap-02226e5e1058469fb`. It was built from `e027317`, whose source tree exactly
-matches merged EC2 backend commit `24212a5` (PR #11). The agent archive SHA-256
+matches merged EC2 backend commit `24212a5` (PR #11). The daemon archive SHA-256
 is `8015a49ed4a6bd96c2b770d6a2cb9c14c52433c67fa5725caefa3bb2bd66ff94`.
 The existing build completed in 686s and was reused after confirming source
 equivalence; no additional build was necessary after the squash merge.
@@ -202,9 +202,9 @@ CURRENT uninitialized, and no HOLD or provisioning/propagation lock.
 The subsequent authorized deployment pinned this image to Launch Template
 `lt-09e12d4ca882601db`, version 1. The first live seed passed startup identity
 validation, claimed generation 0 and emitted healthy authoritative heartbeats.
-Its successor launch was denied because the agent policy and boundary used an
+Its successor launch was denied because the daemon policy and boundary used an
 instance-profile ARN without the existing `/cloud-glider/` path. That policy-only
-correction does not change the baked agent or require rebuilding the AMI.
+correction does not change the baked daemon or require rebuilding the AMI.
 The corrected retry completed ten generations and nine handoffs, including
 confirmed predecessor retirement and supported cleanup. All 257 tests and CI
 passed. Propagation is disabled with max_generation 2, no live test compute
