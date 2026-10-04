@@ -2,8 +2,80 @@
 
 Public summaries of generation timing. Keep dated entries in reverse
 chronological order, with newest run results and corrections first;
-keep raw operational evidence private. Use UTC timestamps and seconds, and
-write `not measured` for missing durations.
+keep raw operational evidence private. New release receipts are retained in
+ignored local storage under `.artifacts/release-receipts/`. Use UTC timestamps
+and seconds, and write `not measured` for missing durations.
+
+## 2026-10-04 UTC — Functional readiness: ten generations passed
+
+The functional release completed generations 0–9 and nine conditional handoffs
+using a verified private baked image built from merged PR #15 source `cd28e26`.
+All nine successor handoffs retained accepted functional readiness proof. No HOLD occurred; the sampled live peak was three,
+including shutting-down instances. Generation 9 confirmed predecessor retirement.
+
+| Measurement | Earlier overlap | Polling | Functional readiness |
+| --- | ---: | ---: | ---: |
+| Seed creation → initial ownership | 36.192s | 35.497s | 31.136s |
+| Mean ownership interval, nine intervals | 38.777s | 34.168s | 31.012s |
+| Seed creation → generation 9 ownership | 385.187s | 343.007s | 310.247s |
+| Sampled live-instance peak | 3 | 3 | 3 |
+
+The functional trial took 9.55% less total time than
+the polling trial and 19.46% less than the overlap trial.
+These are single trials with different immutable images and EC2 startup variance;
+they do not isolate causality. Functional proof includes identity, control,
+ownership and continuation checks. Its proof timestamp marks check start, not
+completion. First sampled publication has different semantics from a polling
+heartbeat; individual SDK/DryRun durations remain not measured.
+
+An earlier functional trial was interrupted by an observer file-write permission
+error. Its supported stop took effect at generation 8; all ten instances and disks were
+verified cleaned before the completed functional trial. An earlier conclusively
+rejected start during cleanup launched nothing. Both events, build, deployment
+and cleanup are excluded from seed-to-ownership timing.
+
+Supported cleanup terminated all ten functional-test instances, deleted their
+ten root disks and seed stack, and cleared cycle records. The next cycle is READY,
+CURRENT UNINITIALIZED, propagation disabled, no HOLD or locks.
+`max_generation` is restored to **10** and `max_live_generations` remains **3**.
+The functional release remains approved and deployed, with both tested private
+AMIs retained. Capacity observations include shared observer/controller activity
+and metric delivery lag; they are not agent-only usage or an actual bill.
+Exact pins, ownership timestamps, comparison, metering and evidence hashes are in
+the functional release receipt (retained locally).
+
+## 2026-10-03 UTC — EC2 polling: ten generations passed
+
+The polling release completed generations 0–9 and nine handoffs using a verified
+private baked image built from merged PR #14 source `b7c4f04`. One-second
+ownership/readiness polling and batched exact instance checks retain the original two-heartbeat gate. No HOLD occurred;
+the sampled live peak was three, including shutting-down instances. Generation 9
+confirmed predecessor retirement before the supported stop.
+
+| Measurement | Earlier overlap trial | Polling trial |
+| --- | ---: | ---: |
+| Seed creation → initial ownership | 36.192s | 35.497s |
+| Mean ownership interval, nine intervals | 38.777s | 34.168s |
+| Seed creation → generation 9 ownership | 385.187s | 343.007s |
+| Sampled live-instance peak | 3 | 3 |
+
+The polling trial took 42.180s (10.95%) less total time. Across nine intervals,
+ownership → successor launch averaged 2.240s, launch → first sampled healthy
+heartbeat 24.885s, and that heartbeat → ownership 7.043s. These are endpoint
+intervals, not isolated SDK/DryRun phases. Single trials with different immutable
+images and startup variance do not isolate causality. Sampler median cadence
+was 3.530s and maximum 3.715s. Build, deployment and cleanup are excluded from
+chain duration. Refreshed CloudTrail evidence contains ten successful live
+RunInstances, eight expected DryRunOperation responses and ten successful
+TerminateInstances including final cleanup; lookup evidence may lag delivery.
+
+Supported cleanup terminated all ten instances and deleted all ten root disks,
+the seed stack and cycle records. The next cycle was READY, CURRENT UNINITIALIZED,
+propagation disabled, no HOLD or locks, max_generation restored to 10 and the
+hard max_live_generations remains 3. Exact pins, timestamps and evidence hashes
+are in the polling release receipt (retained locally).
+
+The functional comparison is recorded in the newer entry above.
 
 ## 2026-10-03 UTC — EC2 retirement overlap: ten generations passed
 
@@ -15,7 +87,7 @@ while its owner's predecessor was shutting down, with CURRENT retained by the
 owner. At each observed ownership transfer, the older retirement target was
 terminated. Generation 9 confirmed predecessor retirement before stopping.
 Exact pins, generation timestamps, comparison and evidence hashes are in the
-[release receipt](../config/releases/2026-10-03-ec2-overlap-minimal-ami.json).
+release receipt (retained locally).
 
 | Measurement | CloudFormation baseline | Serialized EC2 | Overlap EC2 |
 | --- | ---: | ---: | ---: |
@@ -59,7 +131,7 @@ disks, generation alarms, seed stack and cycle records. Propagation is disabled,
 max_generation is restored to 2, and request 5 is ready with CURRENT uninitialized
 and no HOLD or locks. The private image, snapshot and approved Launch Template
 remain. Exact identities and per-generation timestamps are in the
-[release receipt](../config/releases/2026-10-03-ec2-integrated-minimal-ami.json).
+release receipt (retained locally).
 
 | Measurement | Previous CloudFormation baked-image run | Direct EC2 baked-image run |
 | --- | ---: | ---: |
@@ -144,7 +216,7 @@ unavailable internal phase durations must remain **not measured**.
 
 ## 2026-10-03 UTC — EC2-integrated candidate, isolated boot
 
-The [candidate receipt](../config/releases/2026-10-03-ec2-integrated-minimal-ami.json)
+The candidate receipt (retained locally)
 records an encrypted 2 GiB ARM64 image built from the merged EC2 backend source.
 Build duration: 686s. Metadata and isolated cold-boot contract checks passed;
 temporary resources were cleaned up. This is image compatibility evidence.
@@ -161,7 +233,7 @@ generations 0–9 with nine handoffs and no hold. Initial creation-to-ownership:
 39.481s; range 38.555–42.458s. Observed live-instance peak: three, sampled at
 about 3.3s including pending and shutting-down instances. All benchmark stacks
 were deleted; propagation is disabled and max_generation restored to 2.
-See the [release receipt](../config/releases/2026-10-03-preflight-removal-minimal-ami.json)
+See the release receipt (retained locally)
 for exact source/image identities and per-generation timings. These measurements
 exclude build/deployment/cleanup; the earlier failed benchmark is historical.
 
