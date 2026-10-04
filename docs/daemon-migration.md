@@ -52,6 +52,7 @@ retain their existing neutral names.
    persistent launch template. Review resource additions/removals/replacements:
    renamed logical IDs represent new resources, not adoption of existing ones.
    Preserve retained tables, audit resources, network and unrelated resources.
+   The generation table keeps its deployed NEW_AND_OLD_IMAGES stream.
    Keep old logs and boundary evidence; do not interpret retention as completion
    of the rename. Have security administrators review rendered organization
    policies and narrowly scoped operator/deployment grants for the new ARNs.
