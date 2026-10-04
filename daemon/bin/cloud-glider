@@ -11,8 +11,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from cloud_glider.daemon import Daemon, DaemonConfig  # noqa: E402
-from cloud_glider.aws_sdk import AwsSdkGateway  # noqa: E402
+from cloud_glider.timing import emit, span  # noqa: E402
+
+emit("boot_timing", phase="entrypoint_started")
+with span("runtime_imports"):
+    from cloud_glider.daemon import Daemon, DaemonConfig
+    from cloud_glider.aws_sdk import AwsSdkGateway
 
 
 def main() -> int:
@@ -23,15 +27,22 @@ def main() -> int:
         "propagation_backend", "cloudformation"
     )
     if backend == "ec2":
-        from cloud_glider.ec2_daemon import Ec2Daemon, Ec2DaemonConfig
-        from cloud_glider.ec2_sdk import Ec2SdkGateway
+        with span("ec2_runtime_imports"):
+            from cloud_glider.ec2_daemon import Ec2Daemon, Ec2DaemonConfig
+            from cloud_glider.ec2_sdk import Ec2SdkGateway
 
         config = Ec2DaemonConfig.load(args.config)
-        gateway = Ec2SdkGateway(config)
+        with span(
+            "sdk_initialization", generation=config.generation, request_id=config.request_id
+        ):
+            gateway = Ec2SdkGateway(config)
         daemon_type = Ec2Daemon
     elif backend == "cloudformation":
         config = DaemonConfig.load(args.config)
-        gateway = AwsSdkGateway(config)
+        with span(
+            "sdk_initialization", generation=config.generation, request_id=config.request_id
+        ):
+            gateway = AwsSdkGateway(config)
         daemon_type = Daemon
     else:
         raise ValueError("unknown propagation backend")

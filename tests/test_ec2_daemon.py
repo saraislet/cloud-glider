@@ -371,6 +371,17 @@ class DaemonTests(unittest.TestCase):
             self.assertEqual(records[-1]["duration_seconds"], 2.5)
             self.assertEqual(records[-1]["request_id"], a.config.request_id)
 
+    def test_phase_timing_sink_failure_preserves_result_and_original_error(self):
+        a, _, _ = self.setup_daemon()
+        def broken(raw):
+            raise OSError("journal unavailable")
+        a.logger = broken
+        with a.phase("fixture"):
+            pass
+        with self.assertRaisesRegex(TransientFailure, "original"):
+            with a.phase("fixture"):
+                raise TransientFailure("original")
+
     def test_disabled_or_hold_preserves_instances(self):
         for enabled, hold in ((False, False), (True, True), (False, True)):
             a, g, _ = self.setup_daemon()

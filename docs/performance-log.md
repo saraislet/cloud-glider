@@ -462,3 +462,7 @@ data, and raw logs; follow the [audit logging contract](audit-logging.md).
   the predecessor; include retries and failed hops in timing summaries.
 - Compare hop intervals and overlap across repeated comparable runs; report
   sample count and median/range before proposing timing targets.
+
+Boot and per-API collection boundaries and the pre-retirement capture procedure
+are described in [boot/API timing collection](boot-api-timing.md). Instrumented
+source alone does not establish a performance improvement.

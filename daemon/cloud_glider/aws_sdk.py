@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -13,6 +14,7 @@ import boto3
 from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 
+from .timing import emit
 from .daemon import DaemonConfig, SafetyViolation, TransientFailure
 
 IMDS = "http://169.254.169.254/latest"
@@ -121,10 +123,14 @@ class AwsSdkGateway:
         allow_failure: bool = False,
         **parameters: Any,
     ) -> dict[str, Any]:
+        started = time.monotonic()
+        outcome, error_code = "PASSED", None
         try:
             return getattr(self._clients[service], operation)(**parameters)
         except ClientError as exc:
+            outcome = "AWS_ERROR"
             error = exc.response.get("Error", {})
+            error_code = error.get("Code", "Unknown")
             result = {
                 "_code": error.get("Code", "Unknown"),
                 "_error": str(exc),
@@ -135,9 +141,28 @@ class AwsSdkGateway:
                 return result
             raise TransientFailure(f"AWS {service}.{operation} failed: {exc}") from exc
         except BotoCoreError as exc:
+            outcome, error_code = "TRANSPORT_ERROR", type(exc).__name__
             # Includes network timeouts and credential refresh failures. Never infer
             # absence, lost ownership, or successful mutation from a transport error.
             raise TransientFailure(f"AWS {service}.{operation} failed: {exc}") from exc
+
+        except Exception:
+            outcome, error_code = "FAILED", "UnexpectedError"
+            raise
+        finally:
+            emit(
+                "api_timing",
+                service=service,
+                operation=operation,
+                duration_seconds=round(time.monotonic() - started, 6),
+                outcome=outcome,
+                error_code=error_code,
+                dry_run=parameters.get("DryRun") is True,
+                environment=self.config.environment,
+                request_id=self.config.request_id,
+                generation=getattr(self.config, "generation", None),
+                instance_id=self.instance_id,
+            )
 
     def _pages(self, operation: str, **parameters: Any):
         while True:

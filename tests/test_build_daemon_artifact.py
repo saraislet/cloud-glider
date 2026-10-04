@@ -2,6 +2,8 @@ import hashlib
 import importlib.util
 import tarfile
 import tempfile
+import subprocess
+import sys
 import unittest
 from pathlib import Path
 
@@ -29,10 +31,25 @@ class BuildDaemonArtifactTests(unittest.TestCase):
                 self.assertIn("bin/cloud-glider", names)
                 self.assertIn("cloud_glider/daemon.py", names)
                 self.assertIn("cloud_glider/aws_sdk.py", names)
+                self.assertIn("cloud_glider/timing.py", names)
                 self.assertNotIn("cloud_glider/aws_cli.py", names)
                 self.assertEqual(archive.extractfile("requirements.txt").read(),
                                  (ROOT / "daemon/requirements.txt").read_bytes())
                 self.assertEqual(archive.getmember("bin/cloud-glider").mode, 0o755)
+
+    @unittest.skipUnless(importlib.util.find_spec("boto3"), "requires daemon SDK dependencies")
+    def test_packaged_entrypoint_imports_timing_module(self):
+        with tempfile.TemporaryDirectory() as directory:
+            artifact = Path(directory) / "daemon.tar.gz"
+            build_daemon_artifact.build(artifact)
+            with tarfile.open(artifact) as archive:
+                archive.extractall(Path(directory) / "release", filter="data")
+            result = subprocess.run(
+                [sys.executable, str(Path(directory) / "release/bin/cloud-glider"), "--help"],
+                capture_output=True, text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('"phase": "runtime_imports"', result.stdout)
 
 
 if __name__ == "__main__":

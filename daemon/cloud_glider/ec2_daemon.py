@@ -417,7 +417,8 @@ class Ec2Daemon:
         ):
             if refresh_readiness:
                 try:
-                    proof = self.prove_functional_readiness(control, current)
+                    with self.phase("candidate_functional_probe"):
+                        proof = self.prove_functional_readiness(control, current)
                     self._last_readiness_at = self.timing_clock()
                 except TransientFailure as exc:
                     # Replace a prior proof before retrying a failed probe.
@@ -873,13 +874,17 @@ class Ec2Daemon:
             outcome = "FAILED"
             raise
         finally:
-            self.log(
-                "phase_timing",
-                phase=name,
-                started_at=started_at,
-                duration_seconds=round(self.timing_clock() - started, 6),
-                outcome=outcome,
-            )
+            try:
+                self.log(
+                    "phase_timing",
+                    phase=name,
+                    started_at=started_at,
+                    duration_seconds=round(self.timing_clock() - started, 6),
+                    outcome=outcome,
+                )
+            except Exception:
+                # Timing output must not mask a lifecycle result or error.
+                pass
 
     def cycle(self) -> str:
         self._poll_seconds = 1
