@@ -77,6 +77,91 @@ are in the polling release receipt (retained locally).
 
 The functional comparison is recorded in the newer entry above.
 
+## 2026-10-03 local / 2026-10-04 UTC — Observer-recorded EC2 propagation
+
+The operator-requested observer test completed generation 0 through 10, with
+ten consecutive ownership handoffs. Configuration: us-west-2, t4g.micro,
+EC2 backend, pinned numeric launch-template version 4, generation limit 10,
+three-instance ceiling, one-second readiness polling and five-second heartbeat
+telemetry. CONTROL identifies build `cd28e2662f4451ac77633aab5ea64e9b8967d417`
+and the functional-readiness release. This observer change did not modify the
+agent or launch pins.
+
+Source boundaries are the earliest retained CURRENT `updated_at` for each
+generation, read from raw DynamoDB stream NewImage records in the private local
+SQLite archive. All eleven boundaries are present; browser arrival and EC2
+reconciliation times are excluded. Source clocks can have cross-host skew.
+
+| Hop | Successor ownership (UTC) | Interval (s) |
+| --- | --- | ---: |
+| 0 → 1 | 06:04:29.869 | 34.853 |
+| 1 → 2 | 06:05:02.469 | 32.600 |
+| 2 → 3 | 06:05:29.787 | 27.318 |
+| 3 → 4 | 06:06:06.385 | 36.598 |
+| 4 → 5 | 06:06:37.795 | 31.410 |
+| 5 → 6 | 06:07:06.921 | 29.126 |
+| 6 → 7 | 06:07:37.377 | 30.456 |
+| 7 → 8 | 06:08:07.230 | 29.853 |
+| 8 → 9 | 06:08:36.874 | 29.644 |
+| 9 → 10 | 06:09:06.319 | 29.445 |
+
+Initial ownership **06:03:55.016 UTC** → generation 10
+ownership **06:09:06.319 UTC**: **311.303 s**.
+Mean hop **31.130 s**; median **30.154 s**;
+range **27.318–36.598 s** (n=10). Observed propagation rate:
+**1.927 ownership handoffs/minute** (0.03212/second).
+The configured inclusive limit produces eleven generations and ten hops.
+
+This excludes bootstrap request → initial ownership and final cleanup. Individual
+API, readiness, continuation and termination durations, retry count and live
+overlap peak were not measured for this entry. Final CURRENT and cycle identity
+were independently checked through a consistent DynamoDB read. This is one trial;
+it does not isolate a speedup or establish cost savings. No cleanup was requested
+as part of this measurement; the terminal instance remains until operator cleanup.
+
+Private evidence SHA-256: `56ffd711fd86a4b0bff1310931d42cf88628cb308527fe4a969bce5ce52d45b5`. Raw operational data stays under ignored
+`.observer/`; identifiers and raw records are omitted from this public summary.
+
+### Why 385.187 seconds and 311.303 seconds differ
+
+Those totals use different boundaries and hop counts. The older overlap result
+includes **36.192 s of seed creation → initial ownership**, then **nine hops**
+through generation 9. The newer result excludes bootstrap and includes **ten
+hops** through generation 10. Subtracting the headline totals does not measure
+an equivalent-work speedup.
+
+| Comparable measurement | Earlier overlap release | Current functional-readiness run |
+| --- | ---: | ---: |
+| Generation 0 ownership → generation 9 ownership (nine hops) | 348.995 s | 281.858 s |
+| Mean across those same nine hops | 38.777 s | 31.318 s |
+| Bootstrap included in headline total | 36.192 s | Excluded |
+| Extra generation 9 → 10 hop in headline total | None | 29.445 s |
+
+On matching generation 0 → 9 boundaries, the newer trial was **67.137 s
+(19.24%) shorter**. The headline difference of 73.884 s decomposes into
+36.192 s of excluded bootstrap + 67.137 s of shorter matching hops − 29.445 s
+for the newer run's additional hop.
+
+Both releases already use direct EC2 provisioning and retirement overlap.
+The intervening agent changes are [one-second ownership/retry polling with
+independently spaced heartbeats](ec2-polling-evaluation.md), one-second readiness
+polling in current CONTROL, and [successor-produced functional readiness
+(decision 0021)](decisions/0021-successor-functional-readiness.md). The older
+release required two eligible heartbeats at least five seconds apart; the new
+release accepts a fresh successor capability proof after identity, control,
+continuation and handoff checks, removing that fixed observation wait. The
+older trial's first-heartbeat → ownership interval averaged 7.852 s, making the
+removed wait and faster polling plausible contributors to the shorter hops.
+Heartbeat telemetry itself remains five seconds; no additional overlap change
+was introduced for this observer run.
+
+These are documented mechanism changes and an observed end-to-end difference,
+not a measured causal allocation. New phase timings, startup/termination
+variability and isolated polling savings were not captured; source/AMI versions
+also differ. The observer's DynamoDB Streams integration improves measurement
+fidelity and does not change agent readiness or speed up propagation. One trial
+per release cannot determine exactly how much each change contributed.
+
 ## 2026-10-03 UTC — EC2 retirement overlap: ten generations passed
 
 The operator-authorized overlap release completed generations 0–9 and nine

@@ -27,14 +27,15 @@ class RepositoryContractTests(unittest.TestCase):
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)
 
-    def test_separate_generation_table_has_no_operator_stream(self):
+    def test_separate_generation_table_has_observer_stream(self):
         foundation = (ROOT / "cfn/foundation.yaml").read_text()
         import re
         generation = re.split(r"\n  [A-Za-z][A-Za-z0-9]+:\n", foundation.split("  GenerationTable:\n", 1)[1], maxsplit=1)[0]
         self.assertIn("TableName: !Sub 'cloud-glider-${Environment}-generations'", generation)
         self.assertIn("BillingMode: PAY_PER_REQUEST", generation)
         self.assertIn("DeletionProtectionEnabled: true", generation)
-        self.assertNotIn("StreamSpecification", generation)
+        self.assertIn("StreamSpecification", generation)
+        self.assertIn("StreamViewType: NEW_AND_OLD_IMAGES", generation)
 
     def test_validator_rejects_merge_conflict_markers(self):
         with tempfile.TemporaryDirectory() as directory:
