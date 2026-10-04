@@ -12,8 +12,8 @@
   "architecture": "arm64",
   "root_encrypted": true,
   "metadata_checks_passed": true,
-  "release_approved": false,
-  "deployment_status": "PAUSED_SEED_BOUNDARY_CORRECTION_REQUIRED",
+  "release_approved": true,
+  "deployment_status": "DEPLOYED_BOUNDED_TEST_PASSED_CLEANED",
   "artifacts": {
     "daemon": {
       "bucket": "cloud-glider-sandbox-482268323955-us-west-2-artifacts",
@@ -77,7 +77,7 @@
     "cfn_lint": "PASS",
     "repository_checks": "PASS",
     "rendered_bootstrap": "PASS",
-    "live_propagation": "NOT_PASSED"
+    "live_propagation": "PASS_GENERATIONS_0_THROUGH_2"
   },
   "aws_naming": {
     "daemon_role": "cloud-glider-sandbox-daemon",
@@ -104,32 +104,56 @@
     "generation_launches": 0,
     "recovery": "Audited conditional recovery after delivery was disabled, CloudTrail proved AccessDenied, no generation stack existed and AWS generation inventory was empty. Only the matching provisioning marker was removed; cycle and command counters were preserved."
   },
-  "paused_state": {
-    "propagation_enabled": false,
-    "bootstrap_requested": false,
-    "bootstrap_trigger_enabled": false,
-    "max_generation": 2,
-    "current_status": "UNINITIALIZED",
-    "request_status": "READY",
-    "lifecycle_locks": 0,
-    "live_generation_instances": 0
-  },
   "cleanup": {
     "successful_builder_terminated": true,
     "smoke_instance_terminated": true,
     "build_and_smoke_volumes_remaining": 0,
-    "temporary_keypair_deleted": true
+    "temporary_keypair_deleted": true,
+    "legacy_runtime_deployment_grants_removed": true,
+    "three_final_inline_policies_verified": true,
+    "test_generations_deleted": true
   },
-  "remaining_work": [
-    "Apply reviewed boundary source with ApprovedGenerationTemplateUrl equal to the immutable daemon seed URL in foundation, bootstrap and CONTROL.",
-    "Resume delivery declaratively and pass the approved bounded propagation/retirement trial.",
-    "Run supported lifecycle cleanup and verify empty inventory.",
-    "Remove temporary legacy runtime-name deployment policy grants and finalize this receipt."
-  ],
+  "remaining_work": [],
   "limitations": [
-    "Administrator browser session is at AWS sign-in; available CLI identity cannot administer boundary policies. IAM approval was already explicitly given.",
     "Timing records remain local; no live timing result or speedup is claimed.",
     "The first combined bake lost its provisioning connection and was cleanly canceled; the diagnostic retry succeeded.",
     "Historical agent logs, boundary policy, receipts and recovery/import snapshots remain for evidence; SSM Agent and AGENTS.md names are unchanged."
-  ]
+  ],
+  "second_trial": {
+    "result": "SEED_INSTANCE_DENIED_BEFORE_LAUNCH",
+    "cause": "Boundary AllowedImageId retained the previous image pin. Corrected to ami-03ec56175b8fec828 without broadening permissions.",
+    "recovery": "Supported lifecycle cleanup completed; request advanced from 12 to 13."
+  },
+  "bounded_trial": {
+    "request_id": "13",
+    "result": "PASS",
+    "final_current_generation": "000002",
+    "final_instance_id": "i-041a8285d5e05420e",
+    "predecessor_instances": [
+      "i-0c63c54206cf961e9",
+      "i-0f8b134529c1ccb40"
+    ],
+    "predecessors_terminated": true,
+    "successor_functional_continuation": "DRY_RUN_PASSED",
+    "final_ownership_verified": true,
+    "peak_live_generations": "Not continuously sampled; no peak claim."
+  },
+  "final_state": {
+    "propagation_enabled": false,
+    "bootstrap_requested": false,
+    "bootstrap_trigger_enabled": true,
+    "max_generation": 2,
+    "current_status": "UNINITIALIZED",
+    "request_status": "READY",
+    "request_id": "14",
+    "cleanup_status": "COMPLETE",
+    "operation_status": "COMPLETE",
+    "active_command": "NONE",
+    "lifecycle_locks": 0,
+    "live_generation_instances": 0,
+    "generation_records": 0,
+    "seed_stack_exists": false,
+    "cleanup_retry_schedules": 0
+  },
+  "completion_note": "All deployed stack, boundary, image, network, profile, artifact and control pins agree. Supported stop refreshed stale completion feedback after authoritative cleanup had completed. Timing remains unmeasured."
 }

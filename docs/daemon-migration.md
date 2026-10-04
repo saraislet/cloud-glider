@@ -66,6 +66,10 @@ retain their existing neutral names.
    URL in the boundaries, foundation and bootstrap stacks. A renamed boundary
    deployed with its previous parameter still rejects the new seed; successful
    resource creation alone does not establish that these pins agree.
+   Rotate `AllowedImageId` to the verified daemon AMI in those same three
+   stacks. Also verify the boundary's backend, launch-template ID, subnet and
+   security-group pins against the approved release; retaining a previous AMI
+   parameter prevents both seed and direct successor launches.
 3. With all provisioning paths still paused, deploy the renamed boundary before
    the foundation role/profile. Deploy the matched bootstrap controller and
    templates with `Daemon*` parameters and `BootstrapTriggerEnabled=false`. Review actual change sets for ordering
@@ -89,6 +93,8 @@ retain their existing neutral names.
    controller configuration, image metadata and state/template pin agreement.
    Compare the three stacks' `ApprovedGenerationTemplateUrl` parameters with
    the seed URL reconstructed from CONTROL before enabling delivery or starting.
+   Compare their `AllowedImageId` values with the image in the exact numeric
+   launch-template version pinned in CONTROL.
    Set `BootstrapTriggerEnabled=true` through a reviewed bootstrap change set
    only after the complete release agrees. Keep propagation
    disabled until the operator is ready for the bounded trial.
