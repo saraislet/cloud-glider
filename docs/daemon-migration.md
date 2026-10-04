@@ -57,6 +57,15 @@ retain their existing neutral names.
    of the rename. Have security administrators review rendered organization
    policies and narrowly scoped operator/deployment grants for the new ARNs.
    Update allowlists without adding broader actions, wildcards or runtime IAM rights.
+   Include the image-build operator's snapshot/image tag conditions: new candidates
+   use `purpose=daemon-image` and `daemon-sha256`. Keep legacy `agent-image`
+   selectors only where needed to inspect or clean up historical candidates.
+   Temporary deployment grants for both runtime names must fit IAM policy size
+   limits and be reduced to the new runtime name after the migration is verified.
+   Set `ApprovedGenerationTemplateUrl` to the same exact versioned daemon seed
+   URL in the boundaries, foundation and bootstrap stacks. A renamed boundary
+   deployed with its previous parameter still rejects the new seed; successful
+   resource creation alone does not establish that these pins agree.
 3. With all provisioning paths still paused, deploy the renamed boundary before
    the foundation role/profile. Deploy the matched bootstrap controller and
    templates with `Daemon*` parameters and `BootstrapTriggerEnabled=false`. Review actual change sets for ordering
@@ -78,6 +87,8 @@ retain their existing neutral names.
    missing records; it is not a migration tool and must not overwrite existing state.
 6. Inspect the actual installed policies, profile role membership, log group,
    controller configuration, image metadata and state/template pin agreement.
+   Compare the three stacks' `ApprovedGenerationTemplateUrl` parameters with
+   the seed URL reconstructed from CONTROL before enabling delivery or starting.
    Set `BootstrapTriggerEnabled=true` through a reviewed bootstrap change set
    only after the complete release agrees. Keep propagation
    disabled until the operator is ready for the bounded trial.
