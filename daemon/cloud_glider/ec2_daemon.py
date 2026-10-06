@@ -183,6 +183,9 @@ class Ec2Daemon:
         return int(self.config.generation)
 
     def log(self, event: str, **details: Any) -> None:
+        if event == "phase_timing":
+            from .timing import export_record
+            export_record({"event": event, "timestamp": utc_now(), **details})
         self.logger(
             json.dumps(
                 {

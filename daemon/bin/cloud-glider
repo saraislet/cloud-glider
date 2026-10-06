@@ -6,13 +6,16 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from cloud_glider.timing import emit, span  # noqa: E402
+from cloud_glider.timing import emit, span, configure_export, close_export  # noqa: E402
 
+PROCESS_STARTED = time.monotonic()
+CPU_STARTED = time.process_time()
 emit("boot_timing", phase="entrypoint_started")
 with span("runtime_imports"):
     from cloud_glider.daemon import Daemon, DaemonConfig
@@ -22,6 +25,8 @@ with span("runtime_imports"):
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", required=True)
+    parser.add_argument("--timing-smoke", action="store_true",
+                        help="read-only collector smoke: initialize SDK, inspect self, export timings")
     args = parser.parse_args()
     backend = json.loads(Path(args.config).read_text()).get(
         "propagation_backend", "cloudformation"
@@ -47,9 +52,28 @@ def main() -> int:
     else:
         raise ValueError("unknown propagation backend")
     try:
+        try:
+            with span("collector_initialization"):
+                configure_export(config, gateway.instance_id, gateway.region)
+        except Exception:
+            # Diagnostic configuration never changes daemon/lifecycle outcome.
+            pass
+        if args.timing_smoke:
+            # Operator-only isolated smoke. No lifecycle reads/writes or provisioning.
+            with span("collector_smoke_read"):
+                gateway._call("ec2", "describe_instances", InstanceIds=[gateway.instance_id])
+            emit("phase_timing", phase="collector_smoke", outcome="PASSED", duration_seconds=0)
+            return 0
         return daemon_type(config, gateway).run()
     finally:
         gateway.close()
+        started = time.monotonic()
+        drained = close_export()
+        print(json.dumps({"event": "collector_shutdown",
+            "drain_seconds": round(time.monotonic() - started, 6),
+            "process_cpu_seconds": round(time.process_time() - CPU_STARTED, 6),
+            "entry_to_exit_seconds": round(time.monotonic() - PROCESS_STARTED, 6),
+            "drained": drained}, sort_keys=True))
 
 
 if __name__ == "__main__":

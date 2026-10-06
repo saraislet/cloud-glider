@@ -1,9 +1,9 @@
 # Boot and API timing collection
 
 The daemon emits schema-1 JSON diagnostic records locally. Timing is never a
-readiness signal or input to controls, admission, ownership or retirement. No
-additional AWS calls, remote log destinations, IAM permissions or resource
-changes are needed. A rebuilt, verified baked image and reviewed immutable pins
+readiness signal or input to controls, admission, ownership or retirement. Raw timing instrumentation makes no extra AWS calls. The optional durable
+exporter below adds bounded CloudWatch writes using the existing log group and
+permissions. A rebuilt, verified baked image and reviewed immutable pins
 are required to activate this source change. Deploying or running a benchmark
 requires separate operator authorization.
 
@@ -39,24 +39,13 @@ instances. Repeated entry points can indicate a service restart.
 
 ## Capture before retirement
 
-These records remain in local journals and disappear with instance deletion.
-CloudTrail does not contain these internal durations. The next supervised run
-must have an authorized observer capture every generation's journal while it
-is alive, including candidate records before handoff. Do not add a pause or
-weaken retirement gates to collect logs. If the observer cannot capture them,
-report the corresponding phases as **not measured**.
+Local journals disappear with instance deletion. The durable collector below
+exports the timing records to the existing operations log group. CloudTrail does
+not contain internal durations. Require complete receipts for every independently
+identified instance after termination; missing receipts mean failed collection.
+Do not add a pause or weaken retirement gates to collect logs.
 
-On each instance, using an already approved access path:
-
-```sh
-journalctl -u cloud-glider.service -b -o cat --no-pager
-journalctl -u cloud-final.service -b -o cat --no-pager
-systemd-analyze time
-systemd-analyze critical-chain cloud-glider.service
-```
-
-The service journal contains ExecStartPre and daemon records; cloud-final
-contains the user-data verifier. Kernel/systemd and cloud-init logs are needed
+Kernel/systemd and cloud-init logs are needed
 to separate pre-daemon boot delays: uptime alone cannot attribute time to network
 readiness, cloud-init or disk reads. Do not sum overlapping systemd unit times.
 Retain raw logs privately under the audit logging contract. Timing IDs are for
@@ -69,3 +58,54 @@ latency by service/operation, expected DryRuns, errors and retries, plus sample
 count and median/range. Use retained launch/handoff evidence for whole-hop time;
 account for cross-host clock skew and observer sampling delay. Instrumentation
 adds local log I/O; quantify its overhead during the next bounded benchmark.
+
+## Durable collection
+
+The revised baked runtime enables bounded background collection into the existing
+`daemon_operations_log_group`. The daemon enqueues only allowlisted timing fields;
+no request parameters, response bodies, exception messages or secrets are sent.
+A dedicated persistent CloudWatch Logs client runs off the measured API path,
+with one SDK attempt and 0.5-second connection/read timeouts. It is not instrumented.
+Batches contain at most 32 records and are assembled for up to 0.2 seconds. Queued
+messages are bounded to 2 MiB/2048 records; an in-flight batch adds at most 512 KiB,
+and pre-client import records are bounded to 128 records. Queue overflow and
+upload failures are diagnostic losses, never lifecycle failures or retries.
+
+User-data and ExecStartPre verifier records use a bounded 64 KiB spool per boot.
+The runtime imports user-data verification and only the current systemd invocation's
+pre-start verification. A system-interpreter failed-start helper is externally
+bounded to three seconds; it attempts export if verification or the runtime entry
+interpreter fails before normal collection starts. Missing SDK/library files or
+credentials can still prevent diagnostics: absence of a receipt must be treated
+as failed collection, never as an empty successful capture. The helper runs only
+on startup failure; it cannot clear failed verification or run the lifecycle.
+
+Every collector producer uses stable boot/cycle/generation/instance/source
+correlation, unique sequence IDs, and a terminal count/SHA-256 receipt. Read-only
+validation deduplicates identical records and rejects missing sequences, conflicting
+duplicates, corrupt messages, mismatched identity, loss counters or absent markers.
+Successful boot validation also requires both verifier contexts and all early
+entry/import/SDK phases. Validate records retrieved after instance termination.
+
+A drain is limited to 1.5 seconds after `run()` returns. It is not a handoff gate,
+and can race an already authorized successor retirement. No receipt means incomplete
+collection; do not run a diagnostic benchmark until isolated boot/termination
+smoke proves durable delivery. The read-only executable `--timing-smoke` path
+initializes actual imports/SDK/identity and describes only its own instance; it
+cannot read/write lifecycle state, launch successors or invoke emergency hold.
+
+Collection has CPU, allocation, network and potential post-run exit overhead.
+Measure enabled/disabled initialization, enqueue latency, CPU, and exit/retirement
+impact separately. Never claim zero overhead or infer boot speedup from a single
+instrumented run. Failed delivery cannot delay lifecycle operations; a bounded
+shutdown wait remains visible in measurements.
+
+The failed-start helper imports an independently installed stdlib exporter, not
+the failed daemon package or gateway. It still depends on the AMI-installed SDK
+libraries for transport; SDK corruption can prevent delivery. Runtime-start
+markers are scoped to the current systemd invocation, so an earlier crashed
+producer cannot suppress later startup-failure diagnostics. The collector
+initialization and client-initialization durations are included explicitly.
+The local `collector_shutdown` record supplies drain and process CPU timings
+for isolated paired smoke measurements; it is emitted after sealing and is not
+a durable timing receipt.

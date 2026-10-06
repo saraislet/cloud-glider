@@ -47,6 +47,8 @@ python3 -m venv /opt/cloud-glider/venv
 /opt/cloud-glider/venv/bin/python -c "import boto3, botocore"
 install -m 0644 cloud-glider.service /etc/systemd/system/cloud-glider.service
 install -m 0755 verify_image.py /usr/local/lib/cloud-glider/verify_image.py
+install -m 0644 /opt/cloud-glider/cloud_glider/timing_export.py /usr/local/lib/cloud-glider/timing_export.py
+install -m 0755 export_failed_boot.py /usr/local/lib/cloud-glider/export_failed_boot.py
 install -m 0755 smoke_test.py /usr/local/lib/cloud-glider/smoke_test.py
 systemctl daemon-reload
 systemctl disable cloud-glider.service
@@ -54,7 +56,8 @@ python3 - <<'PY'
 import hashlib,json,os,subprocess,tarfile
 from pathlib import Path
 paths=['opt/cloud-glider/daemon.tar.gz','etc/systemd/system/cloud-glider.service',
-       'usr/local/lib/cloud-glider/verify_image.py','usr/local/lib/cloud-glider/smoke_test.py']
+       'usr/local/lib/cloud-glider/verify_image.py','usr/local/lib/cloud-glider/smoke_test.py',
+       'usr/local/lib/cloud-glider/export_failed_boot.py','usr/local/lib/cloud-glider/timing_export.py']
 with tarfile.open('/opt/cloud-glider/daemon.tar.gz') as archive:
     paths += ['opt/cloud-glider/'+member.name for member in archive.getmembers()]
 manifest={'schema_version':1,'daemon_sha256':os.environ['DAEMON_SHA256'].lower(),
@@ -66,7 +69,7 @@ Path('/etc/cloud-glider/python-packages.txt').write_bytes(subprocess.check_outpu
 PY
 /usr/local/lib/cloud-glider/verify_image.py --expected-sha256 "$DAEMON_SHA256"
 /opt/cloud-glider/venv/bin/python /opt/cloud-glider/bin/cloud-glider --help
-for command in python3 bash uname install cat chmod sha256sum tar gzip systemctl; do command -v "$command"; done
+for command in timeout python3 bash uname install cat chmod sha256sum tar gzip systemctl; do command -v "$command"; done
 systemd-analyze verify /etc/systemd/system/cloud-glider.service
 # Keep the EC2 kernel; generic kernels and build-only packages consume scarce space.
 mapfile -t generic < <(dpkg-query -W -f='${binary:Package}\n' | grep -E '^linux-(image|modules)(-extra)?-[0-9].*-generic$|^linux-image-virtual$' || true)

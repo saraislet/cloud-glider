@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import time
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -28,6 +29,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', type=Path)
     parser.add_argument('--expected-sha256')
+    parser.add_argument('--context', choices=['standalone','user_data','service_pre'], default='standalone')
     args = parser.parse_args()
     expected = args.expected_sha256
     if args.config:
@@ -41,20 +43,30 @@ def main():
         outcome = 'PASSED'
         print(json.dumps(manifest, sort_keys=True))
     finally:
-        # Runs in user data and ExecStartPre, before the agent package is imported.
+        # Runs in user data and ExecStartPre, before the daemon package is imported.
         try:
             uptime = float(Path('/proc/uptime').read_text().split()[0])
         except (OSError, ValueError, IndexError):
             uptime = None
         try:
-            print(json.dumps({
+            record = {
                 'schema_version': 1, 'event': 'boot_timing',
                 'phase': 'baked_image_verification',
+                'boot_context': args.context,
+                'startup_invocation': os.environ.get('INVOCATION_ID'),
                 'timestamp': datetime.now(timezone.utc).isoformat(),
                 'boot_elapsed_seconds': uptime,
                 'duration_seconds': round(time.monotonic() - started, 6),
                 'outcome': outcome,
-            }, sort_keys=True))
+            }
+            print(json.dumps(record, sort_keys=True))
+            if args.config:
+                boot_id = Path('/proc/sys/kernel/random/boot_id').read_text().strip()
+                spool = Path('/var/lib/cloud-glider/boot-timing') / (boot_id + '.jsonl')
+                spool.parent.mkdir(mode=0o750, parents=True, exist_ok=True)
+                if not spool.exists() or spool.stat().st_size < 65536:
+                    with spool.open('a') as output:
+                        output.write(json.dumps(record, sort_keys=True) + '\n')
         except Exception:
             pass
 
