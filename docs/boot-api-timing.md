@@ -89,8 +89,9 @@ entry/import/SDK phases. Validate records retrieved after instance termination.
 
 A drain is limited to 1.5 seconds after `run()` returns. It is not a handoff gate,
 and can race an already authorized successor retirement. No receipt means incomplete
-collection; do not run a diagnostic benchmark until isolated boot/termination
-smoke proves durable delivery. The read-only executable `--timing-smoke` path
+collection. For the operator-approved best-effort diagnostic run, prove that
+actual timings reach CloudWatch before starting, then measure post-termination
+coverage and loss rather than requiring complete receipts for every generation. The read-only executable `--timing-smoke` path
 initializes actual imports/SDK/identity and describes only its own instance; it
 cannot read/write lifecycle state, launch successors or invoke emergency hold.
 
@@ -109,3 +110,21 @@ initialization and client-initialization durations are included explicitly.
 The local `collector_shutdown` record supplies drain and process CPU timings
 for isolated paired smoke measurements; it is emitted after sealing and is not
 a durable timing receipt.
+
+## Initial overhead measurement
+
+Three alternating enabled/disabled synthetic runs on the operator workstation
+(Python 3.14, 2000 records each, immediate fake transport) measured median enqueue
+latency of 4.96–5.38 microseconds and p99 of 8.42–10.17 microseconds with collection
+enabled. Process CPU was 10.65–12.36 milliseconds per 2000 records, including the
+background fake-sink worker. These are local bounds for the tested workload, not
+measurements of AMI startup, AWS networking, or retirement. Real paired smoke
+results and live sample coverage must accompany any deployment/run conclusions.
+
+The operator accepts partial diagnostic collection for the initial live rerun.
+Report each phase's observed sample count and instance coverage beside its mean
+and median. Never replace a missing duration with zero or present partial captures
+as complete. Lost final receipts can obscure exact losses and bias averages toward
+instances that survived long enough to upload; retain available sequence gaps,
+completion counters and upload errors as evidence. Lifecycle safety requirements
+are unchanged by acceptance of diagnostic loss.
