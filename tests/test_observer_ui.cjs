@@ -1,7 +1,7 @@
 /* Deterministic runtime checks of the recovered UI, without AWS or browser credentials. */
 const fs=require('fs'),vm=require('vm'),assert=require('assert');
 const elements=new Map(),timers=[];
-function element(id){if(!elements.has(id))elements.set(id,{id,value:'1',textContent:'',innerHTML:'',dataset:{},style:{},classList:{toggle(){},add(){}},addEventListener(){},append(){},replaceChildren(){},setAttribute(){},click(){return this.onclick?.();}});return elements.get(id);}
+function element(id){if(!elements.has(id))elements.set(id,{id,children:[],value:'1',textContent:'',innerHTML:'',dataset:{},style:{},classList:{toggle(){},add(){}},addEventListener(){},append(child){child.remove();child.parent=this;this.children.push(child);},insertBefore(child,before){child.remove();child.parent=this;const index=this.children.indexOf(before);this.children.splice(index<0?this.children.length:index,0,child);},remove(){if(this.parent){this.parent.children.splice(this.parent.children.indexOf(this),1);this.parent=null;}},replaceChildren(){for(const child of [...this.children])child.remove();},setAttribute(){},click(){return this.onclick?.();}});return elements.get(id);}
 const context={console,Map,Set,Date,Number,String,Math,Array,JSON,Error,URL,Blob,performance:{now:()=>0},location:{href:'http://127.0.0.1:8000/',origin:'http://127.0.0.1:8000'},
  document:{getElementById:element,createElement:()=>element('made'+Math.random()),createDocumentFragment:()=>({append(){}}),querySelectorAll:()=>[],documentElement:{style:{setProperty(){}}}},
  EventSource:class {close(){this.closed=true;}},setInterval:(fn,ms)=>timers.push({fn,ms}),
@@ -44,5 +44,17 @@ const run=s=>vm.runInContext(s,context);
  assert.equal(run("items.get('11:a').terminated_at"),'2026-10-03T00:00:10Z','preserve termination snapshot clock');
  assert.equal(run('runDuration([...items.values()]).completed'),true);
  assert.equal(run("runKey(items.get('11:a'))"),'11','run identity grouping');
+ run("apply({instance_id:'12:a',request_id:'12',generation:0,state:'READY',timestamp:'2026-10-03T00:00:20Z'});render()");
+ const picker=element('runSelect'),originalOptions=[...picker.children];
+ for(let n=0;n<20;n++)run('render()');
+ assert.deepEqual(picker.children,originalOptions,'refresh preserves native menu options');
+ picker.value='11';picker.onchange();
+ assert.equal(run('selectedRun'),'11','older run selected');
+ for(let n=0;n<20;n++)run('render()');
+ assert.equal(picker.value,'11','refresh preserves selected run');
+ assert(element('runSummary').textContent.includes('0 active'),'selected run metrics');
+ picker.value='12';picker.onchange();
+ assert.equal(run('selectedRun'),'12','switch back to latest run');
+ assert(element('runSummary').textContent.includes('1 active'),'latest run metrics');
  console.log('PASS: simulation, bounded fan-out, pinned lineage, ancestor timing, replay rewind, deduplication, JSONL import, disconnect state, SSE snapshot replacement');
 })().catch(e=>{console.error(e);process.exitCode=1;});
