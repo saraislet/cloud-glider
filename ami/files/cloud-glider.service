@@ -6,11 +6,13 @@ ConditionPathExists=/etc/cloud-glider/bootstrap.json
 
 [Service]
 Type=simple
-ExecStartPre=/usr/bin/python3 /usr/local/lib/cloud-glider/verify_image.py --config /etc/cloud-glider/bootstrap.json
+ExecStartPre=/usr/bin/python3 /usr/local/lib/cloud-glider/verify_image.py --config /etc/cloud-glider/bootstrap.json --context service_pre
 ExecStart=/opt/cloud-glider/venv/bin/python /opt/cloud-glider/bin/cloud-glider --config /etc/cloud-glider/bootstrap.json
+ExecStopPost=-/usr/bin/timeout 3 /usr/bin/python3 /usr/local/lib/cloud-glider/export_failed_boot.py --config /etc/cloud-glider/bootstrap.json
 Restart=on-failure
 RestartSec=15
 Environment=PYTHONUNBUFFERED=1
+Environment=CLOUD_GLIDER_TIMING_EXPORT=1
 User=root
 NoNewPrivileges=true
 PrivateTmp=true

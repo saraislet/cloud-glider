@@ -20,6 +20,7 @@ SOURCE_FILES = (
     Path("cloud_glider/daemon.py"),
     Path("cloud_glider/aws_sdk.py"),
     Path("cloud_glider/timing.py"),
+    Path("cloud_glider/timing_export.py"),
     Path("cloud_glider/ec2_daemon.py"),
     Path("cloud_glider/ec2_sdk.py"),
     Path("requirements.txt"),
