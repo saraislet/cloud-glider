@@ -13,7 +13,7 @@ from cloud_glider.inherited import child_paths, digest, specification, user_data
 
 
 def family_config(binary=True, **kwargs):
-    settings = {**control(), "schema_version": "3", "binary_fanout_enabled": binary,
+    settings = {**control(), "audit_table_name": config().audit_table_name, "schema_version": "3", "binary_fanout_enabled": binary,
                 "initial_propagation_enabled": True, "control_poll_seconds": 2,
                 "control_max_age_seconds": 15, "retry_backoff_max_seconds": 30}
     envelope = {"settings": settings, "sha256": digest(settings)}
@@ -131,6 +131,19 @@ class FamilyDaemonTests(unittest.TestCase):
         cfg.inherited_configuration["settings"]["max_generation"] = 8
         with self.assertRaises(SafetyViolation): validate(cfg)
         with self.assertRaises(SafetyViolation): validate(family_config(node_path="r1"))
+
+    def test_inherited_audit_destination_is_required_and_pinned(self):
+        for destination, code in ((None, "INHERITED_CONFIG_INVALID"), ("other-audit", "AUDIT_TABLE_MISMATCH")):
+            cfg = family_config()
+            settings = cfg.inherited_configuration["settings"]
+            if destination is None:
+                settings.pop("audit_table_name")
+            else:
+                settings["audit_table_name"] = destination
+            cfg.inherited_configuration["sha256"] = digest(settings)
+            with self.assertRaises(SafetyViolation) as raised:
+                validate(cfg)
+            self.assertEqual(raised.exception.code, code)
 
     def test_user_data_contains_inherited_envelope_and_no_operator_config_fetch(self):
         cfg = family_config()

@@ -38,11 +38,15 @@ class FamilySdkTests(unittest.TestCase):
         self.gateway._call = call
 
     def test_control_read_fetches_only_dynamic_controls_and_family_cancellation(self):
-        response = [{"stop_requested": False, "cleanup_requested": False}, {},
+        response = [{"stop_requested": False, "cleanup_requested": False,
+                     "audit_table_name": self.cfg.audit_table_name}, {},
             {"request_id": "1", "cycle_configuration_sha256": self.gateway.configuration_sha256,
              "propagation_enabled": True, "cleanup_requested": False}, {}]
         self.response = {"Responses": [{"Item": _ddb_item(r)} for r in response]}
         self.assertFalse(self.gateway.poll_stopped())
+        response[0]["audit_table_name"] = "other-audit"
+        self.response = {"Responses": [{"Item": _ddb_item(r)} for r in response]}
+        self.assertTrue(self.gateway.poll_stopped())
         keys = [r["Get"]["Key"] for r in self.calls[0][2]["TransactItems"]]
         self.assertEqual(keys[-1]["SK"], {"S": "STOP"})
         self.assertEqual(len(keys), 4)  # Root has no parent stop record.

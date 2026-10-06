@@ -27,6 +27,7 @@ class FamilyBootstrapTests(unittest.TestCase):
         params = test_cleanup.controller.parameters(fixture.control, fixture.env, "1", request)
         envelope = json.loads(params["CycleConfiguration"])
         self.assertTrue(envelope["settings"]["binary_fanout_enabled"])
+        self.assertEqual(envelope["settings"]["audit_table_name"], fixture.control["audit_table_name"]["S"])
         self.assertEqual(request["cycle_configuration_sha256"]["S"], envelope["sha256"])
         self.assertLessEqual(len(params["CycleConfiguration"]), 4096)
         fixture.control["binary_fanout_enabled"] = {"BOOL": False}

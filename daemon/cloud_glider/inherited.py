@@ -20,7 +20,7 @@ def validate(config) -> dict:
     settings = envelope["settings"]
     if digest(settings) != envelope["sha256"]:
         raise SafetyViolation("INHERITED_CONFIG_INVALID", "configuration digest differs")
-    required = {"schema_version", "request_id", "binary_fanout_enabled", "max_generation",
+    required = {"schema_version", "request_id", "binary_fanout_enabled", "max_generation", "audit_table_name",
                 "readiness_poll_seconds", "readiness_timeout_seconds", "heartbeat_interval_seconds",
                 "control_poll_seconds", "control_max_age_seconds", "initial_propagation_enabled",
                 "retry_backoff_max_seconds",
@@ -28,6 +28,8 @@ def validate(config) -> dict:
                 "daemon_artifact_sha256", "approved_account_id", "approved_region", "environment"}
     if not required <= settings.keys() or settings["schema_version"] != "3":
         raise SafetyViolation("INHERITED_CONFIG_INVALID", "missing inherited settings")
+    if settings["audit_table_name"] != config.audit_table_name:
+        raise SafetyViolation("AUDIT_TABLE_MISMATCH", "inherited audit destination differs")
     for name in ("binary_fanout_enabled", "initial_propagation_enabled"):
         if type(settings[name]) is not bool:
             raise SafetyViolation("INHERITED_CONFIG_INVALID", "invalid Boolean " + name)

@@ -322,7 +322,7 @@ Resources:
                   'launch_template_id launch_template_version launch_template_sha256 max_generation '
                   'readiness_poll_seconds readiness_timeout_seconds heartbeat_interval_seconds '
                   'template_sha256 template_s3_version_id template_s3_bucket template_s3_key template_build_id '
-                  'desired_template_version desired_bootstrap_version generation_table_name '
+                  'desired_template_version desired_bootstrap_version generation_table_name audit_table_name '
                   'daemon_artifact_sha256 daemon_artifact_version_id daemon_artifact_bucket daemon_artifact_key').split()
               settings = {name: native(control[name]) for name in names}
               binary = control.get('binary_fanout_enabled', {'BOOL': False})

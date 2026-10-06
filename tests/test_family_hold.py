@@ -24,7 +24,7 @@ class FamilyHoldTests(unittest.TestCase):
 
     def invoke(self, event):
         with patch.dict(os.environ, {'TABLE_NAME': 'controls', 'ENVIRONMENT': 'sandbox',
-                                     'GENERATION_TABLE': 'generations'}):
+                                     'GENERATION_TABLE': 'generations', 'AUDIT_TABLE': 'audit'}):
             return self.namespace['handler'](event, types.SimpleNamespace(invoked_function_arn='test-function'))
 
     def test_family_error_uses_lineage_and_legacy_error_uses_generation(self):

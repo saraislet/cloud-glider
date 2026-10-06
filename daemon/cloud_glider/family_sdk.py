@@ -67,7 +67,8 @@ class FamilySdkGateway(Ec2SdkGateway):
         if len(response.get("Responses", [])) != len(keys):
             raise TransientFailure("incomplete asynchronous controls")
         control, hold, cycle, *stops = [_item(r.get("Item")) for r in response["Responses"]]
-        return (bool(hold) or cycle.get("request_id") != self.config.request_id
+        return (control.get("audit_table_name") != self.config.audit_table_name
+            or bool(hold) or cycle.get("request_id") != self.config.request_id
             or cycle.get("cycle_configuration_sha256") != self.configuration_sha256
             or cycle.get("propagation_enabled") is not True
             or cycle.get("cleanup_requested") is not False

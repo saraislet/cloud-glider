@@ -152,3 +152,15 @@ executed. No diagnostic bypass was used.
 ## Follow-up candidate
 
 Terminated parents are validated against exact cycle/configuration retirement receipts and retained lineage tags; live parents still require full launch identity. Family hold requests use asynchronous Lambda Event invocation and require HTTP 202 acceptance. Identity errors name mismatched fields and are logged before stopping. The next binary test is depth 3 (15 nodes), explicitly held until the audit-separation AWS rollout completes and the releases are reconciled. No depth-3 configuration or launch is applied during the AMI build.
+
+### Audit separation integration
+
+The family branch is rebased onto audit separation commit
+`88c0d42b05ad75a4cacfc234c99d1e3158568505`. Bootstrap includes the audit
+destination in the inherited configuration digest. Each daemon requires that
+destination to match its configured audit table; its asynchronous control monitor
+latches stop when fresh CONTROL names a different destination. The terminated
+parent receipt validation and asynchronous emergency-hold fixes are preserved.
+AMI `ami-020e1d14a1a081269` predates this integration and must not replace the
+audit-separated deployment. Build and cold-smoke a new immutable image before
+coordinating release pins or starting the authorized depth-3 family trial.
