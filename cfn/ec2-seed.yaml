@@ -201,7 +201,7 @@ Resources:
             chmod 0640 /etc/cloud-glider/bootstrap.json
             test -f /etc/cloud-glider/image.json
             test -x /opt/cloud-glider/venv/bin/python
-            /usr/bin/python3 /usr/local/lib/cloud-glider/verify_image.py --config /etc/cloud-glider/bootstrap.json
+            /usr/bin/python3 /usr/local/lib/cloud-glider/verify_image.py --config /etc/cloud-glider/bootstrap.json --context user_data
             install -d -m 0750 /var/lib/cloud-glider
             systemctl enable --now cloud-glider.service
 

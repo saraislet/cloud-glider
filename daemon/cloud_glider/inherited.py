@@ -97,7 +97,7 @@ cat >/etc/cloud-glider/bootstrap.json <<'JSON'
 """ + json.dumps(raw, sort_keys=True, separators=(",", ":")) + """
 JSON
 chmod 0640 /etc/cloud-glider/bootstrap.json
-/usr/bin/python3 /usr/local/lib/cloud-glider/verify_image.py --config /etc/cloud-glider/bootstrap.json
+/usr/bin/python3 /usr/local/lib/cloud-glider/verify_image.py --config /etc/cloud-glider/bootstrap.json --context user_data
 systemctl enable --now cloud-glider.service
 """
     if len(text.encode()) > 16384:

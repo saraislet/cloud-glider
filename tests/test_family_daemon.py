@@ -122,6 +122,7 @@ class FamilyDaemonTests(unittest.TestCase):
     def test_user_data_contains_inherited_envelope_and_no_operator_config_fetch(self):
         cfg = family_config()
         startup = user_data(cfg)
+        self.assertIn("--context user_data", startup)
         raw = json.loads(startup.split("<<'JSON'\n")[1].split("\nJSON")[0])
         self.assertEqual(raw["inherited_configuration"], cfg.inherited_configuration)
         self.assertNotIn("instance_id", raw)
