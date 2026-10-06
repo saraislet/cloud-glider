@@ -580,3 +580,63 @@ propagation disabled, active command NONE and prior generation limit 2 restored;
 all installed release pins verified. No pending cleanup retry token remains.
 Scheduler inventory was not independently queried after this run; available
 CLI permissions do not allow it.
+
+## 2026-10-05 durable timing diagnostic run
+
+Run F / cycle 16 used ten generations 0–9, ARM64 `t4g.micro`, the EC2 backend, numeric launch-template version 6 and the baked durable-timing release described in [rollout evidence](durable-timing-rollout.md). Existing health, conditional handoff and retirement checks remained in force. No collector IAM permissions were added.
+
+Nine ownership handoffs: mean **30.935s**, median **29.942s**, range **28.032–34.570s**. Initial→final ownership took **278.414s**. Launch→ownership averaged **29.249s** (10 instances). Sampled live peak **3**; snapshot cadence median **2.004s**, maximum **2.006s**. Endpoints come from EC2 LaunchTime and CURRENT.updated_at; snapshots are sequential, and cross-host clock skew limits subtraction.
+
+Post-termination logs contain **1,930 timing records from 10/10 instances** and **10/10 complete receipts**, with zero reported drops/upload errors, invalid identities or conflicting duplicates. Strict sequence/digest and both boot-verifier-context checks passed. No log loss was observed in this trial. Failed-start export remains best-effort and was not exercised on a real failing AMI during this run.
+
+Durations below are pooled observed invocation samples. Short reconciliation/no-work paths and repeated phase invocations are included. Different phases overlap and must not be summed into total boot time. Background collector client initialization is not a synchronous readiness gate; its CPU/network use can still contend with startup. Missing samples would be excluded, never treated as zero.
+
+| Phase / context | Mean (s) | Median (s) | Samples | Instances |
+| --- | ---: | ---: | ---: | ---: |
+| baked_image_verification/user_data | 0.009468 | 0.009428 | 10 | 10/10 |
+| baked_image_verification/service_pre | 0.001011 | 0.000987 | 10 | 10/10 |
+| runtime_imports | 0.294042 | 0.293128 | 10 | 10/10 |
+| ec2_runtime_imports | 0.019681 | 0.019559 | 10 | 10/10 |
+| sdk_initialization | 0.259454 | 0.255348 | 10 | 10/10 |
+| collector_initialization | 0.023635 | 0.013480 | 10 | 10/10 |
+| collector_client_initialization | 0.207832 | 0.204466 | 10 | 10/10 |
+| startup_identity_validation | 0.363091 | 0.373183 | 10 | 10/10 |
+| predecessor_retirement | 0.374190 | 0.349973 | 24 | 10/10 |
+| successor_submission | 1.631200 | 1.954436 | 12 | 9/10 |
+| successor_readiness | 19.382496 | 24.009428 | 12 | 9/10 |
+| continuation_dry_run | 0.891174 | 0.988923 | 9 | 9/10 |
+| conditional_handoff | 0.132168 | 0.132201 | 9 | 9/10 |
+| candidate_functional_probe | 1.236823 | 1.373447 | 9 | 9/10 |
+| predecessor_retirement_reconciliation | 0.479579 | 0.463779 | 8 | 8/10 |
+
+SDK call spans include the full SDK call, including any internal retries; retry counts and transport-only latency are not collected. Expected `DryRunOperation` responses below indicate successful permission preflight rather than launch failure. These are daemon API calls; operator/controller calls and collector log-write calls are excluded.
+
+| API / result | Mean (s) | Samples | Instances |
+| --- | ---: | ---: | ---: |
+| dynamodb.transact_get_items | 0.013655 | 336 | 10/10 |
+| ec2.describe_launch_template_versions | 0.033366 | 69 | 10/10 |
+| ec2.describe_images | 0.038610 | 69 | 10/10 |
+| ec2.describe_instances | 0.078788 | 392 | 10/10 |
+| dynamodb.get_item | 0.004755 | 324 | 10/10 |
+| dynamodb.transact_write_items | 0.019826 | 355 | 10/10 |
+| ec2.describe_instance_type_offerings | 0.019900 | 25 | 9/10 |
+| service-quotas.get_service_quota | 0.051153 | 25 | 9/10 |
+| ec2.describe_instance_types | 0.027358 | 25 | 9/10 |
+| ec2.describe_subnets | 0.103987 | 25 | 9/10 |
+| ec2.run_instances | 1.282125 | 9 | 9/10 |
+| dynamodb.delete_item | 0.006294 | 33 | 10/10 |
+| cloudwatch.describe_alarms | 0.083530 | 20 | 10/10 |
+| cloudwatch.put_metric_alarm | 0.060378 | 12 | 9/10 |
+| ec2.describe_instances / InvalidInstanceID.NotFound | 0.051688 | 3 | 3/10 |
+| ec2.run_instances / dry-run / DryRunOperation | 0.572114 | 16 | 9/10 |
+| dynamodb.transact_get_items / TransactionCanceledException | 0.015943 | 2 | 2/10 |
+| ec2.terminate_instances | 0.395360 | 9 | 9/10 |
+| cloudwatch.delete_alarms | 0.097317 | 8 | 8/10 |
+
+Captured SDK exceptions also included three `InvalidInstanceID.NotFound` calls and two `TransactionCanceledException` calls. The cycle still completed all nine handoffs without a hold; these call-level exceptions are recorded rather than counted as failed handoffs.
+
+This single instrumented trial does not establish a causal speedup. Against run E (30.193s mean) the mean is about 2.5% higher, within overlapping ranges. The image kernel also changed. The isolated one-pair smoke measured roughly 0.263s additional process CPU and 0.095s enabled shutdown drain; caches/order confound that comparison.
+
+Supported stop/cleanup verified all ten instances terminated and generation disks, records, seed stack, holds, locks and cleanup schedules absent. Lifecycle READY, propagation disabled, active command NONE, `max_generation=9` retained. A second supported stop refreshed stale DELETING controller feedback after cleanup completed. The Observer shows run 16 complete with ten terminated instances; AWS captures are authoritative.
+
+Full sanitized means/medians/ranges and outcome counts are in [the release receipt](../config/releases/2026-10-05-durable-timing-diagnostic.json). Historical runs D/E and their restored limit 2 describe their own end states; the current retained limit is 9.

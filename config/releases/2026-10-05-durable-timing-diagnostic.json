@@ -1,0 +1,756 @@
+{
+  "date": "2026-10-05",
+  "run": "F",
+  "cycle": "16",
+  "source_commit": "88c653edc44f1ffe9bc1f52d96a7a394460a34ac",
+  "image_id": "ami-0d79bff01a0f1a1db",
+  "daemon_sha256": "a71035d5880ed3ce69cc0081ebf4eb4a51be8c9056785b7981c9cfc1ac2934ca",
+  "launch_template_version": "6",
+  "launch_template_sha256": "485051b01d45b7dd4f1d2566f1373cd8054d964a0ed2559c4c2eb3cb69bab486",
+  "generation_range": [
+    0,
+    9
+  ],
+  "observed_instances": 10,
+  "handoffs": 9,
+  "handoff_mean_seconds": 30.934888892703587,
+  "handoff_median_seconds": 29.941999912261963,
+  "handoff_range_seconds": [
+    28.032000064849854,
+    34.5699999332428
+  ],
+  "initial_to_final_ownership_seconds": 278.4140000343323,
+  "launch_to_ownership_mean_seconds": 29.249199986457825,
+  "launch_to_ownership_samples": 10,
+  "sampled_live_peak": 3,
+  "sampling_cadence_median_seconds": 2.0042359828948975,
+  "sampling_cadence_max_seconds": 2.005547046661377,
+  "collection": {
+    "expected_instances": 10,
+    "captured_instances": 10,
+    "captured_records": 1930,
+    "invalid_identity_records": 0,
+    "conflicting_duplicates": 0,
+    "phase_statistics": [
+      {
+        "event": "boot_timing",
+        "phase": "baked_image_verification",
+        "context": "user_data",
+        "samples": 10,
+        "instances": 10,
+        "mean_seconds": 0.0094683,
+        "median_seconds": 0.0094275,
+        "range_seconds": [
+          0.007829,
+          0.011297
+        ]
+      },
+      {
+        "event": "boot_timing",
+        "phase": "baked_image_verification",
+        "context": "service_pre",
+        "samples": 10,
+        "instances": 10,
+        "mean_seconds": 0.0010108,
+        "median_seconds": 0.000987,
+        "range_seconds": [
+          0.000955,
+          0.001204
+        ]
+      },
+      {
+        "event": "boot_timing",
+        "phase": "runtime_imports",
+        "context": null,
+        "samples": 10,
+        "instances": 10,
+        "mean_seconds": 0.2940425,
+        "median_seconds": 0.293128,
+        "range_seconds": [
+          0.271936,
+          0.319593
+        ]
+      },
+      {
+        "event": "boot_timing",
+        "phase": "ec2_runtime_imports",
+        "context": null,
+        "samples": 10,
+        "instances": 10,
+        "mean_seconds": 0.0196814,
+        "median_seconds": 0.019559,
+        "range_seconds": [
+          0.019201,
+          0.020919
+        ]
+      },
+      {
+        "event": "boot_timing",
+        "phase": "sdk_initialization",
+        "context": null,
+        "samples": 10,
+        "instances": 10,
+        "mean_seconds": 0.2594539,
+        "median_seconds": 0.2553475,
+        "range_seconds": [
+          0.250092,
+          0.286478
+        ]
+      },
+      {
+        "event": "boot_timing",
+        "phase": "collector_initialization",
+        "context": null,
+        "samples": 10,
+        "instances": 10,
+        "mean_seconds": 0.0236346,
+        "median_seconds": 0.0134795,
+        "range_seconds": [
+          0.012677,
+          0.116647
+        ]
+      },
+      {
+        "event": "boot_timing",
+        "phase": "collector_client_initialization",
+        "context": null,
+        "samples": 10,
+        "instances": 10,
+        "mean_seconds": 0.2078321,
+        "median_seconds": 0.2044665,
+        "range_seconds": [
+          0.195275,
+          0.246216
+        ]
+      },
+      {
+        "event": "phase_timing",
+        "phase": "startup_identity_validation",
+        "context": null,
+        "samples": 10,
+        "instances": 10,
+        "mean_seconds": 0.3630913,
+        "median_seconds": 0.37318300000000004,
+        "range_seconds": [
+          0.263771,
+          0.401263
+        ]
+      },
+      {
+        "event": "phase_timing",
+        "phase": "predecessor_retirement",
+        "context": null,
+        "samples": 24,
+        "instances": 10,
+        "mean_seconds": 0.3741905,
+        "median_seconds": 0.3499725,
+        "range_seconds": [
+          4e-06,
+          0.757468
+        ]
+      },
+      {
+        "event": "phase_timing",
+        "phase": "successor_submission",
+        "context": null,
+        "samples": 12,
+        "instances": 9,
+        "mean_seconds": 1.63119975,
+        "median_seconds": 1.9544365,
+        "range_seconds": [
+          0.332275,
+          2.386956
+        ]
+      },
+      {
+        "event": "phase_timing",
+        "phase": "successor_readiness",
+        "context": null,
+        "samples": 12,
+        "instances": 9,
+        "mean_seconds": 19.3824965,
+        "median_seconds": 24.009428,
+        "range_seconds": [
+          0.069686,
+          30.09315
+        ]
+      },
+      {
+        "event": "phase_timing",
+        "phase": "continuation_dry_run",
+        "context": null,
+        "samples": 9,
+        "instances": 9,
+        "mean_seconds": 0.8911744444444445,
+        "median_seconds": 0.988923,
+        "range_seconds": [
+          6e-06,
+          1.132539
+        ]
+      },
+      {
+        "event": "phase_timing",
+        "phase": "conditional_handoff",
+        "context": null,
+        "samples": 9,
+        "instances": 9,
+        "mean_seconds": 0.132168,
+        "median_seconds": 0.132201,
+        "range_seconds": [
+          0.121209,
+          0.144093
+        ]
+      },
+      {
+        "event": "phase_timing",
+        "phase": "candidate_functional_probe",
+        "context": null,
+        "samples": 9,
+        "instances": 9,
+        "mean_seconds": 1.2368234444444444,
+        "median_seconds": 1.373447,
+        "range_seconds": [
+          0.154169,
+          1.395984
+        ]
+      },
+      {
+        "event": "phase_timing",
+        "phase": "predecessor_retirement_reconciliation",
+        "context": null,
+        "samples": 8,
+        "instances": 8,
+        "mean_seconds": 0.47957875,
+        "median_seconds": 0.463779,
+        "range_seconds": [
+          0.330799,
+          0.642727
+        ]
+      }
+    ],
+    "api_statistics": [
+      {
+        "service": "dynamodb",
+        "operation": "transact_get_items",
+        "samples": 338,
+        "instances": 10,
+        "mean_seconds": 0.01366826923076923,
+        "median_seconds": 0.008615000000000001,
+        "range_seconds": [
+          0.006579,
+          0.208013
+        ]
+      },
+      {
+        "service": "ec2",
+        "operation": "describe_launch_template_versions",
+        "samples": 69,
+        "instances": 10,
+        "mean_seconds": 0.03336592753623188,
+        "median_seconds": 0.020816,
+        "range_seconds": [
+          0.017164,
+          0.101586
+        ]
+      },
+      {
+        "service": "ec2",
+        "operation": "describe_images",
+        "samples": 69,
+        "instances": 10,
+        "mean_seconds": 0.038609797101449274,
+        "median_seconds": 0.039028,
+        "range_seconds": [
+          0.024088,
+          0.055522
+        ]
+      },
+      {
+        "service": "ec2",
+        "operation": "describe_instances",
+        "samples": 395,
+        "instances": 10,
+        "mean_seconds": 0.0785820658227848,
+        "median_seconds": 0.067647,
+        "range_seconds": [
+          0.044054,
+          0.240771
+        ]
+      },
+      {
+        "service": "dynamodb",
+        "operation": "get_item",
+        "samples": 324,
+        "instances": 10,
+        "mean_seconds": 0.004755450617283951,
+        "median_seconds": 0.0038325,
+        "range_seconds": [
+          0.003079,
+          0.034471
+        ]
+      },
+      {
+        "service": "dynamodb",
+        "operation": "transact_write_items",
+        "samples": 355,
+        "instances": 10,
+        "mean_seconds": 0.019825830985915494,
+        "median_seconds": 0.018949,
+        "range_seconds": [
+          0.014717,
+          0.04828
+        ]
+      },
+      {
+        "service": "ec2",
+        "operation": "describe_instance_type_offerings",
+        "samples": 25,
+        "instances": 9,
+        "mean_seconds": 0.0198996,
+        "median_seconds": 0.019734,
+        "range_seconds": [
+          0.015562,
+          0.026205
+        ]
+      },
+      {
+        "service": "service-quotas",
+        "operation": "get_service_quota",
+        "samples": 25,
+        "instances": 9,
+        "mean_seconds": 0.05115284,
+        "median_seconds": 0.04205,
+        "range_seconds": [
+          0.021132,
+          0.100254
+        ]
+      },
+      {
+        "service": "ec2",
+        "operation": "describe_instance_types",
+        "samples": 25,
+        "instances": 9,
+        "mean_seconds": 0.02735772,
+        "median_seconds": 0.02746,
+        "range_seconds": [
+          0.020103,
+          0.035172
+        ]
+      },
+      {
+        "service": "ec2",
+        "operation": "describe_subnets",
+        "samples": 25,
+        "instances": 9,
+        "mean_seconds": 0.10398684,
+        "median_seconds": 0.049066,
+        "range_seconds": [
+          0.037587,
+          0.221773
+        ]
+      },
+      {
+        "service": "ec2",
+        "operation": "run_instances",
+        "samples": 25,
+        "instances": 9,
+        "mean_seconds": 0.8277178,
+        "median_seconds": 0.591891,
+        "range_seconds": [
+          0.528815,
+          1.399123
+        ]
+      },
+      {
+        "service": "dynamodb",
+        "operation": "delete_item",
+        "samples": 33,
+        "instances": 10,
+        "mean_seconds": 0.006294333333333333,
+        "median_seconds": 0.005805,
+        "range_seconds": [
+          0.004835,
+          0.009324
+        ]
+      },
+      {
+        "service": "cloudwatch",
+        "operation": "describe_alarms",
+        "samples": 20,
+        "instances": 10,
+        "mean_seconds": 0.08353015,
+        "median_seconds": 0.08325099999999999,
+        "range_seconds": [
+          0.031576,
+          0.171224
+        ]
+      },
+      {
+        "service": "cloudwatch",
+        "operation": "put_metric_alarm",
+        "samples": 12,
+        "instances": 9,
+        "mean_seconds": 0.06037791666666667,
+        "median_seconds": 0.062654,
+        "range_seconds": [
+          0.031044,
+          0.086676
+        ]
+      },
+      {
+        "service": "ec2",
+        "operation": "terminate_instances",
+        "samples": 9,
+        "instances": 9,
+        "mean_seconds": 0.39536044444444446,
+        "median_seconds": 0.381746,
+        "range_seconds": [
+          0.313302,
+          0.517714
+        ]
+      },
+      {
+        "service": "cloudwatch",
+        "operation": "delete_alarms",
+        "samples": 8,
+        "instances": 8,
+        "mean_seconds": 0.097317125,
+        "median_seconds": 0.09568650000000001,
+        "range_seconds": [
+          0.073616,
+          0.140295
+        ]
+      }
+    ],
+    "api_statistics_by_outcome": [
+      {
+        "service": "dynamodb",
+        "operation": "transact_get_items",
+        "dry_run": false,
+        "outcome": "PASSED",
+        "error_code": null,
+        "samples": 336,
+        "instances": 10,
+        "mean_seconds": 0.013654726190476191,
+        "median_seconds": 0.0086085,
+        "range_seconds": [
+          0.006579,
+          0.208013
+        ]
+      },
+      {
+        "service": "ec2",
+        "operation": "describe_launch_template_versions",
+        "dry_run": false,
+        "outcome": "PASSED",
+        "error_code": null,
+        "samples": 69,
+        "instances": 10,
+        "mean_seconds": 0.03336592753623188,
+        "median_seconds": 0.020816,
+        "range_seconds": [
+          0.017164,
+          0.101586
+        ]
+      },
+      {
+        "service": "ec2",
+        "operation": "describe_images",
+        "dry_run": false,
+        "outcome": "PASSED",
+        "error_code": null,
+        "samples": 69,
+        "instances": 10,
+        "mean_seconds": 0.038609797101449274,
+        "median_seconds": 0.039028,
+        "range_seconds": [
+          0.024088,
+          0.055522
+        ]
+      },
+      {
+        "service": "ec2",
+        "operation": "describe_instances",
+        "dry_run": false,
+        "outcome": "PASSED",
+        "error_code": null,
+        "samples": 392,
+        "instances": 10,
+        "mean_seconds": 0.07878788520408163,
+        "median_seconds": 0.0676645,
+        "range_seconds": [
+          0.044741,
+          0.240771
+        ]
+      },
+      {
+        "service": "dynamodb",
+        "operation": "get_item",
+        "dry_run": false,
+        "outcome": "PASSED",
+        "error_code": null,
+        "samples": 324,
+        "instances": 10,
+        "mean_seconds": 0.004755450617283951,
+        "median_seconds": 0.0038325,
+        "range_seconds": [
+          0.003079,
+          0.034471
+        ]
+      },
+      {
+        "service": "dynamodb",
+        "operation": "transact_write_items",
+        "dry_run": false,
+        "outcome": "PASSED",
+        "error_code": null,
+        "samples": 355,
+        "instances": 10,
+        "mean_seconds": 0.019825830985915494,
+        "median_seconds": 0.018949,
+        "range_seconds": [
+          0.014717,
+          0.04828
+        ]
+      },
+      {
+        "service": "ec2",
+        "operation": "describe_instance_type_offerings",
+        "dry_run": false,
+        "outcome": "PASSED",
+        "error_code": null,
+        "samples": 25,
+        "instances": 9,
+        "mean_seconds": 0.0198996,
+        "median_seconds": 0.019734,
+        "range_seconds": [
+          0.015562,
+          0.026205
+        ]
+      },
+      {
+        "service": "service-quotas",
+        "operation": "get_service_quota",
+        "dry_run": false,
+        "outcome": "PASSED",
+        "error_code": null,
+        "samples": 25,
+        "instances": 9,
+        "mean_seconds": 0.05115284,
+        "median_seconds": 0.04205,
+        "range_seconds": [
+          0.021132,
+          0.100254
+        ]
+      },
+      {
+        "service": "ec2",
+        "operation": "describe_instance_types",
+        "dry_run": false,
+        "outcome": "PASSED",
+        "error_code": null,
+        "samples": 25,
+        "instances": 9,
+        "mean_seconds": 0.02735772,
+        "median_seconds": 0.02746,
+        "range_seconds": [
+          0.020103,
+          0.035172
+        ]
+      },
+      {
+        "service": "ec2",
+        "operation": "describe_subnets",
+        "dry_run": false,
+        "outcome": "PASSED",
+        "error_code": null,
+        "samples": 25,
+        "instances": 9,
+        "mean_seconds": 0.10398684,
+        "median_seconds": 0.049066,
+        "range_seconds": [
+          0.037587,
+          0.221773
+        ]
+      },
+      {
+        "service": "ec2",
+        "operation": "run_instances",
+        "dry_run": false,
+        "outcome": "PASSED",
+        "error_code": null,
+        "samples": 9,
+        "instances": 9,
+        "mean_seconds": 1.2821245555555556,
+        "median_seconds": 1.265224,
+        "range_seconds": [
+          1.121722,
+          1.399123
+        ]
+      },
+      {
+        "service": "dynamodb",
+        "operation": "delete_item",
+        "dry_run": false,
+        "outcome": "PASSED",
+        "error_code": null,
+        "samples": 33,
+        "instances": 10,
+        "mean_seconds": 0.006294333333333333,
+        "median_seconds": 0.005805,
+        "range_seconds": [
+          0.004835,
+          0.009324
+        ]
+      },
+      {
+        "service": "cloudwatch",
+        "operation": "describe_alarms",
+        "dry_run": false,
+        "outcome": "PASSED",
+        "error_code": null,
+        "samples": 20,
+        "instances": 10,
+        "mean_seconds": 0.08353015,
+        "median_seconds": 0.08325099999999999,
+        "range_seconds": [
+          0.031576,
+          0.171224
+        ]
+      },
+      {
+        "service": "cloudwatch",
+        "operation": "put_metric_alarm",
+        "dry_run": false,
+        "outcome": "PASSED",
+        "error_code": null,
+        "samples": 12,
+        "instances": 9,
+        "mean_seconds": 0.06037791666666667,
+        "median_seconds": 0.062654,
+        "range_seconds": [
+          0.031044,
+          0.086676
+        ]
+      },
+      {
+        "service": "ec2",
+        "operation": "describe_instances",
+        "dry_run": false,
+        "outcome": "AWS_ERROR",
+        "error_code": "InvalidInstanceID.NotFound",
+        "samples": 3,
+        "instances": 3,
+        "mean_seconds": 0.051688333333333336,
+        "median_seconds": 0.048946,
+        "range_seconds": [
+          0.044054,
+          0.062065
+        ]
+      },
+      {
+        "service": "ec2",
+        "operation": "run_instances",
+        "dry_run": true,
+        "outcome": "AWS_ERROR",
+        "error_code": "DryRunOperation",
+        "samples": 16,
+        "instances": 9,
+        "mean_seconds": 0.572114,
+        "median_seconds": 0.57386,
+        "range_seconds": [
+          0.528815,
+          0.599159
+        ]
+      },
+      {
+        "service": "dynamodb",
+        "operation": "transact_get_items",
+        "dry_run": false,
+        "outcome": "AWS_ERROR",
+        "error_code": "TransactionCanceledException",
+        "samples": 2,
+        "instances": 2,
+        "mean_seconds": 0.0159435,
+        "median_seconds": 0.0159435,
+        "range_seconds": [
+          0.010999,
+          0.020888
+        ]
+      },
+      {
+        "service": "ec2",
+        "operation": "terminate_instances",
+        "dry_run": false,
+        "outcome": "PASSED",
+        "error_code": null,
+        "samples": 9,
+        "instances": 9,
+        "mean_seconds": 0.39536044444444446,
+        "median_seconds": 0.381746,
+        "range_seconds": [
+          0.313302,
+          0.517714
+        ]
+      },
+      {
+        "service": "cloudwatch",
+        "operation": "delete_alarms",
+        "dry_run": false,
+        "outcome": "PASSED",
+        "error_code": null,
+        "samples": 8,
+        "instances": 8,
+        "mean_seconds": 0.097317125,
+        "median_seconds": 0.09568650000000001,
+        "range_seconds": [
+          0.073616,
+          0.140295
+        ]
+      }
+    ],
+    "api_outcomes": [
+      {
+        "outcome": "PASSED",
+        "error_code": null,
+        "count": 1736
+      },
+      {
+        "outcome": "AWS_ERROR",
+        "error_code": "InvalidInstanceID.NotFound",
+        "count": 3
+      },
+      {
+        "outcome": "AWS_ERROR",
+        "error_code": "DryRunOperation",
+        "count": 16
+      },
+      {
+        "outcome": "AWS_ERROR",
+        "error_code": "TransactionCanceledException",
+        "count": 2
+      }
+    ],
+    "limitations": "Partial capture accepted. Missing durations excluded, never zero. Missing markers obscure exact loss and may bias averages. Single instrumented run is not a causal speedup estimate.",
+    "phase_statistics_note": "Repeated phase invocations, including short reconciliation/no-work paths, are pooled. Phase spans overlap and must not be added into a total boot time."
+  },
+  "receipt_coverage": {
+    "complete_receipts": 10,
+    "dropped": 0,
+    "upload_errors": 0,
+    "posttermination_sequence_digest_and_boot_context_validation": true
+  },
+  "cleanup": {
+    "terminated_instances": 10,
+    "generation_records": 0,
+    "generation_volumes": 0,
+    "live_instances": 0,
+    "seed_stack_absent": true,
+    "ready": true,
+    "propagation_enabled": false,
+    "max_generation": 9,
+    "hold_and_locks_absent": true
+  },
+  "scheduler_inventory_empty": true,
+  "cleanup_feedback_refresh": "Supported stop refreshed stale DELETING feedback after BOOTSTRAP reached READY/COMPLETE. No manual state correction."
+}
