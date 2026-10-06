@@ -25,6 +25,7 @@ def build_transaction(table, control, current, request, states, actor, now):
     if len(states) > 92:
         raise ValueError('Too many generation records for a single reviewed migration')
     migrated = {key: value for key, value in control.items() if key != 'propagation_enabled'}
+    migrated['audit_table_name'] = {'S': 'cloud-glider-' + control['environment']['S'] + '-audit'}
     migrated['generation_table_name'] = {'S': 'cloud-glider-' + control['environment']['S'] + '-generations'}
     migrated.update(operator_defaults())
     migrated['cycle_initialized'] = {'BOOL': True}
@@ -46,7 +47,7 @@ def build_transaction(table, control, current, request, states, actor, now):
         {'Put': {'TableName': table, 'Item': reset_current, **exact(current)}},
         {'Put': {'TableName': table, 'Item': lifecycle, **exact(request)}},
         *[{'Delete': {'TableName': table, 'Key': {'PK': item['PK'], 'SK': item['SK']}, **exact(item)}} for item in states],
-        {'Put': {'TableName': table, 'Item': audit, 'ConditionExpression': 'attribute_not_exists(PK)'}}]
+        {'Put': {'TableName': migrated['audit_table_name']['S'], 'Item': audit, 'ConditionExpression': 'attribute_not_exists(PK)'}}]
 
 
 def main(argv=None):

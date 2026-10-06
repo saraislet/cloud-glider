@@ -71,6 +71,7 @@
 
 - Work only within the `cloud-glider` repository and use a dedicated branch or worktree for each independent task.
 - Do not push directly to protected branches. Keep changes narrowly scoped and reviewable.
+- Include ignored local operational folders such as `.artifacts/` when searching for affected writers, readers, and generated inputs. Preserve historical receipts and snapshots.
 - Do not modify `.github/workflows/`, deployment permissions, secrets, or repository security settings unless explicitly assigned.
 - Never commit credentials, tokens, private keys, or other secrets.
 - Record significant architectural decisions under `docs/decisions/` and update runbooks when behavior or recovery procedures change.

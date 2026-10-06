@@ -1,0 +1,26 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:DescribeTable",
+        "dynamodb:DescribeContinuousBackups",
+        "dynamodb:GetItem",
+        "dynamodb:Query",
+        "dynamodb:Scan",
+        "dynamodb:PutItem",
+        "dynamodb:ConditionCheckItem"
+      ],
+      "Resource": "arn:aws:dynamodb:us-west-2:123456789012:table/cloud-glider-sandbox-audit",
+      "Condition": {
+        "ForAllValues:StringEqualsIfExists": {
+          "dynamodb:LeadingKeys": [
+            "AUDIT#PROPAGATION",
+            "AUDIT#RELEASE"
+          ]
+        }
+      }
+    }
+  ]
+}

@@ -23,6 +23,7 @@ SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 REQUIRED_CONTROL_FIELDS = {
     "propagation_enabled",
     "generation_table_name",
+    "audit_table_name",
     "request_id",
     "cleanup_requested",
     "cleanup_status",
@@ -96,6 +97,11 @@ class DaemonConfig:
     emergency_hold_function_name: str
     propagation_audit_log_group: str
     daemon_operations_log_group: str
+
+    @property
+    def audit_table_name(self) -> str:
+        """Audit destination is pinned by the source release and environment."""
+        return f"cloud-glider-{self.environment}-audit"
 
     @classmethod
     def load(cls, path: str | Path) -> "DaemonConfig":
@@ -202,6 +208,8 @@ class Daemon:
         missing = REQUIRED_CONTROL_FIELDS - control.keys()
         if missing:
             raise SafetyViolation("CONTROL_SCHEMA_INVALID", f"control record lacks {sorted(missing)}")
+        if control["audit_table_name"] != self.config.audit_table_name:
+            raise SafetyViolation("AUDIT_TABLE_MISMATCH", "audit table differs from approved control")
         if control["generation_table_name"] != self.config.generation_table_name:
             raise SafetyViolation("GENERATION_TABLE_MISMATCH", "generation table differs from approved control")
         if control["request_id"] != self.config.request_id:

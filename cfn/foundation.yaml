@@ -127,6 +127,40 @@ Resources:
         - Key: purpose
           Value: control-and-coordination
 
+  AuditTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: !Sub 'cloud-glider-${Environment}-audit'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      DeletionProtectionEnabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+        RecoveryPeriodInDays: 35
+      SSESpecification:
+        # DynamoDB remains encrypted at rest with the free AWS-owned key.
+        SSEEnabled: false
+      Tags:
+        - Key: project
+          Value: cloud-glider
+        - Key: environment
+          Value: !Ref Environment
+        - Key: owner
+          Value: !Ref Owner
+        - Key: purpose
+          Value: audit-records
+
   GenerationTable:
     Type: AWS::DynamoDB::Table
     DeletionPolicy: Retain
@@ -484,6 +518,13 @@ Resources:
                   ForAllValues:StringLike:
                     dynamodb:LeadingKeys:
                       - HOLD
+              - Sid: WritePropagationAudit
+                Effect: Allow
+                Action: dynamodb:PutItem
+                Resource: !GetAtt AuditTable.Arn
+                Condition:
+                  ForAllValues:StringEquals:
+                    dynamodb:LeadingKeys:
                       - AUDIT#PROPAGATION
               - Sid: RecordGenerationError
                 Effect: Allow
@@ -534,6 +575,7 @@ Resources:
         Variables:
           TABLE_NAME: !Ref StateTable
           GENERATION_TABLE: !Ref GenerationTable
+          AUDIT_TABLE: !Ref AuditTable
           ENVIRONMENT: !Ref Environment
       Code:
         ZipFile: |
@@ -648,7 +690,7 @@ Resources:
                               },
                               {
                                   "Put": {
-                                      "TableName": table,
+                                      "TableName": os.environ["AUDIT_TABLE"],
                                       "Item": audit,
                                   }
                               },
@@ -1155,6 +1197,13 @@ Resources:
             - Version: '2012-10-17'
               Statement:
               - Effect: Allow
+                Action: dynamodb:PutItem
+                Resource: !GetAtt AuditTable.Arn
+                Condition:
+                  ForAllValues:StringEquals:
+                    dynamodb:LeadingKeys:
+                    - AUDIT#PROPAGATION
+              - Effect: Allow
                 Action: dynamodb:GetItem
                 Resource: !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-state'
               - Effect: Allow
@@ -1168,7 +1217,6 @@ Resources:
                     dynamodb:LeadingKeys:
                     - CURRENT
                     - LOCK
-                    - AUDIT#PROPAGATION
               - Effect: Allow
                 Action: dynamodb:ConditionCheckItem
                 Resource: !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-state'
@@ -1332,6 +1380,13 @@ Resources:
                     ec2:IsLaunchTemplateResource: false
             - Version: '2012-10-17'
               Statement:
+              - Effect: Allow
+                Action: dynamodb:PutItem
+                Resource: !GetAtt AuditTable.Arn
+                Condition:
+                  ForAllValues:StringEquals:
+                    dynamodb:LeadingKeys:
+                    - AUDIT#PROPAGATION
               - Sid: ReadControlAndState
                 Effect: Allow
                 Action:
@@ -1351,7 +1406,6 @@ Resources:
                     dynamodb:LeadingKeys:
                     - CURRENT
                     - LOCK
-                    - AUDIT#PROPAGATION
               - Sid: ReadAndWriteGenerationState
                 Effect: Allow
                 Action:
@@ -1568,6 +1622,8 @@ Outputs:
     Value: !Ref StateTable
   ArtifactBucketName:
     Value: !Ref ArtifactBucket
+  AuditTableName:
+    Value: !Ref AuditTable
   GenerationTableName:
     Value: !Ref GenerationTable
   AuditArchiveBucketName:

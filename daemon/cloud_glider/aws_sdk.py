@@ -762,7 +762,7 @@ class AwsSdkGateway:
             },
             {
                 "Put": {
-                    "TableName": table,
+                    "TableName": self.config.audit_table_name,
                     "Item": audit_item,
                 }
             },

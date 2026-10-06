@@ -33,6 +33,7 @@ class SdkTests(unittest.TestCase):
         cfg = SimpleNamespace(
             state_table_name="cloud-glider-test",
             generation_table_name="cloud-glider-test-generations",
+            audit_table_name="cloud-glider-sandbox-audit",
             request_id="1",
             environment="sandbox",
             emergency_hold_function_name="cloud-glider-hold",

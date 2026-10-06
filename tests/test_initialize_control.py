@@ -92,6 +92,7 @@ class InitializeControlTests(unittest.TestCase):
         transaction = initialize_control.build_transaction(
             self.args(), now="2026-08-24T00:00:00.000Z", event_id="event-1"
         )
+        self.assertEqual(transaction[2]["Put"]["TableName"], "cloud-glider-sandbox-audit")
         audit = transaction[2]["Put"]["Item"]
         self.assertEqual(audit["PK"], {"S": "AUDIT#PROPAGATION"})
         self.assertEqual(audit["actor"], {"S": self.args().operator_id})

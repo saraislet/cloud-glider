@@ -49,6 +49,9 @@ def build_transaction(table, control, operator, request_id, now):
         raise ValueError('CONTROL must be initialized before bootstrap')
     names = {f'#f{i}': k for i, k in enumerate(approved)}
     values = {f':v{i}': v for i, v in enumerate(approved.values())}
+    audit_table = "cloud-glider-" + control["environment"]["S"] + "-audit"
+    if control.get("audit_table_name") != {"S": audit_table}:
+        raise ValueError("Audit table requires reviewed offline migration")
     audit = {**request, 'PK': {'S': 'AUDIT#PROPAGATION'}, 'SK': {'S': 'LATEST_BOOTSTRAP'},
              'action': {'S': 'PREPARE_BOOTSTRAP'}, 'actor': {'S': operator}, 'result': {'S': 'APPLIED'}}
     return [
@@ -61,7 +64,7 @@ def build_transaction(table, control, operator, request_id, now):
         {'ConditionCheck': {'TableName': table, 'Key': {'PK': {'S': 'HOLD'}, 'SK': {'S': 'ACTIVE'}},
             'ConditionExpression': 'attribute_not_exists(PK)'}},
         {'Put': {'TableName': table, 'Item': request, 'ConditionExpression': 'attribute_not_exists(PK)'}},
-        {'Put': {'TableName': table, 'Item': audit}},
+        {'Put': {'TableName': audit_table, 'Item': audit}},
     ]
 
 

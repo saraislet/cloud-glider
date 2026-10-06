@@ -354,6 +354,7 @@ Resources:
               require(request.get('status') == {'S': status}, 'Request canceled or already handled')
               require('propagation_enabled' not in control, 'Legacy CONTROL requires migration')
               require(control.get('generation_table_name') == {'S': env['GENERATION_TABLE']}, 'Generation table requires migration')
+              require(control.get('audit_table_name') == {'S': 'cloud-glider-' + env['ENVIRONMENT'] + '-audit'}, 'Audit table requires migration')
               require(control.get('cleanup_requested') != {'BOOL': True}, 'A cleanup command blocks bootstrap')
               require(request.get('schema_version') == {'S': '2'}, 'Lifecycle schema requires migration')
               require(type(request.get('propagation_enabled', {}).get('BOOL')) is bool, 'Invalid propagation control')
@@ -952,6 +953,8 @@ Resources:
               if control.get('generation_table_name') != {'S': env['GENERATION_TABLE']}:
                   return reject('Request rejected: migrate the generation table configuration first.')
               action = {'start_requested': 'START', 'stop_requested': 'STOP', 'cleanup_requested': 'CLEANUP'}[selected[0]]
+              if action == 'START' and control.get('audit_table_name') != {'S': 'cloud-glider-' + env['ENVIRONMENT'] + '-audit'}:
+                  return reject('Request rejected: migrate the audit table configuration first.')
               original = request
               if not request:
                   if control.get('cycle_initialized') == {'BOOL': True}:

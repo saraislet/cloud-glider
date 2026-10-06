@@ -82,6 +82,20 @@
                 },
                 {
                   "Effect": "Allow",
+                  "Action": "dynamodb:PutItem",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-audit"
+                  },
+                  "Condition": {
+                    "ForAllValues:StringEquals": {
+                      "dynamodb:LeadingKeys": [
+                        "AUDIT#PROPAGATION"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "Effect": "Allow",
                   "Action": [
                     "dynamodb:ConditionCheckItem",
                     "dynamodb:PutItem",
@@ -94,8 +108,7 @@
                     "ForAllValues:StringLike": {
                       "dynamodb:LeadingKeys": [
                         "CURRENT",
-                        "LOCK",
-                        "AUDIT#PROPAGATION"
+                        "LOCK"
                       ]
                     }
                   }
@@ -429,6 +442,20 @@
                 },
                 {
                   "Effect": "Allow",
+                  "Action": "dynamodb:PutItem",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-audit"
+                  },
+                  "Condition": {
+                    "ForAllValues:StringEquals": {
+                      "dynamodb:LeadingKeys": [
+                        "AUDIT#PROPAGATION"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "Effect": "Allow",
                   "Action": [
                     "dynamodb:ConditionCheckItem",
                     "dynamodb:PutItem",
@@ -441,8 +468,7 @@
                     "ForAllValues:StringLike": {
                       "dynamodb:LeadingKeys": [
                         "CURRENT",
-                        "LOCK",
-                        "AUDIT#PROPAGATION"
+                        "LOCK"
                       ]
                     }
                   }
@@ -520,20 +546,7 @@
                   "Effect": "Allow",
                   "Action": [
                     "cloudformation:DeleteChangeSet",
-                    "cloudformation:ExecuteChangeSet"
-                  ],
-                  "Resource": [
-                    {
-                      "Fn::Sub": "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/cloud-glider-${Environment}-gen-*/*"
-                    },
-                    {
-                      "Fn::Sub": "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:changeSet/cloud-glider-${Environment}-gen-*/*"
-                    }
-                  ]
-                },
-                {
-                  "Effect": "Allow",
-                  "Action": [
+                    "cloudformation:ExecuteChangeSet",
                     "cloudformation:DescribeChangeSet",
                     "cloudformation:DescribeStackEvents",
                     "cloudformation:DescribeStackResource",
@@ -891,6 +904,20 @@
             },
             {
               "Effect": "Allow",
+              "Action": "dynamodb:PutItem",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-audit"
+              },
+              "Condition": {
+                "ForAllValues:StringEquals": {
+                  "dynamodb:LeadingKeys": [
+                    "AUDIT#PROPAGATION"
+                  ]
+                }
+              }
+            },
+            {
+              "Effect": "Allow",
               "Action": [
                 "dynamodb:ConditionCheckItem",
                 "dynamodb:PutItem"
@@ -901,8 +928,7 @@
               "Condition": {
                 "ForAllValues:StringLike": {
                   "dynamodb:LeadingKeys": [
-                    "HOLD",
-                    "AUDIT#PROPAGATION"
+                    "HOLD"
                   ]
                 }
               }
@@ -1654,21 +1680,14 @@
             {
               "Effect": "Allow",
               "Action": "iam:PassRole",
-              "Resource": {
-                "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider-${Environment}-emergency-hold"
-              },
-              "Condition": {
-                "StringEquals": {
-                  "iam:PassedToService": "lambda.amazonaws.com"
+              "Resource": [
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider-${Environment}-emergency-hold"
+                },
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider-${Environment}-bootstrap-BootstrapRole-*"
                 }
-              }
-            },
-            {
-              "Effect": "Allow",
-              "Action": "iam:PassRole",
-              "Resource": {
-                "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cloud-glider-${Environment}-bootstrap-BootstrapRole-*"
-              },
+              ],
               "Condition": {
                 "StringEquals": {
                   "iam:PassedToService": "lambda.amazonaws.com"
@@ -1682,13 +1701,7 @@
                 "ec2:DescribeSubnets",
                 "ec2:DescribeSecurityGroups",
                 "logs:DescribeLogGroups",
-                "lambda:ListEventSourceMappings"
-              ],
-              "Resource": "*"
-            },
-            {
-              "Effect": "Allow",
-              "Action": [
+                "lambda:ListEventSourceMappings",
                 "logs:DescribeResourcePolicies",
                 "logs:PutResourcePolicy"
               ],
@@ -1727,13 +1740,6 @@
                 "iam:UpdateAssumeRolePolicy",
                 "iam:TagRole",
                 "iam:UntagRole",
-                "iam:CreateInstanceProfile",
-                "iam:DeleteInstanceProfile",
-                "iam:GetInstanceProfile",
-                "iam:AddRoleToInstanceProfile",
-                "iam:RemoveRoleFromInstanceProfile",
-                "iam:TagInstanceProfile",
-                "iam:UntagInstanceProfile",
                 "iam:ListInstanceProfileTags",
                 "dynamodb:CreateTable",
                 "dynamodb:DeleteTable",
@@ -1776,7 +1782,8 @@
                 "events:*",
                 "sns:*",
                 "cloudwatch:*",
-                "cloudtrail:*"
+                "cloudtrail:*",
+                "iam:*InstanceProfile"
               ],
               "Resource": [
                 {
@@ -1858,6 +1865,21 @@
               ],
               "Resource": {
                 "Fn::Sub": "arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:cloud-glider-${Environment}-bootstrap"
+              }
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "dynamodb:CreateTable",
+                "dynamodb:DescribeTable",
+                "dynamodb:UpdateTable",
+                "dynamodb:TagResource",
+                "dynamodb:ListTagsOfResource",
+                "dynamodb:UpdateContinuousBackups",
+                "dynamodb:DescribeContinuousBackups"
+              ],
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cloud-glider-${Environment}-audit"
               }
             }
           ]

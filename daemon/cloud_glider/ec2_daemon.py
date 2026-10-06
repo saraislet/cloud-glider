@@ -23,6 +23,7 @@ SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 REQUIRED_CONTROL_FIELDS = {
     "propagation_enabled",
     "generation_table_name",
+    "audit_table_name",
     "request_id",
     "cleanup_requested",
     "cleanup_status",
@@ -88,6 +89,11 @@ class Ec2DaemonConfig:
     daemon_operations_log_group: str
     operational_alerts_topic_arn: str
     daemon_delivery_mode: str = "baked"
+
+    @property
+    def audit_table_name(self) -> str:
+        """Audit destination is pinned by the source release and environment."""
+        return f"cloud-glider-{self.environment}-audit"
 
     @classmethod
     def load(cls, path: str | Path) -> "Ec2DaemonConfig":
@@ -209,6 +215,8 @@ class Ec2Daemon:
             raise SafetyViolation(
                 "CONTROL_SCHEMA_INVALID", f"control lacks {sorted(missing)}"
             )
+        if control["audit_table_name"] != self.config.audit_table_name:
+            raise SafetyViolation("AUDIT_TABLE_MISMATCH", "audit table differs from approved control")
         if control["generation_table_name"] != self.config.generation_table_name:
             raise SafetyViolation(
                 "GENERATION_TABLE_MISMATCH", "unexpected generation table"

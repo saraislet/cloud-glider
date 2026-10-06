@@ -118,7 +118,7 @@ cycle once. It rejects an already migrated lifecycle; do not reset its counter.
 
 ## Reference and validation
 
-CONTROL holds the operator switches and messages alongside approved settings. The control table also holds CURRENT, BOOTSTRAP, holds/locks, and reusable latest-event audit records. Heartbeats and stack inventory use the separate generation table. Earlier audit history remains until an explicit offline compaction; normal cleanup does not erase it.
+CONTROL holds the operator switches and messages alongside approved settings. The control table also holds CURRENT, BOOTSTRAP, holds/locks, and recovery audit records. Propagation and release audits use the separate audit table after the offline migration in decision 0024. Heartbeats and stack inventory use the separate generation table. Earlier audit history remains until an explicit offline compaction; normal cleanup does not erase it.
 BOOTSTRAP/REQUEST holds controller-managed launch permission, cycle identity,
 and cleanup state. No routine edits to that item are needed. HOLD stays independent.
 

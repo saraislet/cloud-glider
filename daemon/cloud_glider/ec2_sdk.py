@@ -625,7 +625,7 @@ class Ec2SdkGateway(AwsSdkGateway):
             },
             {
                 "Put": {
-                    "TableName": table,
+                    "TableName": self.config.audit_table_name,
                     "Item": _ddb_item(
                         {
                             "PK": "AUDIT#PROPAGATION",
