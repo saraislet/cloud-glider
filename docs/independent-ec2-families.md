@@ -1,7 +1,7 @@
 # Independent inherited EC2 propagation
 
-Source implementation only. This runbook covers new version-3 EC2 family cycles;
-it does not authorize live deployment or a larger propagation test. Architectural
+The depth-2 release was deployed and tested live on 2026-10-06. Larger tests
+require separate operator approval. This runbook covers version-3 EC2 family cycles. Architectural
 changes and preserved gates are recorded in [decision 0023](decisions/0023-independent-inherited-ec2-families.md).
 
 ## Operator configuration
@@ -49,7 +49,7 @@ should leave four leaf instances after interior retirement.
 
 ## AWS work required before deployment
 
-None of these steps has been executed for this source change.
+The deployment steps below were completed for the depth-2 candidate; the live trial findings are recorded at the end.
 
 1. Stop and clean up the existing cycle using the approved operator path. Verify
    no live generations or unresolved submissions. Never activate the new schema
@@ -121,3 +121,34 @@ The deterministic candidate archive built locally with SHA-256
 No AMI was built, no artifacts uploaded, no permissions changed in AWS, and no
 live propagation or cold-boot test was run. Source tests do not establish live
 IAM authorization, AWS concurrency behavior or propagation performance.
+
+## Live deployment and first binary trial — 2026-10-06
+
+Deployed private ARM64 AMI `ami-0336aa2a14014e35f`, source commit
+`6288931b99fab6363e4f391c777709a08f5249ce`, daemon archive SHA-256
+`c79c25d22093134c54fd1731bd08c4edbc20dfc5a3f9a3cf9a1ffe92d01da95c`,
+and numeric launch-template version 10. Cold smoke passed its explicit signal
+and console PASS checks; its stack and instance were cleaned up. All four
+deployment stacks reached UPDATE_COMPLETE. Inherited configuration and binary
+fan-out were enabled for the new cycle at max_generation=2.
+
+The operator explicitly approved CreatePolicyVersion and DeletePolicyVersion
+for GliderManager on only the three sandbox boundary policies. Runtime daemon
+permissions were not expanded. Boundary rollback recovered without resource skips.
+
+Cycle 19 launched exactly seven instances with paths r, r0, r1, r00, r01, r10,
+and r11. The root retired; r00 and r01 reached LEAF. Node r0 then reported
+INSTANCE_IDENTITY_MISMATCH and emergency hold latched descendant STOP records.
+This trial does not establish a successful complete binary handoff cycle.
+STOP was applied and cleanup requested; all seven instances were confirmed
+terminated. Preserve the hold until the identity failure is inspected.
+
+Raw evidence and complete collected timing validation are under ignored
+`.artifacts/family-rollout/cycle-19/`. Bootstrap START initially remained pending
+while its enabled stream mapping reported OK, then processed normally. A direct
+synthetic diagnostic replay was rejected by automatic approval review and never
+executed. No diagnostic bypass was used.
+
+## Follow-up candidate
+
+Terminated parents are validated against exact cycle/configuration retirement receipts and retained lineage tags; live parents still require full launch identity. Family hold requests use asynchronous Lambda Event invocation and require HTTP 202 acceptance. Identity errors name mismatched fields and are logged before stopping. The next binary test is depth 3 (15 nodes), explicitly held until the audit-separation AWS rollout completes and the releases are reconciled. No depth-3 configuration or launch is applied during the AMI build.

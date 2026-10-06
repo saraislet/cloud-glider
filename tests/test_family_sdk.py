@@ -180,3 +180,24 @@ class FamilySdkTests(unittest.TestCase):
         self.gateway.record_child(spec, {"InstanceId": "i-child"})
         self.assertEqual([action for action, _ in order], ["transaction", "alarm", "transaction"])
         self.assertIn("settled", str(order[-1]))
+
+    def test_terminated_parent_requires_durable_retirement_receipt(self):
+        import dataclasses
+        from cloud_glider.inherited import specification
+        self.gateway.config = dataclasses.replace(self.cfg, node_path="r0", generation="000001", predecessor_instance_id="i-parent")
+        spec = specification(self.gateway.config, "r", "NONE", "OPERATOR_BOOTSTRAP")
+        parent = {"InstanceId": "i-parent", "State": {"Name": "terminated"}, "Tags": spec["tags"]}
+        receipt = {"request_id": self.cfg.request_id, "instance_id": "i-parent", "owner": "i-parent", "configuration_sha256": self.gateway.configuration_sha256, "status": "RETIRING", "retirement_children": ["r0", "r1"]}
+        self.gateway.describe_instance = Mock(return_value=parent)
+        self.gateway.read_node = Mock(return_value=receipt)
+        self.assertTrue(self.gateway.parent_terminated())
+        for field, value in (("request_id", "other"), ("owner", "other"), ("status", "OWNER"), ("retirement_children", ["r0"])):
+            self.gateway.read_node.return_value = {**receipt, field: value}
+            with self.assertRaises(SafetyViolation): self.gateway.parent_terminated()
+
+    def test_family_hold_is_async_and_requires_acceptance(self):
+        self.response = {"StatusCode": 202}
+        self.gateway.invoke_hold("000000", "TEST", "id")
+        self.assertEqual(self.calls[-1][2]["InvocationType"], "Event")
+        self.response = {"StatusCode": 500}
+        with self.assertRaises(TransientFailure): self.gateway.invoke_hold("000000", "TEST", "id")

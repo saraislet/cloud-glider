@@ -168,6 +168,7 @@ class FamilyDaemon:
                     delay = random.uniform(delay, maximum)
                 self.sleep(delay)
         except SafetyViolation as exc:
+            self.logger(f"{exc.code}: {exc}")
             self.monitor.stopped = True
             try:
                 self.stop_children()

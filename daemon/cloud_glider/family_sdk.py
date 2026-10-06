@@ -18,7 +18,7 @@ class FamilySdkGateway(Ec2SdkGateway):
         return {"PK": {"S": "GEN#" + path}, "SK": {"S": sk}}
 
     def invoke_hold(self, generation, error_code, correlation_id):
-        return super().invoke_hold(generation, error_code, correlation_id, node_path=self.config.node_path)
+        return super().invoke_hold(generation, error_code, correlation_id, node_path=self.config.node_path, asynchronous=True)
 
     def get_node_item(self, path, sk):
         return self._get("GEN#" + path, sk)
@@ -247,7 +247,22 @@ class FamilySdkGateway(Ec2SdkGateway):
         tags = parent.get("Tags", {})
         spec = specification(self.config, self.config.node_path[:-1],
                              tags.get("predecessor-instance-id"), tags.get("handoff-token"))
-        self.verify_instance(parent, spec)
+        if parent["State"]["Name"] == "terminated":
+            # EC2 removes network/profile fields after termination. Anchor the
+            # exact parent to its cycle-fenced, accepted retirement receipt.
+            receipt = self.read_node(self.config.node_path[:-1])
+            expected = {"request_id": self.config.request_id,
+                        "instance_id": self.config.predecessor_instance_id,
+                        "owner": self.config.predecessor_instance_id,
+                        "configuration_sha256": self.configuration_sha256,
+                        "status": "RETIRING"}
+            if (parent.get("InstanceId") != self.config.predecessor_instance_id
+                or any(receipt.get(k) != v for k, v in expected.items())
+                or receipt.get("retirement_children") != list(child_paths(self.config.node_path[:-1], self.settings))
+                or any(tags.get(k) != v for k, v in spec["tags"].items())):
+                raise SafetyViolation("PARENT_RETIREMENT_IDENTITY_MISMATCH", "terminated parent differs from durable retirement receipt or lineage tags")
+        else:
+            self.verify_instance(parent, spec)
         return parent["State"]["Name"]
 
     def parent_terminated(self):

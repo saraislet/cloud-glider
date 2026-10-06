@@ -789,7 +789,7 @@ class AwsSdkGateway:
         )
 
     def invoke_hold(
-        self, generation: str, error_code: str, correlation_id: str, *, node_path: str | None = None
+        self, generation: str, error_code: str, correlation_id: str, *, node_path: str | None = None, asynchronous: bool = False
     ) -> None:
         payload = json.dumps(
             {
@@ -805,7 +805,7 @@ class AwsSdkGateway:
             "invoke",
             FunctionName=self.config.emergency_hold_function_name,
             Payload=payload,
-            InvocationType="RequestResponse",
+            InvocationType="Event" if asynchronous else "RequestResponse",
             allow_failure=True,
         )
         body = result.get("Payload")
@@ -820,6 +820,6 @@ class AwsSdkGateway:
         if (
             result.get("_returncode")
             or result.get("FunctionError")
-            or result.get("StatusCode") != 200
+            or result.get("StatusCode") != (202 if asynchronous else 200)
         ):
             raise TransientFailure("failed to create emergency hold")

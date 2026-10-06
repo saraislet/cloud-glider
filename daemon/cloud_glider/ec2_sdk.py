@@ -260,30 +260,24 @@ class Ec2SdkGateway(AwsSdkGateway):
         tags = instance.get("Tags", {})
         network = data["NetworkInterfaces"][0]
         metadata = instance.get("MetadataOptions", {})
-        if (
-            instance.get("LaunchTemplate") != expected_template
-            or any((tags.get(k) != v for k, v in specification["tags"].items()))
-            or instance.get("ImageId") != data["ImageId"]
-            or (instance.get("InstanceType") != "t4g.micro")
-            or (instance.get("Architecture") != "arm64")
-            or (instance.get("SubnetId") != network["SubnetId"])
-            or (
-                sorted((g["GroupId"] for g in instance.get("SecurityGroups", [])))
-                != sorted(network["Groups"])
-            )
-            or (
-                instance.get("IamInstanceProfile", {}).get("Arn")
-                != f"arn:aws:iam::{self.account_id}:instance-profile/cloud-glider/{data['IamInstanceProfile']['Name']}"
-            )
-            or (metadata.get("HttpTokens") != "required")
-            or (metadata.get("HttpEndpoint") != "enabled")
-            or (metadata.get("HttpPutResponseHopLimit") != 1)
-            or (metadata.get("InstanceMetadataTags") != "enabled")
-        ):
-            raise SafetyViolation(
-                "INSTANCE_IDENTITY_MISMATCH",
-                "EC2 identity or launch configuration differs",
-            )
+        comparisons = {
+            "launch_template": (instance.get("LaunchTemplate"), expected_template),
+            "image_id": (instance.get("ImageId"), data["ImageId"]),
+            "instance_type": (instance.get("InstanceType"), "t4g.micro"),
+            "architecture": (instance.get("Architecture"), "arm64"),
+            "subnet_id": (instance.get("SubnetId"), network["SubnetId"]),
+            "security_groups": (sorted(g["GroupId"] for g in instance.get("SecurityGroups", [])), sorted(network["Groups"])),
+            "instance_profile": (instance.get("IamInstanceProfile", {}).get("Arn"), f"arn:aws:iam::{self.account_id}:instance-profile/cloud-glider/{data['IamInstanceProfile']['Name']}"),
+            "http_tokens": (metadata.get("HttpTokens"), "required"),
+            "http_endpoint": (metadata.get("HttpEndpoint"), "enabled"),
+            "metadata_hop_limit": (metadata.get("HttpPutResponseHopLimit"), 1),
+            "metadata_tags": (metadata.get("InstanceMetadataTags"), "enabled"),
+        }
+        comparisons.update({"tag:" + k: (tags.get(k), v) for k, v in specification["tags"].items()})
+        mismatches = [name for name, (actual, expected) in comparisons.items() if actual != expected]
+        if mismatches:
+            raise SafetyViolation("INSTANCE_IDENTITY_MISMATCH",
+                                  "EC2 identity differs in: " + ", ".join(mismatches))
 
     def find_successor(self, specification: dict) -> dict | None:
         result = self._pages(
