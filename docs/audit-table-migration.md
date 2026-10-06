@@ -4,6 +4,32 @@ Preparation is local-only; live operations require an operator-authorized rollou
 The operator authorized the sandbox rollout on October 6, 2026. Its exact live
 receipts remain under ignored `.artifacts/audit-split/aws-rollout/`.
 
+## Sandbox rollout completed October 6, 2026
+
+All 32 original audit items (17 propagation and 15 release) were copied with exact
+full-value verification, then conditionally removed from the state table. The
+audit table contains those 32 items and one fenced migration release receipt;
+the state table retains seven items, including the three recovery audits. A native
+source-table backup is available. The new table has deletion protection and PITR.
+
+All four affected CloudFormation stacks completed their updates. Bootstrap
+delivery and hold Lambda concurrency were restored. Propagation remains disabled,
+CURRENT remains uninitialized, request counter 20 and the existing
+INSTANCE_IDENTITY_MISMATCH hold are preserved, and no live generations remain.
+No propagation cycle was started by this rollout.
+
+Validation includes 355 Python tests, successful GitHub validation, scoped IAM
+simulation, and an isolated guest cold-boot smoke test of the new immutable AMI.
+The smoke stack and temporary build resources were cleaned up. EC2 console output
+was empty, so the guest's explicit CloudFormation success signal is the cold-boot
+evidence; console-log verification and a live handoff cycle are not claimed.
+
+The deployed source preserves the existing binary-family runtime ahead of main.
+That branch must rebase onto this audit change and integrate audit destination
+validation into inherited settings and its control monitor before rebuilding its
+AMI. Exact deployed pins, source provenance, and integration instructions are in
+the local completion receipt and `family-rebase-notes.md` alongside it.
+
 ## Prepared scope
 
 `cfn/foundation.yaml` adds `cloud-glider-{environment}-audit` and redirects the
