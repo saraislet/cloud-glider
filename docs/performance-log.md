@@ -518,3 +518,65 @@ is READY, propagation disabled, and the prior generation limit of 2 restored.
 No pending cleanup retry token remains. Scheduler inventory was not independently
 queried after this run because the CLI lacks that permission and the browser
 was unavailable.
+
+## 2026-10-04 repeat combined daemon/timing benchmark
+
+Run E repeats run D with the same release and settings: ten generations 0–9,
+nine handoffs, EC2 backend, ARM64 `t4g.micro`, baked 2 GiB image, source
+`a32e6c9`, existing readiness/retirement gates and three-live ceiling. No boot
+optimization or additional collection permissions/infrastructure was introduced.
+SSM and SSH are disabled in the runtime image; timing records remain local
+and are not exported. Internal boot, API and phase journal durations are
+**not measured**, so this repeat is not a boot diagnosis.
+
+EC2 `LaunchTime`, first observed live STATE and successor functional proof
+provide distinct endpoints. Live STATE may precede functional readiness; the
+run D table's “observed readiness” column likewise measures first live STATE,
+not authoritative readiness. `CURRENT.updated_at` is the accepted ownership
+endpoint. Functional `proved_at_epoch` has whole-second precision. Sequential
+reads are not atomic; two-second sampling and cross-host clock skew limit
+phase subtraction. Proof→ownership includes publication and parent validation,
+not only boot time. First observed STATE publication timestamps may already
+reflect a heartbeat, so an exact initial publication boundary is not claimed.
+
+| Generation | Launch→observed live STATE (s) | Launch→functional proof (s) | Proof→ownership (s) | Launch→ownership (s) | Ownership hop (s) |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 0 | 28.379 | — | — | 27.659 | — |
+| 1 | 25.432 | 23.000 | 3.719 | 26.719 | 28.060 |
+| 2 | 22.480 | 22.000 | 3.684 | 25.684 | 27.965 |
+| 3 | 30.554 | 28.000 | 4.157 | 32.157 | 34.473 |
+| 4 | 21.608 | 22.000 | 3.741 | 25.741 | 28.584 |
+| 5 | 29.682 | 27.000 | 4.701 | 31.701 | 33.960 |
+| 6 | 27.742 | 25.000 | 4.265 | 29.265 | 31.564 |
+| 7 | 25.805 | 23.000 | 3.767 | 26.767 | 29.502 |
+| 8 | 28.872 | 25.000 | 4.199 | 29.199 | 31.432 |
+| 9 | 23.932 | 23.000 | 1.397 | 24.397 | 26.198 |
+
+Nine handoffs: mean **30.193s**, median **29.502s**,
+range **26.198–34.473s**. Seed creation→initial
+ownership: **31.985s**; seed creation→generation 9:
+**303.723s**; initial→final ownership:
+**271.738s**. Sampled live peak **3**, observed
+instances **10**; no failed handoffs or replacement instances observed. SDK
+retries remain unmeasured. Observer cadence median **2.005s**,
+maximum **2.005s**. All predecessors left the live inventory
+before cleanup. Observer UI was supplemental and showed transient lag/status
+misclassification; direct AWS/DynamoDB capture supplies these results.
+
+Compared with run D (31.681s mean / 323.711s total), this run was about
+4.7% lower in mean and 6.2% lower in total. Against the older functional
+baseline (31.012s / 310.247s), it was about 2.6% and 2.1% lower. Both daemon
+runs use unchanged software and have overlapping interval ranges; these
+observations do not establish causal speedup.
+
+A separately reviewed collection change could export best-effort sanitized
+timing records to the existing daemon operations log group, using its existing
+log-write permissions. Review volume, cost, failure isolation and contract
+before implementing; do not add retirement delays or readiness dependencies.
+
+Supported stop/cleanup completed. All ten instances are confirmed terminated,
+and generation root disks, seed stack and records are absent. READY with
+propagation disabled, active command NONE and prior generation limit 2 restored;
+all installed release pins verified. No pending cleanup retry token remains.
+Scheduler inventory was not independently queried after this run; available
+CLI permissions do not allow it.
