@@ -33,6 +33,8 @@ def av_string(value: str) -> dict[str, str]:
 
 def build_transaction(args: argparse.Namespace, *, now: str, event_id: str) -> list[dict[str, Any]]:
     defaults = load_defaults()
+    if getattr(args, "binary_fanout", False) and getattr(args, "propagation_backend", "cloudformation") != "ec2":
+        raise ValueError("Binary fan-out requires the EC2 backend")
     if not SHA256_RE.fullmatch(args.template_sha256):
         raise ValueError("--template-sha256 must be exactly 64 hexadecimal characters")
     if not SHA256_RE.fullmatch(args.daemon_artifact_sha256):
@@ -77,6 +79,11 @@ def build_transaction(args: argparse.Namespace, *, now: str, event_id: str) -> l
         "updated_by": av_string(args.operator_id),
     }
     if getattr(args, "propagation_backend", "cloudformation") == "ec2":
+        if not 0 <= args.max_generation <= 9:
+            raise ValueError("Inherited EC2 cycles support max_generation 0 through 9")
+        control.update(configuration_inheritance={"BOOL": True},
+            binary_fanout_enabled={"BOOL": bool(getattr(args, "binary_fanout", False))},
+            control_poll_seconds={"N": "2"}, control_max_age_seconds={"N": "15"}, retry_backoff_max_seconds={"N": "30"})
         if not re.fullmatch(r"[0-9]{12}", args.approved_account_id or ""):
             raise ValueError("EC2 requires --approved-account-id")
         if not re.fullmatch(r"lt-[0-9a-f]{17}", args.launch_template_id or ""):
@@ -156,6 +163,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--region", default=defaults["aws_region"])
     parser.add_argument("--profile")
     parser.add_argument("--propagation-backend", choices=["cloudformation", "ec2"], default="cloudformation")
+    parser.add_argument("--binary-fanout", action="store_true", help="Select inherited EC2 binary fan-out for a new cycle")
     parser.add_argument("--approved-account-id")
     parser.add_argument("--launch-template-id")
     parser.add_argument("--launch-template-version")

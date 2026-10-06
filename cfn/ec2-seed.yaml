@@ -2,6 +2,14 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: Operator seed instance from the persistent launch template; propagation uses direct EC2 APIs.
 
 Parameters:
+  CycleConfiguration:
+    Type: String
+    Default: ""
+    MaxLength: 4096
+  ConfigurationSha256:
+    Type: String
+    Default: ""
+    AllowedPattern: "^$|^[0-9a-f]{64}$"
   LaunchTemplateId:
     Type: String
     AllowedPattern: '^lt-[0-9a-f]{17}$'
@@ -123,6 +131,9 @@ Rules:
       - Assert: !Equals [!Ref ImageArchitecture, arm64]
         AssertDescription: Cloud Glider's initial sandbox requires a prevalidated arm64 AMI.
 
+Conditions:
+  HasInheritedConfiguration: !Not [!Equals [!Ref CycleConfiguration, ""]]
+
 Resources:
   GenerationInstance:
     Type: AWS::EC2::Instance
@@ -154,6 +165,47 @@ Resources:
       LaunchTemplate:
         LaunchTemplateId: !Ref LaunchTemplateId
         Version: !Ref LaunchTemplateVersion
+      UserData: !If
+        - HasInheritedConfiguration
+        - Fn::Base64: !Sub |
+            #!/bin/bash
+            set -euo pipefail
+            test "$(uname -m)" = "aarch64"
+            install -d -m 0750 /etc/cloud-glider /opt/cloud-glider
+            cat >/etc/cloud-glider/bootstrap.json <<'JSON'
+            {
+              "propagation_backend": "ec2",
+              "inherited_configuration": ${CycleConfiguration},
+              "daemon_delivery_mode": "baked",
+              "generation_table_name": "${GenerationTableName}",
+              "environment": "${Environment}",
+              "owner": "${Owner}",
+              "operational_alerts_topic_arn": "${OperationalAlertsTopicArn}",
+              "state_table_name": "${StateTableName}",
+              "bootstrap_version": "${BootstrapVersion}",
+              "template_version": "${TemplateVersion}",
+              "template_bucket": "${TemplateBucket}",
+              "template_key": "${TemplateKey}",
+              "template_s3_version_id": "${TemplateS3VersionId}",
+              "template_sha256": "${TemplateSha256}",
+              "template_build_id": "${TemplateBuildId}",
+              "daemon_artifact_bucket": "${DaemonArtifactBucket}",
+              "daemon_artifact_key": "${DaemonArtifactKey}",
+              "daemon_artifact_version_id": "${DaemonArtifactVersionId}",
+              "daemon_artifact_sha256": "${DaemonArtifactSha256}",
+              "propagation_audit_log_group": "${PropagationAuditLogGroupName}",
+              "daemon_operations_log_group": "${DaemonOperationsLogGroupName}",
+              "emergency_hold_function_name": "${EmergencyHoldFunctionName}"
+            }
+            JSON
+            chmod 0640 /etc/cloud-glider/bootstrap.json
+            test -f /etc/cloud-glider/image.json
+            test -x /opt/cloud-glider/venv/bin/python
+            /usr/bin/python3 /usr/local/lib/cloud-glider/verify_image.py --config /etc/cloud-glider/bootstrap.json
+            install -d -m 0750 /var/lib/cloud-glider
+            systemctl enable --now cloud-glider.service
+
+        - !Ref AWS::NoValue
       Tags:
         - Key: bootstrap-request-id
           Value: !Ref RequestId
@@ -163,8 +215,12 @@ Resources:
           Value: !Ref PredecessorStackId
         - Key: handoff-token
           Value: !Ref HandoffToken
+        - Key: node-path
+          Value: r
+        - Key: configuration-sha256
+          Value: !Ref ConfigurationSha256
         - Key: Name
-          Value: !Sub 'cloud-glider-${Environment}-gen-${Generation}'
+          Value: !If [HasInheritedConfiguration, !Sub 'cloud-glider-${Environment}-${RequestId}-r', !Sub 'cloud-glider-${Environment}-gen-${Generation}']
         - Key: project
           Value: cloud-glider
         - Key: environment

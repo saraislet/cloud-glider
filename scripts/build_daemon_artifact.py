@@ -23,6 +23,9 @@ SOURCE_FILES = (
     Path("cloud_glider/timing_export.py"),
     Path("cloud_glider/ec2_daemon.py"),
     Path("cloud_glider/ec2_sdk.py"),
+    Path("cloud_glider/inherited.py"),
+    Path("cloud_glider/family_daemon.py"),
+    Path("cloud_glider/family_sdk.py"),
     Path("requirements.txt"),
 )
 

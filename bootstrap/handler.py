@@ -42,7 +42,41 @@ def require(condition, message):
         raise RuntimeError(message)
 
 
-def parameters(control, env, request_id):
+def inherited_envelope(control, request_id, enabled):
+    def native(value):
+        if 'S' in value: return value['S']
+        if 'N' in value: return int(value['N'])
+        if 'BOOL' in value: return value['BOOL']
+        if 'L' in value: return [native(v) for v in value['L']]
+        raise RuntimeError('Unsupported inherited setting')
+    names = ('environment approved_region approved_account_id approved_architecture approved_instance_types '
+        'launch_template_id launch_template_version launch_template_sha256 max_generation '
+        'readiness_poll_seconds readiness_timeout_seconds heartbeat_interval_seconds '
+        'template_sha256 template_s3_version_id template_s3_bucket template_s3_key template_build_id '
+        'desired_template_version desired_bootstrap_version generation_table_name '
+        'daemon_artifact_sha256 daemon_artifact_version_id daemon_artifact_bucket daemon_artifact_key').split()
+    settings = {name: native(control[name]) for name in names}
+    binary = control.get('binary_fanout_enabled', {'BOOL': False})
+    require(type(binary.get('BOOL')) is bool, 'binary_fanout_enabled must be Boolean')
+    require(type(settings['max_generation']) is int and 0 <= settings['max_generation'] <= 9,
+            'Inherited cycles support generation 0 through 9')
+    settings.update(schema_version='3', request_id=request_id, binary_fanout_enabled=binary['BOOL'],
+        initial_propagation_enabled=enabled,
+        retry_backoff_max_seconds=int(control.get('retry_backoff_max_seconds', {'N': '30'})['N']),
+        control_poll_seconds=int(control.get('control_poll_seconds', {'N': '2'})['N']),
+        control_max_age_seconds=int(control.get('control_max_age_seconds', {'N': '15'})['N']))
+    require(all(type(settings[n]) is int and settings[n] > 0 for n in
+        ('readiness_poll_seconds', 'readiness_timeout_seconds', 'heartbeat_interval_seconds',
+         'control_poll_seconds', 'control_max_age_seconds', 'retry_backoff_max_seconds')), 'Invalid inherited timing')
+    require(settings['retry_backoff_max_seconds'] >= settings['readiness_poll_seconds'], 'Retry cap shorter than polling')
+    require(settings['control_max_age_seconds'] >= settings['control_poll_seconds'], 'Control freshness shorter than polling')
+    digest = hashlib.sha256(json.dumps(settings, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    return {'settings': settings, 'sha256': digest}
+
+
+def parameters(control, env, request_id, request=None):
+    if request and 'cycle_control' in request:
+        control = request['cycle_control']['M']
     result = json.loads(env['GENERATION_PARAMETERS'])
     fields = {
         'BootstrapVersion': 'desired_bootstrap_version', 'TemplateVersion': 'desired_template_version',
@@ -56,6 +90,11 @@ def parameters(control, env, request_id):
     if control.get('propagation_backend') == {'S': 'ec2'}:
         result['LaunchTemplateId'] = control['launch_template_id']['S']
         result['LaunchTemplateVersion'] = control['launch_template_version']['S']
+        if control.get('configuration_inheritance') == {'BOOL': True}:
+            enabled = bool(request and request.get('initial_propagation_enabled') == {'BOOL': True})
+            envelope = inherited_envelope(control, request_id, enabled)
+            result['CycleConfiguration'] = json.dumps(envelope, sort_keys=True, separators=(',', ':'))
+            result['ConfigurationSha256'] = envelope['sha256']
     result['GenerationTableName'] = env['GENERATION_TABLE']
     result.update(Generation='000000', PredecessorStackId='NONE', HandoffToken='OPERATOR_BOOTSTRAP', RequestId=request_id)
     return result
@@ -101,7 +140,11 @@ def guard(control, current, hold, request, event_request, env, status):
     require(control.get('approved_region') == {'S': 'us-west-2'}, 'Region mismatch')
     require(control.get('approved_architecture') == {'S': 'arm64'}, 'Architecture mismatch')
     require(control.get('approved_instance_types') == {'L': [{'S': 't4g.micro'}]}, 'Instance type mismatch')
-    require(control.get('max_live_generations') == {'N': '3'}, 'Live generation limit mismatch')
+    if control.get('configuration_inheritance') != {'BOOL': True}:
+        require(control.get('max_live_generations') == {'N': '3'}, 'Live generation limit mismatch')
+    require(control.get('binary_fanout_enabled') != {'BOOL': True} or (
+        control.get('propagation_backend') == {'S': 'ec2'} and
+        control.get('configuration_inheritance') == {'BOOL': True}), 'Binary mode requires inherited EC2 lifecycle')
     require(int(control['max_generation']['N']) >= 0, 'Invalid generation limit')
 
 
@@ -192,7 +235,7 @@ def reconcile_submitted_bootstrap(ddb, cfn, table, control, request, env, name):
     stack = describe(cfn, stack_id)
     require(stack is not None and stack.get('StackId') == stack_id,
             'Submitted bootstrap stack cannot be verified; inspect manually')
-    verify_existing(stack, parameters(control, env, request_id), env, request_id)
+    verify_existing(stack, parameters(control, env, request_id, request), env, request_id)
     verify_cleanup_stack(stack, env, request_id)
     record_bootstrap_submission(ddb, env['GENERATION_TABLE'], request_id, stack_id)
     release_submission(ddb, table, request_id)
@@ -209,7 +252,17 @@ def process(event_request, ddb, cfn, s3, ec2, env):
     if status == 'CANCELLED':
         return
     request_id = request['request_id']['S']
-    params = parameters(control, env, request_id)
+    pin = {}
+    if control.get('configuration_inheritance') == {'BOOL': True} and 'cycle_control' not in request:
+        require(status == 'READY', 'Unpinned inherited bootstrap requires offline preparation')
+        enabled = request.get('propagation_enabled') == {'BOOL': True}
+        require(enabled, 'Inherited bootstrap requires START with propagation enabled')
+        envelope = inherited_envelope(control, request_id, enabled)
+        pin = {'cycle_control': {'M': {k: v for k, v in control.items() if k not in OPERATOR_FIELDS}},
+               'cycle_configuration_sha256': {'S': envelope['sha256']},
+               'initial_propagation_enabled': {'BOOL': enabled}}
+        request = {**request, **pin}
+    params = parameters(control, env, request_id, request)
     require(re.fullmatch('[1-9][0-9]{0,17}', request_id), 'Invalid request id')
     existing = describe(cfn, name)
     if status == 'CREATING':
@@ -236,11 +289,12 @@ def process(event_request, ddb, cfn, s3, ec2, env):
         verify_ec2_template(ec2, control, params)
     # A durable claim prevents duplicate execution and automatic rebootstrap after deletion.
     ddb.update_item(TableName=table, Key=key('BOOTSTRAP', 'REQUEST'),
-        UpdateExpression='SET #s = :creating',
+        UpdateExpression='SET #s = :creating' + ''.join(', ' + name + ' = :pin_' + name for name in pin),
         ConditionExpression='request_id = :id AND #s = :requested AND control_sha256 = :digest AND bootstrap_requested = :enabled AND cleanup_requested = :no AND cleanup_status IN (:idle, :complete)',
         ExpressionAttributeNames={'#s': 'status'}, ExpressionAttributeValues={
             ':id': {'S': request_id}, ':requested': {'S': 'READY'}, ':enabled': {'BOOL': True}, ':creating': {'S': 'CREATING'},
-            ':digest': request['control_sha256'], ':no': {'BOOL': False}, ':idle': {'S': 'IDLE'}, ':complete': {'S': 'COMPLETE'}})
+            ':digest': request['control_sha256'], ':no': {'BOOL': False}, ':idle': {'S': 'IDLE'}, ':complete': {'S': 'COMPLETE'},
+            **{':pin_' + name: value for name, value in pin.items()}})
     claim_submission(ddb, table, request_id, name)
     fresh = snapshot(ddb, table)
     guard(*fresh, event_request, env, 'CREATING')
@@ -427,7 +481,8 @@ def complete_cleanup(ddb, table, control, current, request, env):
         'bootstrap_requested': {'BOOL': False}, 'propagation_enabled': {'BOOL': False},
         'cleanup_requested': {'BOOL': False}, 'cleanup_status': {'S': 'COMPLETE'},
         'cleanup_completed_at': {'N': str(int(time.time()))}, 'control_sha256': {'S': fingerprint(control)}}
-    for field in ('cleanup_retry_token', 'cleanup_retry_at', 'cleanup_retry_sequence'):
+    for field in ('cleanup_retry_token', 'cleanup_retry_at', 'cleanup_retry_sequence',
+                  'cycle_control', 'cycle_configuration_sha256', 'initial_propagation_enabled'):
         ready.pop(field, None)
     ready.pop('stack_id', None)
     ready.pop('requested_at', None)
@@ -446,6 +501,8 @@ def complete_cleanup(ddb, table, control, current, request, env):
 def cleanup_step(event_request, ddb, cfn, ec2, env):
     table = env['STATE_TABLE']
     control, current, hold, request = snapshot(ddb, table)
+    if 'cycle_control' in request:
+        control = {**control, **request['cycle_control']['M']}
     if request.get('request_id') != event_request.get('request_id'):
         return  # Old stream records cannot operate on a newer chain.
     status = request.get('cleanup_status', {}).get('S')
@@ -474,6 +531,10 @@ def cleanup_step(event_request, ddb, cfn, ec2, env):
         # Verify the complete inventory before deleting any stack.
         require(current.get('status', {}).get('S') in ('UNINITIALIZED', 'CURRENT'), 'Missing or invalid CURRENT')
         states = generation_state(ddb, env['GENERATION_TABLE'], request_id)
+        if any(item.get('SK') == {'S': 'SUBMISSION'} and item.get('settled') == {'BOOL': False} for item in states):
+            require(int(time.time()) - int(request['cleanup_started_at']['N']) < 180,
+                    'Unsettled family submission; reconcile exact instance before cleanup')
+            return
         known_ids = {item['stack_id']['S'] for item in states if 'stack_id' in item}
         known_ids.update(entry['S'] for entry in request.get('cleanup_stack_ids', {}).get('L', []))
         if 'stack_id' in request:
@@ -713,6 +774,13 @@ def consume_command(ddb, env, event_control=None):
         status = request.get('status', {}).get('S')
         if status == 'READY':
             updated.update(bootstrap_requested={'BOOL': True}, propagation_enabled={'BOOL': True})
+            if control.get('configuration_inheritance') == {'BOOL': True}:
+                require(control.get('propagation_backend') == {'S': 'ec2'}, 'Inheritance requires EC2')
+                envelope = inherited_envelope(control, request_id, True)
+                updated.update(cycle_control={'M': {k: v for k, v in control.items() if k not in OPERATOR_FIELDS}},
+                    control_sha256={'S': fingerprint(control)},
+                    cycle_configuration_sha256={'S': envelope['sha256']},
+                    initial_propagation_enabled={'BOOL': True})
             try:
                 guard(control, current, hold, updated, updated, env, 'READY')
             except (RuntimeError, KeyError, ValueError) as exc:

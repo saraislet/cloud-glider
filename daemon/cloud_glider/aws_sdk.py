@@ -789,7 +789,7 @@ class AwsSdkGateway:
         )
 
     def invoke_hold(
-        self, generation: str, error_code: str, correlation_id: str
+        self, generation: str, error_code: str, correlation_id: str, *, node_path: str | None = None
     ) -> None:
         payload = json.dumps(
             {
@@ -797,6 +797,7 @@ class AwsSdkGateway:
                 "error_code": error_code,
                 "correlation_id": correlation_id,
                 "request_id": self.config.request_id,
+                **({"node_path": node_path} if node_path is not None else {}),
             }
         ).encode()
         result = self._call(

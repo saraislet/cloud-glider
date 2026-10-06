@@ -705,7 +705,7 @@ def load_instance_config(static: dict) -> dict:
         raise TransientFailure("own EC2 identity lookup incomplete")
     instance = Ec2SdkGateway._instance(instances[0])
     tags = instance["Tags"]
-    return {
+    result = {
         **static,
         "instance_id": instance_id,
         "request_id": tags.get("bootstrap-request-id", ""),
@@ -715,3 +715,8 @@ def load_instance_config(static: dict) -> dict:
         "launch_template_id": instance["LaunchTemplate"]["LaunchTemplateId"],
         "launch_template_version": instance["LaunchTemplate"]["Version"],
     }
+    if static.get("inherited_configuration") is not None:
+        result["node_path"] = tags.get("node-path", "")
+        if tags.get("configuration-sha256") != static["inherited_configuration"].get("sha256"):
+            raise SafetyViolation("INHERITED_CONFIG_INVALID", "instance configuration tag differs")
+    return result

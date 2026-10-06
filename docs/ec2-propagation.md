@@ -1,5 +1,10 @@
 # Direct EC2 propagation
 
+New source supports independently propagating single/binary EC2 families with
+inherited configuration. See [the family runbook](independent-ec2-families.md) and
+[decision 0023](decisions/0023-independent-inherited-ec2-families.md). This is not
+deployed; existing cycles and the historical release receipts below are unchanged.
+
 This runbook applies only to explicitly initialized `ec2` cycles in the `cloud-glider` repository. The legacy CloudFormation backend and its templates remain available. The retained infrastructure, persistent launch template and seed remain operator-managed CloudFormation resources. Per-generation successors and retirement use EC2 APIs.
 
 ## Offline activation

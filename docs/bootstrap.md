@@ -1,5 +1,11 @@
 # Bootstrap and cleanup runbook
 
+For new inherited EC2 families, see [the family runbook](independent-ec2-families.md).
+It adds bootstrap-pinned configuration, asynchronous launch cancellation,
+per-node ownership, retained leaves and per-child cleanup reconciliation. The
+changed bootstrap must be deployed before activating that lifecycle; this source
+change performs no AWS deployment. Existing cycles retain the behavior below.
+
 Use one DynamoDB item: `CONTROL/GLOBAL` in `cloud-glider-sandbox-state`, Region
 `us-west-2`. Generation details live separately in `cloud-glider-sandbox-generations`. Pick a small generation limit. Billing alerts and notification verification remain deferred to V2.
 

@@ -1,5 +1,11 @@
 # Cloud Glider
 
+Source now includes live-agent support for inherited single-successor and binary
+EC2 families. Deployment requires a matching rebuilt AMI, immutable artifacts,
+reviewed launch-template pins and bootstrap update. See
+[independent EC2 families](docs/independent-ec2-families.md). No AWS deployment or
+live binary propagation test has been performed for this source change.
+
 This is a sanitized source copy. Read [public repository preparation](docs/public-repository.md) before deployment; historical recovery artifacts are examples only.
 
 Cloud Glider is a deliberately self-propagating EC2 compute pattern. Each
