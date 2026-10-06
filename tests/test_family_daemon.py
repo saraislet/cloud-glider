@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import Mock, patch
 
 from test_ec2_daemon import config, control
 from cloud_glider.daemon import SafetyViolation, TransientFailure
@@ -87,6 +88,18 @@ class World:
 
 
 class FamilyDaemonTests(unittest.TestCase):
+    def test_retirement_and_persisted_stop_exit_normally_for_diagnostic_drain(self):
+        for result in ("RETIRING", "STOPPED"):
+            with self.subTest(result=result), patch("cloud_glider.family_daemon.Path") as path:
+                path.return_value.__truediv__.return_value.exists.return_value = False
+                monitor = Mock()
+                daemon = FamilyDaemon(family_config(), Mock(), monitor=monitor,
+                                      logger=Mock(), sleep=Mock(side_effect=AssertionError("must exit")))
+                daemon.cycle = Mock(return_value=result)
+                self.assertEqual(daemon.run(), 0)
+                monitor.close.assert_called_once()
+
+
     def test_actual_agent_binary_tree_inherits_configuration_and_retains_leaves(self):
         world = World()
         world.run()

@@ -157,6 +157,10 @@ class FamilyDaemon:
                         "instance_id": self.config.instance_id, "result": result,
                         "duration_seconds": round(time.monotonic() - started, 6)}, sort_keys=True))
                     failures = 0
+                    if result in ("RETIRING", "STOPPED"):
+                        # Finish the process normally so the entrypoint drains
+                        # durable diagnostics before EC2 shutdown or local stop.
+                        return 0
                 except TransientFailure as exc:
                     self.logger(str(exc))
                     failures += 1
