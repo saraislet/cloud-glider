@@ -4,6 +4,7 @@ import argparse
 import glob
 import json
 import os
+import re
 from pathlib import Path
 import sys
 import urllib.request
@@ -40,14 +41,28 @@ def main():
         with urllib.request.urlopen(request,timeout=.3) as response:return response.read().decode()
     instance=imds('meta-data/instance-id')
     region=json.loads(imds('dynamic/instance-identity/document'))['region']
+    session=boto3.Session(region_name=region)
+    transport=Config(connect_timeout=.3,read_timeout=.3,retries={'total_max_attempts':1})
+    ec2=session.client('ec2',config=transport)
+    try:
+        result=ec2.describe_instances(InstanceIds=[instance])
+    finally:
+        ec2.close()
+    instances=[i for reservation in result.get('Reservations',[]) for i in reservation.get('Instances',[])]
+    if len(instances)!=1 or instances[0].get('InstanceId')!=instance:
+        raise ValueError('MissingFailedBootIdentity')
+    tags={t['Key']:t['Value'] for t in instances[0].get('Tags',[])}
+    request_id=tags.get('bootstrap-request-id','')
+    generation=tags.get('generation','')
+    if not re.fullmatch(r'[1-9][0-9]{0,17}',request_id) or not re.fullmatch(r'[0-9]{6}',generation):
+        raise ValueError('InvalidFailedBootCorrelation')
     manifest=json.loads(Path('/etc/cloud-glider/image.json').read_text())
-    identity=dict(environment=config.environment,request_id=config.request_id,
-        generation=config.generation,instance_id=instance,boot_id=boot,
+    identity=dict(environment=config.environment,request_id=request_id,
+        generation=generation,instance_id=instance,boot_id=boot,
         source_commit=manifest['source_commit'],daemon_sha256=manifest['daemon_sha256'])
-    def client():return boto3.Session(region_name=region).client('logs',config=Config(
-        connect_timeout=.3,read_timeout=.3,retries={'total_max_attempts':1}))
+    def client():return session.client('logs',config=transport)
     export=Exporter(client,config.daemon_operations_log_group,
-        'timing/'+config.request_id+'/'+config.generation+'/'+instance+'/'+boot,identity)
+        'timing/'+request_id+'/'+generation+'/'+instance+'/'+boot,identity)
     spool=Path('/var/lib/cloud-glider/boot-timing')/(boot+'.jsonl')
     if spool.exists():
         with spool.open() as source:text=source.read(65536)

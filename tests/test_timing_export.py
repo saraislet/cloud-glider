@@ -142,7 +142,8 @@ class FailedStartupTests(unittest.TestCase):
                 value=str(value);return real_path(value) if value==str(config) else root/value.lstrip('/')
             def request(req,**kw):
                 return io.BytesIO(b'{"region":"us-west-2"}' if 'document' in req.full_url else b'i-smoke')
-            fake_boto=types.SimpleNamespace(Session=lambda **kw:types.SimpleNamespace(client=lambda *a,**kw:sink))
+            ec2=types.SimpleNamespace(describe_instances=lambda **kw:{'Reservations':[{'Instances':[{'InstanceId':'i-smoke','Tags':[{'Key':'bootstrap-request-id','Value':'16'},{'Key':'generation','Value':'000000'}]}]}]},close=lambda:None)
+            fake_boto=types.SimpleNamespace(Session=lambda **kw:types.SimpleNamespace(client=lambda service,**kw:ec2 if service=='ec2' else sink))
             with patch.object(helper,'Path',side_effect=path),patch.object(helper.urllib.request,'urlopen',side_effect=request),patch.object(sys,'argv',['helper','--config',str(config)]),patch.dict('os.environ',{'SERVICE_RESULT':'exit-code','INVOCATION_ID':'broken'}),patch.dict(sys.modules,{'timing_export':sys.modules['cloud_glider.timing_export'],'boto3':fake_boto}):
                 helper.main()
             self.assertTrue(sink.records[-1]['complete'])
