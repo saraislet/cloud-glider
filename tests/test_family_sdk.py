@@ -195,6 +195,11 @@ class FamilySdkTests(unittest.TestCase):
         self.gateway.describe_instance = Mock(return_value=parent)
         self.gateway.read_node = Mock(return_value=receipt)
         self.assertTrue(self.gateway.parent_terminated())
+        self.assertIn('termination_confirmed', str(self.calls[-1]))
+        self.assertIn('client_token = :token', str(self.calls[-1]))
+        count = len(self.calls)
+        self.assertTrue(self.gateway.parent_terminated())
+        self.assertEqual(len(self.calls), count)
         for field, value in (("request_id", "other"), ("owner", "other"), ("status", "OWNER"), ("retirement_children", ["r0"])):
             self.gateway.read_node.return_value = {**receipt, field: value}
             with self.assertRaises(SafetyViolation): self.gateway.parent_terminated()

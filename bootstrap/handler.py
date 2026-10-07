@@ -439,6 +439,34 @@ def inspect_instances(ec2, env):
             for reservation in page['Reservations'] for instance in reservation['Instances']]
 
 
+def recorded_instance(ec2, instance_id, record, control, request_id):
+    """Missing EC2 descriptions require an explicit durable termination receipt."""
+    require(record is not None and record.get('instance_id') == {'S': instance_id}
+            and record.get('request_id') == {'S': request_id}
+            and record.get('launch_template_id') == control['launch_template_id']
+            and record.get('launch_template_version') == control['launch_template_version'],
+            'Missing or mismatched exact EC2 inventory')
+    try:
+        exact = [i for r in ec2.describe_instances(InstanceIds=[instance_id]).get('Reservations', []) for i in r.get('Instances', [])]
+    except Exception as exc:
+        if getattr(exc, 'response', {}).get('Error', {}).get('Code') != 'InvalidInstanceID.NotFound':
+            raise
+        exact = []
+    if not exact:
+        require(record.get('termination_confirmed') == {'BOOL': True}
+                and bool(record.get('termination_observed_at', {}).get('S'))
+                and re.fullmatch('[a-f0-9]{64}', record.get('termination_evidence_sha256', {}).get('S', '')),
+                'Recorded EC2 deletion is ambiguous')
+        return None
+    require(len(exact) == 1 and exact[0]['InstanceId'] == instance_id, 'Recorded EC2 deletion is ambiguous')
+    tags = {t['Key']: t['Value'] for t in exact[0].get('Tags', [])}
+    require(tags.get('bootstrap-request-id') == request_id and tags.get('propagation-backend') == 'ec2'
+            and tags.get('aws:ec2launchtemplate:id') == control['launch_template_id']['S']
+            and tags.get('aws:ec2launchtemplate:version') == control['launch_template_version']['S']
+            and record.get('client_token') == {'S': exact[0].get('ClientToken', '')}, 'Exact EC2 ownership changed')
+    return exact[0]
+
+
 def verify_residuals(ec2, env, volume_ids):
     require(not inspect_instances(ec2, env), 'Residual generation instances require inspection')
     filters = [{'Name': 'tag:project', 'Values': ['cloud-glider']},
@@ -601,13 +629,7 @@ def cleanup_step(event_request, ddb, cfn, ec2, env):
         for instance_id in sorted(direct_ids):
             record = resources.get(instance_id)
             require(record is not None and re.fullmatch('i-[0-9a-f]{17}', instance_id), 'Missing exact EC2 inventory')
-            exact = [i for r in ec2.describe_instances(InstanceIds=[instance_id]).get('Reservations', []) for i in r.get('Instances', [])]
-            require(len(exact) == 1 and exact[0]['InstanceId'] == instance_id, 'Recorded EC2 deletion is ambiguous')
-            tags = {t['Key']: t['Value'] for t in exact[0].get('Tags', [])}
-            require(tags.get('bootstrap-request-id') == request_id and tags.get('propagation-backend') == 'ec2'
-                and tags.get('aws:ec2launchtemplate:id') == control['launch_template_id']['S']
-                and tags.get('aws:ec2launchtemplate:version') == control['launch_template_version']['S']
-                and record.get('client_token') == {'S': exact[0].get('ClientToken', '')}, 'Exact EC2 ownership changed')
+            recorded_instance(ec2, instance_id, record, control, request_id)
         cleanup_update(ddb, table, request_id, {
             'cleanup_status': {'S': 'DELETING' if stacks or direct_ids else 'VERIFYING'},
             'cleanup_instance_ids': {'L': [{'S': value} for value in sorted(direct_ids)]},
@@ -616,18 +638,11 @@ def cleanup_step(event_request, ddb, cfn, ec2, env):
         direct_pending = False
         for instance_id in sorted(direct_ids):
             cleanup_guard(ddb, table, request_id)
-            exact = [i for r in ec2.describe_instances(InstanceIds=[instance_id]).get('Reservations', []) for i in r.get('Instances', [])]
-            require(len(exact) == 1 and exact[0]['InstanceId'] == instance_id, 'Recorded EC2 deletion is ambiguous')
-            tags = {t['Key']: t['Value'] for t in exact[0].get('Tags', [])}
             record = resources.get(instance_id)
-            require(record is not None and tags.get('bootstrap-request-id') == request_id
-                and tags.get('propagation-backend') == 'ec2'
-                and tags.get('aws:ec2launchtemplate:id') == control['launch_template_id']['S']
-                and tags.get('aws:ec2launchtemplate:version') == control['launch_template_version']['S']
-                and record.get('client_token') == {'S': exact[0].get('ClientToken', '')}, 'Exact EC2 ownership changed')
-            if exact[0]['State']['Name'] != 'terminated':
+            exact = recorded_instance(ec2, instance_id, record, control, request_id)
+            if exact is not None and exact['State']['Name'] != 'terminated':
                 direct_pending = True
-                if exact[0]['State']['Name'] != 'shutting-down':
+                if exact['State']['Name'] != 'shutting-down':
                     cleanup_guard(ddb, table, request_id)
                     ec2.terminate_instances(InstanceIds=[instance_id])
         for stack in stacks:

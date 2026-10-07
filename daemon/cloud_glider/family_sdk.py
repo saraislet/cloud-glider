@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 import time
+import hashlib
+import json
+from datetime import datetime, timezone
 from .daemon import SafetyViolation, TransientFailure
 from .aws_sdk import _av, _ddb_item, _item
 from .ec2_sdk import Ec2SdkGateway
@@ -14,6 +17,7 @@ class FamilySdkGateway(Ec2SdkGateway):
         self.settings = validate(config)
         self.configuration_sha256 = config.inherited_configuration["sha256"]
         self.first_ready_at = None
+        self.confirmed_parent_termination = False
 
     def node_key(self, path, sk="NODE"):
         return {"PK": {"S": "GEN#" + path}, "SK": {"S": sk}}
@@ -292,6 +296,17 @@ class FamilySdkGateway(Ec2SdkGateway):
                 or receipt.get("retirement_children") != list(child_paths(self.config.node_path[:-1], self.settings))
                 or any(tags.get(k) != v for k, v in spec["tags"].items())):
                 raise SafetyViolation("PARENT_RETIREMENT_IDENTITY_MISMATCH", "terminated parent differs from durable retirement receipt or lineage tags")
+            if not self.confirmed_parent_termination:
+                proof = json.dumps(parent, sort_keys=True, default=str, separators=(",", ":"))
+                self.transact([{"Update": {"TableName": self.config.generation_table_name,
+                    "Key": self.node_key(self.config.node_path[:-1], "RESOURCE#" + self.config.predecessor_instance_id),
+                    "UpdateExpression": "SET termination_confirmed = :yes, termination_observed_at = if_not_exists(termination_observed_at, :at), termination_evidence_sha256 = if_not_exists(termination_evidence_sha256, :sha)",
+                    "ConditionExpression": "request_id = :id AND instance_id = :instance AND launch_template_id = :lt AND launch_template_version = :version AND client_token = :token",
+                    "ExpressionAttributeValues": {":yes": _av(True), ":at": _av(datetime.now(timezone.utc).isoformat()),
+                        ":sha": _av(hashlib.sha256(proof.encode()).hexdigest()), ":id": _av(self.config.request_id),
+                        ":instance": _av(self.config.predecessor_instance_id), ":lt": _av(self.config.launch_template_id),
+                        ":version": _av(self.config.launch_template_version), ":token": _av(parent.get("ClientToken", ""))}}}], bookkeeping=True)
+                self.confirmed_parent_termination = True
         else:
             self.verify_instance(parent, spec)
         return parent["State"]["Name"]

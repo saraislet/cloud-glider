@@ -233,3 +233,19 @@ Observer joins family records independently of scan/stream arrival order, shows
 accepted family ownership, functional proof, stop and retirement states, and
 uses EC2 launch time with retained first-readiness time for intervals. Old images
 lack first-readiness timestamps; missing historical timings are not invented.
+
+Cleanup also needs a durable record of physical termination: EC2 eventually stops
+returning terminated instances. A successor now stores a cycle-fenced RESOURCE
+receipt only after exact EC2 TERMINATED state and the accepted parent retirement
+identity have been verified. The receipt preserves the first observation time
+and evidence digest. Cleanup accepts an absent exact ID only with that receipt,
+matching cycle and launch-template pins. A present instance still requires exact
+ownership validation; API authorization, throttling and transport errors never
+count as absence. Historical cycles without receipts require an explicit operator
+recovery using retained physical-termination evidence before normal cleanup can
+continue. STOP alone preserves running instances; CLEANUP terminates them.
+
+The operator submission-reconciliation supplement in
+`iam/operator-family-cleanup-reconciliation.json` is restricted to generation
+keys and submission receipt attributes. It does not permit termination receipts,
+NODE ownership updates, or CONTROL changes.
