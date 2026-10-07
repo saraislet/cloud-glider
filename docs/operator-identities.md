@@ -164,11 +164,16 @@ rendered template passed CloudFormation validation and cfn-lint.
 A subsequent isolated smoke operation using the migration builder role launched
 its instance and received the guest's success signal, but console collection
 failed because the original smoke supplement lacked `ec2:GetConsoleOutput`.
-The scoped console-read correction is included in this source change; deployment
-and a successful console read through the replacement role still require proof.
-AWS policy validation and all ten console-scope simulations passed for the
-proposed complete builder policy. No smoke instance or lifecycle state was
-changed while validating this permission correction.
+Anna Sarai subsequently authorized live IAM deployment. The console-read
+correction was applied through an exact one-role CloudFormation change set and
+the operator-identities stack reached `UPDATE_COMPLETE`. Both actual console
+collection and authorization DryRun succeeded through `glider-build-migration`
+on existing smoke instances, including their guest success markers. All ten
+scope simulations also passed against the deployed role. Live readback matched
+the updated template and confirmed that original grants and inspected existing
+role trusts remained unchanged. No smoke instance or lifecycle state was changed
+while applying or validating this permission correction. After rebasing onto
+the current main branch, the complete Python suite passed 429 tests.
 
 Identity Center provisioning/sign-in validation is pending. Actual build/smoke,
 release, normal command/cleanup and exceptional recovery/deletion workflows remain
