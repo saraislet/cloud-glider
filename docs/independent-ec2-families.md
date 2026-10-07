@@ -249,3 +249,14 @@ The operator submission-reconciliation supplement in
 `iam/operator-family-cleanup-reconciliation.json` is restricted to generation
 keys and submission receipt attributes. It does not permit termination receipts,
 NODE ownership updates, or CONTROL changes.
+
+Cycle 21 cleanup was subsequently completed through the normal controller path
+after operator recovery recorded the twelve exact, previously observed physical
+terminations. The remaining seventeen instances were terminated. Verification
+found no surviving generation instances, generation stack, sandbox volumes,
+generation alarms, or generation inventory records. BOOTSTRAP advanced to request
+22 with READY/COMPLETE, CONTROL acknowledged NONE/COMPLETE, and propagation stayed
+disabled. Both in-progress candidate image builds were canceled with Packer's
+normal cleanup; this repair has not yet completed a fresh 31-instance live trial.
+Local validation passed 420 Python tests, the deterministic Observer UI check,
+repository safety checks, generated bootstrap consistency and CloudFormation lint.
