@@ -1,0 +1,36 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReconcileSandboxFamilySubmissionReceipts",
+      "Effect": "Allow",
+      "Action": "dynamodb:UpdateItem",
+      "Resource": "arn:aws:dynamodb:us-west-2:482268323955:table/cloud-glider-sandbox-generations",
+      "Condition": {
+        "ForAllValues:StringLike": {
+          "dynamodb:LeadingKeys": [
+            "GEN#r*"
+          ]
+        },
+        "ForAllValues:StringEquals": {
+          "dynamodb:Attributes": [
+            "PK",
+            "SK",
+            "request_id",
+            "token",
+            "settled",
+            "aborted",
+            "instance_id"
+          ]
+        },
+        "StringEqualsIfExists": {
+          "dynamodb:ReturnValues": "NONE"
+        },
+        "Null": {
+          "dynamodb:LeadingKeys": "false",
+          "dynamodb:Attributes": "false"
+        }
+      }
+    }
+  ]
+}

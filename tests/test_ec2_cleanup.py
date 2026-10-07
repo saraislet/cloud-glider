@@ -94,3 +94,37 @@ class Ec2CleanupTests(unittest.TestCase):
             self.step()
         self.ec2.terminate_instances.assert_not_called()
         self.assertEqual(self.request["request_id"], {"S": "1"})
+
+    def test_missing_instance_with_exact_termination_receipt_is_settled(self):
+        record = self.ddb.items[("GEN#000001", "RESOURCE#" + self.identifier)]
+        record.update(termination_confirmed={"BOOL": True},
+                      termination_observed_at={"S": "2026-10-07T01:34:57+00:00"},
+                      termination_evidence_sha256={"S": "a" * 64})
+        self.ec2.describe_instances.side_effect = None
+        self.ec2.describe_instances.return_value = {"Reservations": []}
+        control = self.ddb.items[("CONTROL", "GLOBAL")]
+        self.assertIsNone(fixtures.controller.recorded_instance(
+            self.ec2, self.identifier, record, control, "1"))
+        for field in ("termination_confirmed", "termination_observed_at", "termination_evidence_sha256"):
+            changed = copy.deepcopy(record)
+            del changed[field]
+            with self.assertRaisesRegex(RuntimeError, "ambiguous"):
+                fixtures.controller.recorded_instance(self.ec2, self.identifier, changed, control, "1")
+        with self.assertRaisesRegex(RuntimeError, "mismatched"):
+            fixtures.controller.recorded_instance(self.ec2, self.identifier, record, control, "2")
+
+    def test_receipt_never_masks_present_identity_mismatch_or_api_failure(self):
+        record = self.ddb.items[("GEN#000001", "RESOURCE#" + self.identifier)]
+        record.update(termination_confirmed={"BOOL": True}, termination_observed_at={"S": "now"},
+                      termination_evidence_sha256={"S": "a" * 64})
+        control = self.ddb.items[("CONTROL", "GLOBAL")]
+        self.instance['ClientToken'] = 'foreign'
+        with self.assertRaisesRegex(RuntimeError, "ownership"):
+            fixtures.controller.recorded_instance(self.ec2, self.identifier, record, control, "1")
+        from botocore.exceptions import ClientError
+        for code in ('UnauthorizedOperation', 'RequestLimitExceeded'):
+            self.ec2.describe_instances.side_effect = ClientError({'Error': {'Code': code}}, 'DescribeInstances')
+            with self.assertRaises(ClientError):
+                fixtures.controller.recorded_instance(self.ec2, self.identifier, record, control, "1")
+        self.ec2.describe_instances.side_effect = ClientError({'Error': {'Code': 'InvalidInstanceID.NotFound'}}, 'DescribeInstances')
+        self.assertIsNone(fixtures.controller.recorded_instance(self.ec2, self.identifier, record, control, "1"))

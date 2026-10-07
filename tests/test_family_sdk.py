@@ -195,6 +195,11 @@ class FamilySdkTests(unittest.TestCase):
         self.gateway.describe_instance = Mock(return_value=parent)
         self.gateway.read_node = Mock(return_value=receipt)
         self.assertTrue(self.gateway.parent_terminated())
+        self.assertIn('termination_confirmed', str(self.calls[-1]))
+        self.assertIn('client_token = :token', str(self.calls[-1]))
+        count = len(self.calls)
+        self.assertTrue(self.gateway.parent_terminated())
+        self.assertEqual(len(self.calls), count)
         for field, value in (("request_id", "other"), ("owner", "other"), ("status", "OWNER"), ("retirement_children", ["r0"])):
             self.gateway.read_node.return_value = {**receipt, field: value}
             with self.assertRaises(SafetyViolation): self.gateway.parent_terminated()
@@ -205,3 +210,30 @@ class FamilySdkTests(unittest.TestCase):
         self.assertEqual(self.calls[-1][2]["InvocationType"], "Event")
         self.response = {"StatusCode": 500}
         with self.assertRaises(TransientFailure): self.gateway.invoke_hold("000000", "TEST", "id")
+
+    def test_explicit_launch_throttle_is_recorded_for_safe_retry(self):
+        from cloud_glider.inherited import specification
+        spec = specification(self.cfg, 'r0', self.cfg.instance_id, 'handoff-r0')
+        self.response = {'_code': 'RequestLimitExceeded'}
+        with self.assertRaises(TransientFailure): self.gateway.submit_child(spec)
+        self.assertIn('launch_rejected', str(self.calls[-1]))
+
+    def test_retryable_intent_is_cleared_before_same_token_submission(self):
+        from cloud_glider.inherited import specification
+        spec = specification(self.cfg, 'r0', self.cfg.instance_id, 'handoff-r0')
+        self.gateway.get_node_item = Mock(return_value={'token':spec['client_token'], 'request_id':'1', 'launch_rejected':True})
+        self.gateway._pages = Mock(return_value=[])
+        self.gateway.submit_child = Mock(return_value='i-child')
+        self.assertEqual(self.gateway.launch_child(spec), 'i-child')
+        self.assertIn('REMOVE launch_rejected', str(self.calls[-1]))
+        self.gateway.submit_child.assert_called_once_with(spec)
+
+    def test_existing_instance_wins_over_retryable_throttle_receipt(self):
+        from cloud_glider.inherited import specification
+        spec = specification(self.cfg, 'r0', self.cfg.instance_id, 'handoff-r0')
+        self.gateway.get_node_item = Mock(return_value={'token':spec['client_token'], 'request_id':'1', 'launch_rejected':True})
+        self.gateway._pages = Mock(return_value=[{'Reservations':[{'Instances':[{'InstanceId':'i-child'}]}]}])
+        self.gateway.verify_instance = Mock(); self.gateway.record_child = Mock()
+        self.gateway.submit_child = Mock()
+        self.assertEqual(self.gateway.launch_child(spec), 'i-child')
+        self.gateway.submit_child.assert_not_called()

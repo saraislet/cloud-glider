@@ -213,3 +213,50 @@ The acknowledgement preserves newer operator feedback, never clears another
 cycle's command, and fails atomically if an operator changes CONTROL concurrently.
 This is a bootstrap Lambda source/template change; daemon artifacts and baked
 AMI contents are unchanged. Deploy the updated bootstrap stack to activate it.
+
+### Depth-4 throttling and Observer repair
+
+Cycle 21 (generations 0–4, 31 intended launches) stopped after 29 actual launches.
+EC2 throttled requests; lifecycle retry sleeps starved the tick-driven control
+monitor for longer than its unchanged 15-second freshness bound. Local STOP
+latched correctly, but that expiry was avoidable. Control polling now has its own
+scheduler and remains active during backoff and blocking launch calls. Explicit
+RunInstances RequestLimitExceeded responses record a cycle-fenced rejection;
+retry first reconciles the exact token and clears that receipt before repeating
+the same request. Transport errors or other ambiguous responses never authorize
+resubmission. Failed receipt recording also preserves ambiguity.
+
+First functional-readiness time is retained separately from its five-second
+refresh. NODE records retain startup, handoff, leaf and retirement timestamps.
+Family cycle durations are exported through the existing bounded timing channel.
+Observer joins family records independently of scan/stream arrival order, shows
+accepted family ownership, functional proof, stop and retirement states, and
+uses EC2 launch time with retained first-readiness time for intervals. Old images
+lack first-readiness timestamps; missing historical timings are not invented.
+
+Cleanup also needs a durable record of physical termination: EC2 eventually stops
+returning terminated instances. A successor now stores a cycle-fenced RESOURCE
+receipt only after exact EC2 TERMINATED state and the accepted parent retirement
+identity have been verified. The receipt preserves the first observation time
+and evidence digest. Cleanup accepts an absent exact ID only with that receipt,
+matching cycle and launch-template pins. A present instance still requires exact
+ownership validation; API authorization, throttling and transport errors never
+count as absence. Historical cycles without receipts require an explicit operator
+recovery using retained physical-termination evidence before normal cleanup can
+continue. STOP alone preserves running instances; CLEANUP terminates them.
+
+The operator submission-reconciliation supplement in
+`iam/operator-family-cleanup-reconciliation.json` is restricted to generation
+keys and submission receipt attributes. It does not permit termination receipts,
+NODE ownership updates, or CONTROL changes.
+
+Cycle 21 cleanup was subsequently completed through the normal controller path
+after operator recovery recorded the twelve exact, previously observed physical
+terminations. The remaining seventeen instances were terminated. Verification
+found no surviving generation instances, generation stack, sandbox volumes,
+generation alarms, or generation inventory records. BOOTSTRAP advanced to request
+22 with READY/COMPLETE, CONTROL acknowledged NONE/COMPLETE, and propagation stayed
+disabled. Both in-progress candidate image builds were canceled with Packer's
+normal cleanup; this repair has not yet completed a fresh 31-instance live trial.
+Local validation passed 420 Python tests, the deterministic Observer UI check,
+repository safety checks, generated bootstrap consistency and CloudFormation lint.

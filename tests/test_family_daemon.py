@@ -223,3 +223,23 @@ class ControlMonitorTests(unittest.TestCase):
             if isinstance(result, Exception): future.set_exception(result)
             else: future.set_result(result)
             self.assertTrue(self.monitor.tick())
+
+class IndependentMonitorTests(unittest.TestCase):
+    def test_polling_continues_while_lifecycle_worker_is_blocked(self):
+        import threading
+        reads = []
+        observed = threading.Event()
+        def poll():
+            reads.append(1)
+            if len(reads) >= 2: observed.set()
+            return False
+        gateway = Mock(poll_stopped=poll)
+        settings = {**validate(family_config()), 'control_poll_seconds': .01}
+        monitor = ControlMonitor(gateway, settings)
+        try:
+            monitor.start()
+            # The caller performs no tick: represents a blocked SDK call/backoff.
+            self.assertTrue(observed.wait(2))
+            self.assertFalse(monitor.stopped)
+        finally:
+            monitor.close()
