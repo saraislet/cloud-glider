@@ -28,6 +28,11 @@ disabled daemon, empty state and at least 384 MiB free space. Successful tests
 shut down the instance. Collect evidence and delete the smoke stack through
 CloudFormation to end storage charges. Preserve the AMI and its root snapshot.
 
+Complete the [verified cleanup and AMI retention checklist](trial-cleanup-and-ami-retention.md)
+after each smoke trial. Keep only the deployed image, an optional compatible
+rollback and one next-release candidate; reconcile references and preserve
+receipts before retiring superseded image/snapshot pairs.
+
 A rebuilt image does not update deployed controller/schema or CONTROL approvals.
 Follow [the coordinated release runbook](minimal-ami.md) after validation.
 

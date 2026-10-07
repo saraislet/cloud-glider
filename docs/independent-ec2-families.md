@@ -4,6 +4,10 @@ The depth-2 release was deployed and tested live on 2026-10-06. Larger tests
 require separate operator approval. This runbook covers version-3 EC2 family cycles. Architectural
 changes and preserved gates are recorded in [decision 0023](decisions/0023-independent-inherited-ec2-families.md).
 
+Every live trial ends with the [verified cleanup checklist](trial-cleanup-and-ami-retention.md).
+STOP alone leaves instances running. Collect evidence, use supported CLEANUP,
+verify resources are gone and record any operator-approved retained exceptions.
+
 ## Operator configuration
 
 On an offline, cleaned-up environment, prepare CONTROL/GLOBAL with:
