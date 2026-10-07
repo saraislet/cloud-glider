@@ -152,3 +152,14 @@ The controller automatically requests supported cleanup after max-generation
 ownership and confirmed predecessor retirement. It respects holds, disabled
 propagation, pending commands and cycle fencing; ambiguous completion preserves
 instances. Cleanup resets CURRENT and prepares the next cycle. See decision 0023.
+
+## Private trial automation
+
+Use the implemented `scripts/trial_receipt.py preflight`, `capture`, and `verify`
+commands in [the trial evidence runbook](trial-cleanup-and-ami-retention.md#implemented-private-evidence-commands).
+Capture exact resource IDs and evidence before supported cleanup, then verify
+fresh resource/state readback afterward. STOP alone is not cleanup. The tool
+performs read-only AWS calls, preserves owner-only ignored receipts, and leaves
+missing evidence, incomplete cleanup and retained exceptions explicit. Live
+trials, cleanup writes, deployment and AMI retention changes still require their
+existing operator authorization; the tool adds no scheduled deletion workflow.

@@ -41,3 +41,13 @@ guest PASS, deleted the smoke stack and removed the six image/snapshot pairs.
 Readback confirmed DELETE_COMPLETE, terminated instance, absent root volume,
 and exactly two retained AMIs with their snapshots. Private receipts are under
 `.artifacts/cost-review-20261007/`; IDs and account telemetry remain local.
+
+## Read-only automation implementation
+
+`scripts/trial_receipt.py` now automates operator-invoked preflight inventory,
+private evidence capture and conservative completion verification. It uses
+existing scoped credentials and supported lifecycle state contracts; it adds
+no deletion, IAM changes, scheduled runs, or AMI/snapshot pruning. Missing evidence,
+ambiguous ownership and named retained exceptions remain incomplete. See the
+runbook for exact coverage and limitations. Implementation is locally validated;
+this change does not establish live AWS validation.
