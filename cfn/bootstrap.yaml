@@ -756,9 +756,27 @@ Resources:
               ready.pop('stack_id', None)
               ready.pop('requested_at', None)
               ready['prepared_at'] = {'N': str(int(time.time()))}
+              control_guard = {'ConditionCheck': {'TableName': table, 'Key': key('CONTROL'),
+                  **exact_condition({k: v for k, v in control.items() if k not in OPERATOR_FIELDS | {'updated_at', 'updated_by'}})}}
+              live_control = read_item(ddb, table, 'CONTROL', 'GLOBAL')
+              if (live_control.get('active_command') == {'S': 'CLEANUP'}
+                      and live_control.get('active_request_id') == {'S': request_id}):
+                  assignments = {'active_command': {'S': 'NONE'}, 'active_request_id': {'S': ''},
+                      'operation_status': {'S': 'COMPLETE'}, 'operation_updated_at': {'N': str(int(time.time()))}}
+                  if live_control.get('last_result_sequence') == live_control.get('active_command_sequence'):
+                      assignments['last_result'] = {'S': 'Cleanup complete. Ready for another start.'}
+                  # Acknowledge the matching operator command atomically with cycle reset.
+                  # Use fresh interface fields; inherited settings may contain older timestamps.
+                  acknowledgement = command_update(table, live_control, assignments)['Update']
+                  for i, (field, value) in enumerate(control.items()):
+                      if field in OPERATOR_FIELDS | {'updated_at', 'updated_by'}:
+                          continue
+                      acknowledgement['ExpressionAttributeNames'][f'#pin{i}'] = field
+                      acknowledgement['ExpressionAttributeValues'][f':pin{i}'] = value
+                      acknowledgement['ConditionExpression'] += f' AND #pin{i} = :pin{i}'
+                  control_guard = {'Update': acknowledgement}
               ddb.transact_write_items(TransactItems=[
-                  {'ConditionCheck': {'TableName': table, 'Key': key('CONTROL'),
-                      **exact_condition({k: v for k, v in control.items() if k not in OPERATOR_FIELDS | {'updated_at', 'updated_by'}})}},
+                  control_guard,
                   {'ConditionCheck': {'TableName': table, 'Key': key('LOCK', 'PROVISIONING'), 'ConditionExpression': 'attribute_not_exists(PK)'}},
                   {'Put': {'TableName': table, 'Item': {**key('CURRENT'), 'status': {'S': 'UNINITIALIZED'},
                       'environment': {'S': env['ENVIRONMENT']}}, **exact_condition(current)}},

@@ -203,3 +203,13 @@ cleanup COMPLETE, CONTROL command NONE, next request 21, no hold, no generation
 records and no live Glider instances. The retained binary depth setting is 3.
 Evidence is under ignored `.artifacts/family-audit/`, especially `completion.json`
 and `cycle-20/`; no diagnostic Lambda replay was used.
+
+### Atomic cleanup command acknowledgement
+
+Cleanup now clears its matching CONTROL command in the same conditional
+DynamoDB transaction that resets CURRENT and advances the lifecycle cycle.
+Stream-driven completion therefore needs no extra STOP to clear the busy flag.
+The acknowledgement preserves newer operator feedback, never clears another
+cycle's command, and fails atomically if an operator changes CONTROL concurrently.
+This is a bootstrap Lambda source/template change; daemon artifacts and baked
+AMI contents are unchanged. Deploy the updated bootstrap stack to activate it.
