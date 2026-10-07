@@ -89,6 +89,8 @@ class Ec2DaemonConfig:
     daemon_operations_log_group: str
     operational_alerts_topic_arn: str
     daemon_delivery_mode: str = "baked"
+    inherited_configuration: dict | None = None
+    node_path: str = "r"
 
     @property
     def audit_table_name(self) -> str:
@@ -103,7 +105,9 @@ class Ec2DaemonConfig:
 
         raw = load_instance_config(json.loads(Path(path).read_text(encoding="utf-8")))
         expected = {field.name for field in dataclasses.fields(cls)}
-        if set(raw) != expected:
+        required = {field.name for field in dataclasses.fields(cls)
+                    if field.default is dataclasses.MISSING}
+        if not required <= set(raw) or set(raw) - expected:
             raise ValueError(f"invalid config fields: {sorted(set(raw) ^ expected)}")
         config = cls(**raw)
         config.validate()

@@ -40,8 +40,13 @@ def main() -> int:
         with span(
             "sdk_initialization", generation=config.generation, request_id=config.request_id
         ):
-            gateway = Ec2SdkGateway(config)
-        daemon_type = Ec2Daemon
+            if config.inherited_configuration is not None:
+                from cloud_glider.family_daemon import FamilyDaemon
+                from cloud_glider.family_sdk import FamilySdkGateway
+                gateway = FamilySdkGateway(config)
+            else:
+                gateway = Ec2SdkGateway(config)
+        daemon_type = FamilyDaemon if config.inherited_configuration is not None else Ec2Daemon
     elif backend == "cloudformation":
         config = DaemonConfig.load(args.config)
         with span(

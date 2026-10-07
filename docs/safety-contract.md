@@ -3,6 +3,16 @@
 This contract is normative. A change that violates an invariant must not be
 merged or deployed, even if it makes a happy-path propagation test pass.
 
+For explicitly initialized inherited EC2 families, operator-approved
+[decision 0023](decisions/0023-independent-inherited-ec2-families.md) supersedes
+the synchronous prelaunch control read, global CURRENT ownership, static-only
+user data and three-live-instance ceiling below. Initial settings are pinned by
+bootstrap and inherited. Launch cancellation is asynchronous; additional
+descendants can launch before stop is observed. Per-family identity, durable
+submission reconciliation, fresh functional readiness, atomic controlled
+handoff/retirement, cycle fencing, least privilege and verified cleanup remain
+required. Existing cycles retain their contract; no live migration is permitted.
+
 ## System invariants
 
 1. **Fresh operator control.** The daemon must transactionally read `CONTROL/GLOBAL`, `BOOTSTRAP/REQUEST`, and

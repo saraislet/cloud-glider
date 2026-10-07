@@ -599,6 +599,11 @@ Resources:
               correlation_id = str(event.get("correlation_id", ""))
               if not generation_pattern.fullmatch(generation):
                   raise ValueError("generation must be six digits")
+              node_path = event.get("node_path")
+              if node_path is not None and (not isinstance(node_path, str)
+                      or not re.fullmatch(r"r[01]{0,9}", node_path)
+                      or len(node_path) - 1 != int(generation)):
+                  raise ValueError("node_path must match generation depth")
               if not error_pattern.fullmatch(error_code):
                   raise ValueError("invalid terminal error code")
               if not correlation_id or len(correlation_id) > 128:
@@ -682,7 +687,7 @@ Resources:
                               {
                                   "Update": {
                                       "TableName": os.environ["GENERATION_TABLE"],
-                                      "Key": {"PK": {"S": f"GEN#{generation}"}, "SK": {"S": "STATE"}},
+                                      "Key": {"PK": {"S": f"GEN#{node_path or generation}"}, "SK": {"S": "STATE"}},
                                       "UpdateExpression": "SET request_id = :request, #status = :error, generation = :generation, error_code = :code, error_correlation_id = :correlation, updated_at = :now",
                                       "ExpressionAttributeNames": {"#status": "status"},
                                       "ExpressionAttributeValues": generation_values,

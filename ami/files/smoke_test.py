@@ -41,10 +41,15 @@ def verify_ec2_contract():
     from botocore.validate import validate_parameters
     from cloud_glider.ec2_daemon import Ec2DaemonConfig
     from cloud_glider.ec2_sdk import Ec2SdkGateway
+    from cloud_glider.family_daemon import FamilyDaemon, ControlMonitor
+    from cloud_glider.family_sdk import FamilySdkGateway
     fields = {field.name for field in dataclasses.fields(Ec2DaemonConfig)}
     assert {'request_id', 'generation_table_name', 'predecessor_instance_id',
             'launch_template_id', 'launch_template_version', 'daemon_delivery_mode'} <= fields
     assert Ec2DaemonConfig.__dataclass_fields__['daemon_delivery_mode'].default == 'baked'
+    assert {'inherited_configuration', 'node_path'} <= fields
+    assert callable(FamilySdkGateway.launch_child) and callable(FamilyDaemon.cycle)
+    assert callable(ControlMonitor.tick)
     spec = {'launch_template_id': 'lt-' + 'a' * 17, 'launch_template_version': '1',
             'client_token': 'isolated-smoke-only', 'tags': {'project': 'cloud-glider'}}
     request = Ec2SdkGateway._run_request(spec)

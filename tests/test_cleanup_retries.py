@@ -96,6 +96,43 @@ class CleanupRetryTests(unittest.TestCase):
         self.assertEqual(self.scheduler.create_schedule.call_count, 1)
         self.scheduler.delete_schedule.assert_called_once_with(GroupName=self.env['CLEANUP_SCHEDULE_GROUP'], Name='cleanup-1-1')
 
+    def test_stream_cleanup_completion_atomically_clears_matching_command(self):
+        self.request['cleanup_target_request_id'] = {'S': '1'}
+        self.control.update(active_command_sequence={'N': '7'}, last_result_sequence={'N': '7'})
+        before = copy.deepcopy(self.request)
+        controller.complete_cleanup(self.ddb, self.env['STATE_TABLE'], copy.deepcopy(self.control),
+            self.ddb.items[('CURRENT', 'GLOBAL')], before, self.env)
+        self.assertEqual(self.ddb.items[('BOOTSTRAP', 'REQUEST')]['cleanup_status'], {'S': 'COMPLETE'})
+        self.assertEqual(self.control['active_command'], {'S': 'NONE'})
+        self.assertEqual(self.control['active_request_id'], {'S': ''})
+        self.assertEqual(self.control['operation_status'], {'S': 'COMPLETE'})
+        self.assertIn('Cleanup complete', self.control['last_result']['S'])
+
+    def test_completion_preserves_newer_feedback_and_unrelated_command(self):
+        for target in ('1', '2'):
+            with self.subTest(target=target):
+                self.setUp()
+                self.control.update(active_request_id={'S': target},
+                    active_command_sequence={'N': '7'}, last_result_sequence={'N': '8'},
+                    last_result={'S': 'Newer operator feedback'})
+                controller.complete_cleanup(self.ddb, self.env['STATE_TABLE'], copy.deepcopy(self.control),
+                    self.ddb.items[('CURRENT', 'GLOBAL')], copy.deepcopy(self.request), self.env)
+                self.assertEqual(self.control['last_result'], {'S': 'Newer operator feedback'})
+                self.assertEqual(self.control['active_command'], {'S': 'NONE' if target == '1' else 'CLEANUP'})
+
+    def test_concurrent_operator_edit_prevents_acknowledgement_and_cycle_reset(self):
+        original = self.ddb.transact_write_items
+        def raced(**kwargs):
+            self.control['stop_requested'] = {'BOOL': True}
+            return original(**kwargs)
+        with patch.object(self.ddb, 'transact_write_items', side_effect=raced):
+            with self.assertRaisesRegex(RuntimeError, 'conditional conflict'):
+                controller.complete_cleanup(self.ddb, self.env['STATE_TABLE'], copy.deepcopy(self.control),
+                    self.ddb.items[('CURRENT', 'GLOBAL')], copy.deepcopy(self.request), self.env)
+        self.assertEqual(self.ddb.items[('BOOTSTRAP', 'REQUEST')]['request_id'], {'S': '1'})
+        self.assertEqual(self.control['active_command'], {'S': 'CLEANUP'})
+        self.assertEqual(self.control['stop_requested'], {'BOOL': True})
+
     def test_timeout_keeps_token_for_bounded_delivery_retry(self):
         self.arm()
         with patch.object(controller, 'run_operator', side_effect=KeyboardInterrupt('timeout')):
