@@ -69,6 +69,10 @@ through generation `2`.
 
 ## Operator controls
 
+Select a human task identity using the profiles in
+[the operator identity runbook](docs/operator-identities.md). Existing access is
+retained until replacement assumption and operational paths are validated.
+
 Use `CONTROL/GLOBAL`: set one Boolean `start_requested`, `stop_requested`, or
 `cleanup_requested` to true. Refresh `operation_status` and `last_result` in the
 same item. Detailed generation records live in the separate `cloud-glider-sandbox-generations` table; latest audit results stay with the controls. Start prepares bootstrap and enables propagation; stop keeps instances;
