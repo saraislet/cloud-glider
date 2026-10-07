@@ -175,9 +175,42 @@ role trusts remained unchanged. No smoke instance or lifecycle state was changed
 while applying or validating this permission correction. After rebasing onto
 the current main branch, the complete Python suite passed 429 tests.
 
-Identity Center provisioning/sign-in validation is pending. Actual build/smoke,
-release, normal command/cleanup and exceptional recovery/deletion workflows remain
-unverified under the replacements. There were no live generation instances for
-the cleanup termination DryRun. All existing broad grants remain in place.
+On October 7, 2026, both Identity Center permission sets were created and assigned
+to the verified existing human user in the Glider account. Assignment completion,
+exact assumption-only policies and one-hour permission-set sessions passed
+readback. Both actual SSO source identities and all seven task-role assumptions
+then passed, along with the same safe authorization probes used during migration.
+GliderAccess was denied assumption of SecurityAdmin, and GliderSecurityAccess was
+denied assumption of Observer. The provisioned AWS-reserved roles had exact inline
+policies and no attached managed policies. Their IAM maximum session duration
+was twelve hours; the permission sets remained configured for one hour, and the
+actual issued source credentials expired within one hour. Human task roles retain
+their one-hour IAM maximum.
+
+Existing GliderManager IAM and SSO identities still worked, including an actual
+CONTROL read through the retained SSO source. Original permission-set policies
+and assignments, member-account grants and inspected trusts remained unchanged.
+There were no matching live generation instances for the cleanup termination
+DryRun. PR #25 remains unmerged, and no propagation trial was started by this
+migration. All existing broad grants remain in place.
+
+The remaining operational evidence is distinct from successful role assumption:
+
+| Replacement path | Evidence so far | Still required before removing the corresponding grant |
+| --- | --- | --- |
+| Observer | Actual SSO role, state/Streams, logs, artifacts and quota reads | Any additional reader workflow that currently relies on GliderManager |
+| Operator | SSO assumption and forced conditional-failure authorization | Supported lifecycle commands and normal controller cleanup during approved operations |
+| StateRecovery | SSO assumption, conditional submission/HOLD probes and ownership-write denial | Justified recovery with exact cycle, rejection and physical-inventory evidence |
+| ExceptionalCleanup | SSO assumption and repair denial; termination DryRun untested without a matching generation | Justified verified generation and residual-resource cleanup |
+| ImageBuilder | Replacement smoke launches, first smoke-stack deletion and physical cleanup readback; actual console reads and guest success markers | A complete Packer build and cleanup under the replacement, plus a complete smoke workflow through that identity; the earlier Packer build used the old build role |
+| Release | SSO assumption, template validation and conditional authorization | Approved immutable publication, reviewed deployment and idle release-pin coordination |
+| SecurityAdmin | SSO assumption, policy validation and scope simulation | Required administrative replacement workflows during explicitly approved IAM operations |
+
+Do not manufacture an incident, delete resources or start a propagation trial
+solely to fill this table. Check other chats' active operations and obtain the
+operation-specific authorization before exercising a workflow. Successful SSO
+validation completes the additive access setup; the operational evidence and
+incremental broad-grant removal remain later migration stages.
+
 Private deployment and validation receipts are under
 `.artifacts/identity-split/`; preserve them with the historical operational inputs.
