@@ -31,6 +31,33 @@ def project(rows, region):
     current = next((r for r in rows if r.get('PK') == 'CURRENT'), {})
     request = next((r for r in rows if r.get('PK') == 'BOOTSTRAP'), {})
     hold = any(r.get('PK') == 'HOLD' and r.get('SK') == 'ACTIVE' for r in rows)
+    # NODE, STATE and RESOURCE are separate family records. Join explicitly:
+    # scan/shard arrival order must never choose lifecycle status or identity.
+    families = {}
+    legacy = []
+    for r in rows:
+        path = r.get('PK', '')[4:]
+        if r.get('PK', '').startswith('GEN#r') and path.startswith('r') and set(path[1:]) <= {'0', '1'}:
+            families.setdefault((r.get('request_id'), path), {})[r['SK']] = r
+        else:
+            legacy.append(r)
+    for (cycle, path), records in families.items():
+        node, proof = records.get('NODE', {}), records.get('STATE', {})
+        identity = node.get('instance_id') or proof.get('instance_id')
+        if not identity:
+            continue
+        valid_proof = (proof.get('instance_id') == identity and proof.get('request_id') == cycle
+                       and proof.get('configuration_sha256') == node.get('configuration_sha256')
+                       and proof.get('node_path') == path and proof.get('daemon_live') is True
+                       and isinstance(proof.get('ready_at'), (int, float))
+                       and proof.get('continuation') in ('DRY_RUN_PASSED', 'BOUNDARY')
+                       and not proof.get('error_code'))
+        merged = {**proof, **node, 'generation': len(path)-1, 'node_path': path, '_family': True,
+                  '_proof_valid': valid_proof, '_stopped': 'STOP' in records,
+                  '_proof': proof}
+        if proof.get('error_code') or proof.get('status') == 'ERROR': merged['status'] = 'ERROR'
+        legacy.append(merged)
+    rows = legacy
     nodes = {}
     for r in rows:
         if not r.get('instance_id') or r.get('generation') is None or not (r.get('PK', '').startswith('GEN#') or r.get('PK') == 'CURRENT'):
@@ -51,6 +78,10 @@ def project(rows, region):
             state = 'READY'
         elif isinstance(r.get('functional_readiness'), dict):
             state = 'READY'
+        if r.get('_family') and state != 'ERROR':
+            state = 'READY' if r.get('_proof_valid') else 'BOOTING'
+            if r.get('status') == 'RETIRING': state = 'DRAINING'
+            elif r.get('_stopped'): state = 'WAITING'
         if hold:
             state = 'EMERGENCY_HOLD'
         event = {'instance_id': identity, 'aws_instance_id': r['instance_id'], 'generation': int(r['generation']),
@@ -59,6 +90,16 @@ def project(rows, region):
                  'readiness_basis':'accepted CURRENT ownership' if owner else 'reported functional proof' if r.get('functional_readiness') else 'no authoritative readiness evidence',
                  'functional_readiness': r.get('functional_readiness'), 'source_updated_at':r.get('updated_at'), 'workload_healthy': r.get('workload_healthy'),
                  'propagation_enabled': request.get('propagation_enabled', False), 'raw_status': status}
+        if r.get('_family'):
+            proof = r['_proof']
+            event.update(node_path=r['node_path'], stopped=r['_stopped'],
+                         readiness_basis='accepted family ownership' if r.get('owner') == r['instance_id'] and r.get('_proof_valid') else 'reported family functional proof' if r.get('_proof_valid') else 'no authoritative readiness evidence',
+                         source_ready_at=iso(proof['ready_at']) if r.get('_proof_valid') else None,
+                         ownership_at=iso(r['handoff_at']) if r.get('handoff_at') else None)
+            if r.get('_proof_valid'):
+                event['heartbeat_at'] = iso(proof['ready_at'])
+                if proof.get('first_ready_at') is not None: event['ready_at'] = iso(proof['first_ready_at'])
+            if r.get('started_at'): event['daemon_started_at'] = iso(r['started_at'])
         if r.get('heartbeat_at_epoch') is not None:
             event['heartbeat_at'] = iso(float(r['heartbeat_at_epoch']))
         parent = r.get('predecessor_instance_id')
@@ -76,9 +117,11 @@ def project(rows, region):
             parent = by_id.get(e['parent_id'])
             if parent and current.get('retirement_authorized') and not hold:
                 parent['state'] = 'TERMINATED' if current.get('retirement_completed') else 'DRAINING'
-    physical = {r.get('instance_id'): r.get('ec2_state') for r in rows if r.get('PK') == 'EC2'}
+    physical = {r.get('instance_id'): r for r in rows if r.get('PK') == 'EC2'}
     for e in out:
-        e['ec2_state'] = physical.get(e['aws_instance_id'])
+        physical_row = physical.get(e['aws_instance_id'], {})
+        e['ec2_state'] = physical_row.get('ec2_state')
+        if physical_row.get('launch_at'): e['created_at'] = physical_row['launch_at']
         if e['ec2_state'] == 'terminated': e['state'] = 'TERMINATED'
         elif e['ec2_state'] == 'shutting-down': e['state'] = 'DRAINING'
     return out
@@ -117,16 +160,17 @@ class Store:
                 old = prior.get(e['instance_id'])
                 if old and old['state'] == 'TERMINATED':
                     e['state'] = 'TERMINATED'  # Exact instance identities never become live again.
-                comparable = {k:v for k,v in e.items() if k != 'timestamp'}
-                if old and comparable == {k:v for k,v in old.items() if k not in ('timestamp','event_id','created_at','ready_at','terminated_at','history')}:
+                derived = ('timestamp','event_id','created_at','ready_at','terminated_at','history')
+                comparable = {k:v for k,v in e.items() if k not in derived}
+                if old and comparable == {k:v for k,v in old.items() if k not in derived} and all(e.get(k,old.get(k)) == old.get(k) for k in ('created_at','ready_at')):
                     continue
                 e['timestamp'] = iso()  # observation clock; source times remain separately available
                 e['event_id'] = uid + ':' + e['instance_id']
                 old=old or {}
-                e['created_at']=old.get('created_at',e['timestamp'])
+                e['created_at']=e.get('created_at', old.get('created_at',e['timestamp']))
                 for field in ('ready_at','terminated_at'):
-                    if field in old: e[field]=old[field]
-                if e['state']=='READY' and 'ready_at' not in e: e['ready_at']=e['timestamp']
+                    if field in old and field not in e: e[field]=old[field]
+                if e['state'] in ('READY','DRAINING') and 'ready_at' not in e and (e['state']=='READY' or e.get('source_ready_at')): e['ready_at']=e['timestamp']
                 if e['state']=='TERMINATED' and 'terminated_at' not in e: e['terminated_at']=e['timestamp']
                 e['history']=list(old.get('history',[]))
                 if not e['history'] or e['history'][-1]['state']!=e['state']:
@@ -250,6 +294,7 @@ class Observer:
                 for instance in reservation['Instances']:
                     row = {'PK':'EC2','SK':instance['InstanceId'],'instance_id':instance['InstanceId'],
                            'ec2_state':instance['State']['Name']}
+                    if instance.get('LaunchTime'): row['launch_at'] = instance['LaunchTime'].isoformat()
                     changes.append((row,row))
         self.store.update('ec2',changes,self.region,'ec2:'+str(time.time_ns()))
     def set_active(self, enabled):

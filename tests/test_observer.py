@@ -226,3 +226,44 @@ class ObserverTests(unittest.TestCase):
         self.assertEqual(self.store.db.execute('SELECT COUNT(*) FROM raw_events').fetchone()[0],1)
 
 if __name__=='__main__': unittest.main()
+
+class FamilyProjectionTests(unittest.TestCase):
+    def rows(self):
+        return [dict(PK='GEN#r0', SK='NODE',request_id='1',instance_id='i-child',configuration_sha256='digest',owner='i-child',status='OWNER',handoff_at=102),
+                dict(PK='GEN#r0', SK='STATE',request_id='1',instance_id='i-child',configuration_sha256='digest',node_path='r0',generation='000001',predecessor_instance_id='i-root',daemon_live=True,ready_at=105,first_ready_at=101,continuation='DRY_RUN_PASSED'),
+                dict(PK='GEN#r0',SK='RESOURCE#i-child',request_id='1',instance_id='i-child'),
+                dict(PK='EC2',SK='i-child',instance_id='i-child',ec2_state='running',launch_at=iso(90))]
+    def test_family_join_order_readiness_and_source_timing(self):
+        import itertools
+        for rows in itertools.permutations(self.rows()):
+            event=project(rows,'us-west-2')[0]
+            self.assertEqual(event['state'],'READY')
+            self.assertEqual(event['ready_at'],iso(101))
+            self.assertEqual(event['created_at'],iso(90))
+            self.assertEqual(event['ownership_at'],iso(102))
+            self.assertEqual(event['heartbeat_at'],iso(105))
+            self.assertEqual(event['parent_id'],'1:i-root')
+    def test_family_conflicting_proof_never_claims_ready(self):
+        rows=self.rows(); rows[1]['configuration_sha256']='other'
+        self.assertEqual(project(rows,'r')[0]['state'],'BOOTING')
+    def test_family_stop_retirement_and_termination_precedence(self):
+        rows=self.rows()+[dict(PK='GEN#r0',SK='STOP',request_id='1')]
+        self.assertEqual(project(rows,'r')[0]['state'],'WAITING')
+        rows[0]['status']='RETIRING'
+        self.assertEqual(project(rows,'r')[0]['state'],'DRAINING')
+        rows[3]['ec2_state']='terminated'
+        self.assertEqual(project(rows,'r')[0]['state'],'TERMINATED')
+    def test_persisted_family_history_and_first_readiness_do_not_shift(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store=Store(Path(directory)/'events.sqlite')
+            rows=self.rows();store.update('t',[(r,r)for r in rows],'r','first')
+            first=store.snapshot()['instances'][0]
+            rows[1]['ready_at']=110
+            store.update('t',[(rows[1],rows[1])],'r','refresh')
+            second=store.snapshot()['instances'][0]
+            self.assertEqual(first['ready_at'],second['ready_at'])
+            self.assertEqual(first['created_at'],second['created_at'])
+            self.assertEqual(len(second['history']),1)
+            rows[0]['status']='RETIRING';store.update('t',[(rows[0],rows[0])],'r','retire')
+            self.assertEqual([h['state']for h in store.snapshot()['instances'][0]['history']],['READY','DRAINING'])
+            store.db.close()

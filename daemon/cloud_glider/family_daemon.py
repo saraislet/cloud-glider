@@ -6,11 +6,13 @@ import json
 import os
 from pathlib import Path
 import random
+import threading
 import time
 import uuid
 
 from .daemon import SafetyViolation, TransientFailure
 from .inherited import child_paths, specification, validate
+from .timing import emit
 
 
 class ControlMonitor:
@@ -23,12 +25,31 @@ class ControlMonitor:
         self.submitted_at = None
         self.next_poll = 0
         self.pending = None
+        self.lock = threading.RLock()
+        self.closed = threading.Event()
+        self.thread = None
+        self.reason = None
+
+    def start(self):
+        # Poll independently of launch latency and exponential retry sleeps.
+        def run():
+            while not self.closed.is_set():
+                self.tick()
+                self.closed.wait(0.25)
+        self.thread = threading.Thread(target=run, name="glider-control-monitor", daemon=True)
+        self.thread.start()
 
     def tick(self):
+        with self.lock:
+            return self._tick()
+
+    def _tick(self):
         now = self.clock()
         if self.pending is not None and self.pending.done():
             try:
-                self.stopped |= self.pending.result()
+                remote_stop = self.pending.result()
+                self.stopped |= remote_stop
+                if remote_stop and self.reason is None: self.reason = "remote stop/hold/cycle fence"
                 # Age starts at request submission, not at a delayed response.
                 self.observed_at = self.submitted_at
             except Exception:
@@ -36,6 +57,7 @@ class ControlMonitor:
             self.pending = None
         if now - self.observed_at >= self.settings["control_max_age_seconds"]:
             self.stopped = True
+            if self.reason is None: self.reason = "control freshness expired"
         if self.pending is None and now >= self.next_poll:
             self.submitted_at = now
             self.pending = self.executor.submit(self.gateway.poll_stopped)
@@ -43,6 +65,9 @@ class ControlMonitor:
         return self.stopped
 
     def close(self):
+        self.closed.set()
+        if self.thread is not None:
+            self.thread.join()
         self.executor.shutdown(wait=True, cancel_futures=True)
 
 
@@ -137,6 +162,8 @@ class FamilyDaemon:
 
     def run(self):
         try:
+            if hasattr(self.monitor, "start"):
+                self.monitor.start()
             state_dir = Path("/var/lib/cloud-glider")
             state_dir.mkdir(parents=True, exist_ok=True)
             self.stop_file = state_dir / f"stop-{self.config.request_id}-{self.config.node_path}"
@@ -152,12 +179,18 @@ class FamilyDaemon:
                 try:
                     started = time.monotonic()
                     result = self.cycle()
+                    emit("phase_timing", phase="family_cycle", outcome=result,
+                         duration_seconds=round(time.monotonic() - started, 6),
+                         request_id=self.config.request_id, generation=self.config.generation,
+                         instance_id=self.config.instance_id)
                     self.logger(json.dumps({"event": "family_cycle", "request_id": self.config.request_id,
                         "node_path": self.config.node_path, "generation": self.config.generation,
                         "instance_id": self.config.instance_id, "result": result,
                         "duration_seconds": round(time.monotonic() - started, 6)}, sort_keys=True))
                     failures = 0
                     if result in ("RETIRING", "STOPPED"):
+                        if result == "STOPPED":
+                            self.logger("Family stopped: " + str(getattr(self.monitor, "reason", "persisted/operator stop")))
                         # Finish the process normally so the entrypoint drains
                         # durable diagnostics before EC2 shutdown or local stop.
                         return 0

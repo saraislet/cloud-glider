@@ -13,6 +13,7 @@ class FamilySdkGateway(Ec2SdkGateway):
         super().__init__(config, **kwargs)
         self.settings = validate(config)
         self.configuration_sha256 = config.inherited_configuration["sha256"]
+        self.first_ready_at = None
 
     def node_key(self, path, sk="NODE"):
         return {"PK": {"S": "GEN#" + path}, "SK": {"S": sk}}
@@ -110,6 +111,7 @@ class FamilySdkGateway(Ec2SdkGateway):
         record = {"PK": "GEN#" + self.config.node_path, "SK": "NODE",
                   "request_id": self.config.request_id, "instance_id": self.instance_id,
                   "configuration_sha256": self.configuration_sha256,
+                  "started_at": int(time.time()),
                   "owner": self.instance_id if self.config.node_path == "r" else "",
                   "status": "OWNER" if self.config.node_path == "r" else "CANDIDATE"}
         self.transact([{"Put": {"TableName": self.config.generation_table_name,
@@ -145,6 +147,17 @@ class FamilySdkGateway(Ec2SdkGateway):
                 instances = [self._instance(i) for page in self._pages("describe_instances",
                     Filters=[{"Name": "client-token", "Values": [spec["client_token"]]}])
                     for r in page.get("Reservations", []) for i in r.get("Instances", [])]
+                if not instances and intent.get("launch_rejected") is True:
+                    # Only an explicit throttle rejection permits another attempt.
+                    # Clear permission before the request: a lost response must
+                    # return to reconciliation, including after process restart.
+                    self.transact([self.owner_check(), {"Update": {
+                        "TableName": self.config.generation_table_name, "Key": self.node_key(path, "SUBMISSION"),
+                        "UpdateExpression": "REMOVE launch_rejected",
+                        "ConditionExpression": "request_id = :id AND #token = :token AND launch_rejected = :yes AND attribute_not_exists(instance_id)",
+                        "ExpressionAttributeNames": {"#token": "token"},
+                        "ExpressionAttributeValues": {":id": _av(self.config.request_id), ":token": _av(spec["client_token"]), ":yes": _av(True)}}}])
+                    return self.submit_child(spec)
                 if len(instances) != 1:
                     raise TransientFailure("ambiguous submission; do not resubmit child")
                 instance = instances[0]
@@ -158,7 +171,20 @@ class FamilySdkGateway(Ec2SdkGateway):
         # Stop/HOLD is intentionally monitored asynchronously, not gated here.
         self.transact([self.owner_check(), {"Put": {"TableName": self.config.generation_table_name,
             "Item": _ddb_item(intent), "ConditionExpression": "attribute_not_exists(PK)"}}])
-        response = self._call("ec2", "run_instances", **self.child_request(spec))
+        return self.submit_child(spec)
+
+    def submit_child(self, spec):
+        response = self._call("ec2", "run_instances", allow_failure=True, **self.child_request(spec))
+        if response.get("_code") == "RequestLimitExceeded":
+            self.transact([{"Update": {"TableName": self.config.generation_table_name,
+                "Key": self.node_key(spec["node_path"], "SUBMISSION"),
+                "UpdateExpression": "SET launch_rejected = :yes",
+                "ConditionExpression": "request_id = :id AND #token = :token AND attribute_not_exists(instance_id)",
+                "ExpressionAttributeNames": {"#token": "token"},
+                "ExpressionAttributeValues": {":id": _av(self.config.request_id), ":token": _av(spec["client_token"]), ":yes": _av(True)}}}], bookkeeping=True)
+            raise TransientFailure("child launch throttled; exact request may retry after backoff")
+        if response.get("_code"):
+            raise TransientFailure("child launch requires reconciliation: " + response["_code"])
         if len(response.get("Instances", [])) != 1:
             raise TransientFailure("ambiguous child launch response")
         instance = self._instance(response["Instances"][0])
@@ -185,11 +211,15 @@ class FamilySdkGateway(Ec2SdkGateway):
                     ":token": _av(spec["client_token"]), ":instance": _av(instance["InstanceId"]), ":yes": _av(True)}}}], bookkeeping=True)
 
     def publish_readiness(self, now, has_children):
+        if self.first_ready_at is None:
+            old = self.get_node_item(self.config.node_path, "STATE")
+            self.first_ready_at = old.get("first_ready_at", old.get("ready_at", int(now))) if old.get("instance_id") == self.instance_id else int(now)
         state = {"PK": "GEN#" + self.config.node_path, "SK": "STATE", "request_id": self.config.request_id,
                  "instance_id": self.instance_id, "configuration_sha256": self.configuration_sha256,
                  "node_path": self.config.node_path, "generation": self.config.generation,
                  "predecessor_instance_id": self.config.predecessor_instance_id,
                  "handoff_token": self.config.handoff_token, "ready_at": int(now),
+                 "first_ready_at": self.first_ready_at,
                  "daemon_live": True, "continuation": "DRY_RUN_PASSED" if has_children else "BOUNDARY"}
         self.transact([{"Put": {"TableName": self.config.generation_table_name,
             "Item": _ddb_item(state), "ConditionExpression": "attribute_not_exists(PK) OR (instance_id = :instance AND attribute_not_exists(error_code))",
@@ -288,11 +318,11 @@ class FamilySdkGateway(Ec2SdkGateway):
                 "ExpressionAttributeValues": {":instance": _av(state["instance_id"]),
                     ":owner": _av("OWNER"), ":leaf": _av("LEAF")}}}]
         operations.append({"Update": {"TableName": self.config.generation_table_name,
-            "Key": self.node_key(self.config.node_path), "UpdateExpression": "SET #status = :retiring, retirement_children = :children",
+            "Key": self.node_key(self.config.node_path), "UpdateExpression": "SET #status = :retiring, retirement_children = :children, retirement_at = if_not_exists(retirement_at, :now)",
             "ConditionExpression": "#owner = :instance AND #status = :owner",
             "ExpressionAttributeNames": {"#owner": "owner", "#status": "status"},
             "ExpressionAttributeValues": {":instance": _av(self.instance_id), ":owner": _av("RETIRING" if retiring else "OWNER"),
-                ":retiring": _av("RETIRING"), ":children": _av(list(children))}}})
+                ":retiring": _av("RETIRING"), ":children": _av(list(children)), ":now": _av(int(now))}}})
         self.transact(operations, final=True)
         return True
 
@@ -307,8 +337,8 @@ class FamilySdkGateway(Ec2SdkGateway):
 
     def mark_leaf(self):
         self.transact([{"Update": {"TableName": self.config.generation_table_name,
-            "Key": self.node_key(self.config.node_path), "UpdateExpression": "SET #status = :leaf",
+            "Key": self.node_key(self.config.node_path), "UpdateExpression": "SET #status = :leaf, leaf_at = if_not_exists(leaf_at, :now)",
             "ConditionExpression": "#owner = :instance AND #status IN (:owner, :leaf)",
             "ExpressionAttributeNames": {"#owner": "owner", "#status": "status"},
             "ExpressionAttributeValues": {":instance": _av(self.instance_id), ":owner": _av("OWNER"),
-                ":leaf": _av("LEAF")}}}])
+                ":leaf": _av("LEAF"), ":now": _av(int(time.time()))}}}])

@@ -189,3 +189,18 @@ displayed, with explicit generation labels and state text; rows wrap within the
 panel instead of adding horizontal width. Summary counts refer to that run. Each completed run freezes its observation duration at its last confirmed
 termination; prior run history remains available. The lifecycle controller, not
 the read-only Observer, performs automatic terminal cleanup (decision 0023).
+
+## Inherited family support
+
+For schema-3 binary runs, Observer joins NODE, STATE, RESOURCE and STOP by exact
+cycle and lineage. It verifies proof identity/configuration before displaying
+reported functional readiness; accepted NODE ownership is distinguished from
+candidate proof. RETIRING displays Draining, a durable STOP displays Waiting,
+and confirmed EC2 termination remains terminal. CURRENT stays UNINITIALIZED in
+family mode and does not indicate a failed run.
+
+EC2 LaunchTime supplies creation time. New family releases retain first_ready_at
+while ready_at refreshes live proof every five seconds; Observer uses the former
+for readiness intervals and the latter for proof/heartbeat age. History records
+observed state transitions and survives SSE reconnection and SQLite restart.
+Existing recordings cannot establish first readiness if it was never captured.

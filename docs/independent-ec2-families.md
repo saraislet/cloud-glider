@@ -213,3 +213,23 @@ The acknowledgement preserves newer operator feedback, never clears another
 cycle's command, and fails atomically if an operator changes CONTROL concurrently.
 This is a bootstrap Lambda source/template change; daemon artifacts and baked
 AMI contents are unchanged. Deploy the updated bootstrap stack to activate it.
+
+### Depth-4 throttling and Observer repair
+
+Cycle 21 (generations 0–4, 31 intended launches) stopped after 29 actual launches.
+EC2 throttled requests; lifecycle retry sleeps starved the tick-driven control
+monitor for longer than its unchanged 15-second freshness bound. Local STOP
+latched correctly, but that expiry was avoidable. Control polling now has its own
+scheduler and remains active during backoff and blocking launch calls. Explicit
+RunInstances RequestLimitExceeded responses record a cycle-fenced rejection;
+retry first reconciles the exact token and clears that receipt before repeating
+the same request. Transport errors or other ambiguous responses never authorize
+resubmission. Failed receipt recording also preserves ambiguity.
+
+First functional-readiness time is retained separately from its five-second
+refresh. NODE records retain startup, handoff, leaf and retirement timestamps.
+Family cycle durations are exported through the existing bounded timing channel.
+Observer joins family records independently of scan/stream arrival order, shows
+accepted family ownership, functional proof, stop and retirement states, and
+uses EC2 launch time with retained first-readiness time for intervals. Old images
+lack first-readiness timestamps; missing historical timings are not invented.
