@@ -184,6 +184,8 @@ class GatewayLifecycleTests(unittest.TestCase):
                 )
             )
             current = successor
+        transaction = gateway._call.call_args.kwargs["TransactItems"]
+        self.assertEqual(transaction[-1]["Put"]["TableName"], gateway.config.audit_table_name)
         latest = copy.deepcopy(db.items[("AUDIT#PROPAGATION", "LATEST_HANDOFF")])
         self.assertEqual(latest["event_id"], {"S": "000003"})
         self.assertEqual(

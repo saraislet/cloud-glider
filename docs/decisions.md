@@ -99,3 +99,5 @@ budget is a planning target while billing alerts are deferred; verify current
 [Decision 0019](decisions/0019-direct-ec2-propagation.md) adds cycle-fenced direct EC2 successors and integrates the backend with the baked 2 GiB image. Building and isolated-testing the candidate does not deploy or enable propagation.
 
 - [0022: agent-to-daemon rename](decisions/0022-agent-to-daemon.md) changes names across both backends and release contracts; deploy offline using the daemon migration runbook.
+
+- [0024: separate audit table](decisions/0024-separated-audit-table.md) moves propagation and release audit records out of the control table, with an offline rollout.

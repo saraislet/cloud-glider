@@ -65,6 +65,7 @@ def config(**overrides):
 def control(**overrides):
     values = dict(
         request_id="1",
+        audit_table_name="cloud-glider-sandbox-audit",
         generation_table_name="cloud-glider-sandbox-generations",
         cleanup_requested=False,
         cleanup_status="IDLE",

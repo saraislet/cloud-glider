@@ -117,6 +117,32 @@ class GuardrailTests(unittest.TestCase):
             self.assertEqual(decision(policy, action, resource.replace(PREFIX, 'unrelated')), 'implicitDeny')
         self.assertEqual(decision(policy, 'dynamodb:PutItem', generations), 'implicitDeny')
 
+    @unittest.skipUnless(importlib.util.find_spec('botocore'), 'Pinned SDK model required')
+    def test_compact_profile_selector_preserves_existing_operation_set(self):
+        from botocore.session import get_session
+        matches = {name for name in get_session().get_service_model('iam').operation_names
+                   if fnmatch.fnmatchcase(name, '*InstanceProfile')}
+        self.assertEqual(matches, {'CreateInstanceProfile', 'DeleteInstanceProfile', 'GetInstanceProfile',
+            'AddRoleToInstanceProfile', 'RemoveRoleFromInstanceProfile', 'TagInstanceProfile', 'UntagInstanceProfile'})
+
+    def test_audit_provisioning_grant_does_not_allow_record_mutation(self):
+        audit = TABLE.replace('-state', '-audit')
+        policy = self.boundaries['FoundationBoundary']
+        for action in ('dynamodb:CreateTable', 'dynamodb:DescribeTable', 'dynamodb:UpdateContinuousBackups'):
+            self.assertEqual(decision(policy, action, audit), 'allowed')
+            self.assertEqual(decision(policy, action, audit.replace(PREFIX, 'unrelated')), 'implicitDeny')
+        for action in ('dynamodb:PutItem', 'dynamodb:DeleteItem', 'dynamodb:DeleteTable'):
+            self.assertEqual(decision(policy, action, audit), 'implicitDeny')
+
+    def test_operator_audit_access_is_scoped_to_both_partitions(self):
+        policy = json.loads((ROOT / 'iam/glider-manager-audit-access.json').read_text().replace('123456789012', ACCOUNT))
+        audit = TABLE.replace('-state', '-audit')
+        for pk in ('AUDIT#PROPAGATION', 'AUDIT#RELEASE'):
+            self.assertEqual(decision(policy, 'dynamodb:PutItem', audit, {'dynamodb:LeadingKeys': [pk]}), 'allowed')
+        self.assertEqual(decision(policy, 'dynamodb:PutItem', audit, {'dynamodb:LeadingKeys': ['CONTROL']}), 'implicitDeny')
+        self.assertEqual(decision(policy, 'dynamodb:PutItem', TABLE, {'dynamodb:LeadingKeys': ['AUDIT#RELEASE']}), 'implicitDeny')
+        self.assertEqual(decision(policy, 'dynamodb:DeleteItem', audit), 'implicitDeny')
+
     @classmethod
     def setUpClass(cls):
         cls.template = json.loads((ROOT / "cfn/permission-boundaries.json").read_text())
@@ -232,11 +258,26 @@ class GuardrailTests(unittest.TestCase):
             for action in ["dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:BatchWriteItem"]:
                 self.assertEqual(self.boundary("Daemon", action, TABLE, {"dynamodb:LeadingKeys": [key]}), "explicitDeny")
         self.assertEqual(self.boundary("Daemon", "dynamodb:ConditionCheckItem", TABLE, {"dynamodb:LeadingKeys": ["CONTROL", "HOLD"]}), "allowed")
-        for key in ["CURRENT", "LOCK", "AUDIT#PROPAGATION"]:
+        for key in ["CURRENT", "LOCK"]:
             self.assertEqual(self.boundary("Daemon", "dynamodb:UpdateItem", TABLE, {"dynamodb:LeadingKeys": [key]}), "allowed")
         self.assertEqual(self.boundary("Daemon", "dynamodb:PutItem", TABLE, {"dynamodb:LeadingKeys": ["CURRENT", "CONTROL"]}), "explicitDeny")
         self.assertEqual(self.boundary("Hold", "dynamodb:PutItem", TABLE, {"dynamodb:LeadingKeys": ["HOLD"]}), "allowed")
         self.assertEqual(self.boundary("Hold", "dynamodb:DeleteItem", TABLE, {"dynamodb:LeadingKeys": ["HOLD"]}), "explicitDeny")
+
+    def test_audit_writes_are_separate_and_partition_scoped(self):
+        audit = TABLE.replace("-state", "-audit")
+        for role in ("Daemon", "Hold"):
+            for backend in ("cloudformation", "ec2"):
+                policy = resolve(self.template["Resources"][role + "Boundary"]["Properties"]["PolicyDocument"],
+                                 {**VALUES, "PropagationBackend": backend, "AllowedLaunchTemplateId": "lt-approved"})
+                ctx = {"dynamodb:LeadingKeys": ["AUDIT#PROPAGATION"]}
+                self.assertEqual(decision(policy, "dynamodb:PutItem", audit, ctx), "allowed")
+                self.assertNotEqual(decision(policy, "dynamodb:PutItem", TABLE, ctx), "allowed")
+                for key in ("AUDIT#RELEASE", "CONTROL", "CURRENT", "HOLD"):
+                    self.assertNotEqual(decision(policy, "dynamodb:PutItem", audit,
+                                                {"dynamodb:LeadingKeys": [key]}), "allowed")
+                for action in ("dynamodb:DeleteItem", "dynamodb:UpdateItem", "dynamodb:Scan"):
+                    self.assertNotEqual(decision(policy, action, audit, ctx), "allowed")
 
     def test_generation_table_permissions_are_separate(self):
         generations = TABLE.replace("-state", "-generations")

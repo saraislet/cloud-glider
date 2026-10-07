@@ -86,3 +86,11 @@ steady-state protected-resource SCP also blocks normal foundation changes to
 retention and trail selectors. Use the reviewed maintenance and recovery path
 in [the guardrail runbook](../iam/permission-guardrails.md); preserve canonical
 audit delivery while testing RCP service-source restrictions.
+
+## DynamoDB audit records
+
+Propagation and release audit items use `cloud-glider-{environment}-audit` after
+the [offline migration](audit-table-migration.md). Existing keys and contents are
+preserved, including reusable latest-event results. Ownership handoff and its
+audit write remain one atomic transaction across tables. Recovery audits remain
+in the state table. This split does not replace CloudTrail or change log retention.

@@ -49,6 +49,7 @@ def build_transaction(args: argparse.Namespace, *, now: str, event_id: str) -> l
         "last_result_sequence": {"N": "0"}, "cycle_initialized": {"BOOL": False},
         "PK": av_string("CONTROL"),
         "SK": av_string("GLOBAL"),
+        "audit_table_name": av_string(f"cloud-glider-{args.environment}-audit"),
         "generation_table_name": av_string(f"cloud-glider-{args.environment}-generations"),
         "desired_template_version": av_string(args.template_version),
         "desired_bootstrap_version": av_string(args.bootstrap_version),
@@ -129,7 +130,7 @@ def build_transaction(args: argparse.Namespace, *, now: str, event_id: str) -> l
     return [
         {"Put": {"TableName": args.table_name, "Item": control, "ConditionExpression": condition}},
         {"Put": {"TableName": args.table_name, "Item": current, "ConditionExpression": condition}},
-        {"Put": {"TableName": args.table_name, "Item": audit, "ConditionExpression": condition}},
+        {"Put": {"TableName": f"cloud-glider-{args.environment}-audit", "Item": audit, "ConditionExpression": condition}},
     ]
 
 

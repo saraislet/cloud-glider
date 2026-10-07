@@ -186,3 +186,7 @@ and the separate historical deployed release.
 Direct EC2 propagation is available as an explicit offline transition. See [the EC2 runbook](docs/ec2-propagation.md) and decision 0019. Existing CloudFormation cycles retain their current behavior.
 
 For the coordinated agent-to-daemon release, follow [the migration runbook](docs/daemon-migration.md).
+
+The prepared [audit-table split](docs/audit-table-migration.md) moves propagation
+and release audit records into a separate table during a reviewed offline rollout.
+The preparation scripts never submit AWS requests.

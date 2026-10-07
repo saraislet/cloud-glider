@@ -97,6 +97,12 @@ class BootstrapTests(unittest.TestCase):
         self.run_request()
         self.cfn.create_stack.assert_called_once()
 
+    def test_unmigrated_audit_destination_blocks_launch(self):
+        self.control.pop('audit_table_name')
+        with self.assertRaisesRegex(RuntimeError, 'Audit table requires migration'):
+            self.run_request()
+        self.cfn.create_stack.assert_not_called()
+
     def test_hold_and_missing_or_initialized_current_fail_closed(self):
         for which in ('hold', 'missing_current', 'initialized'):
             with self.subTest(which=which):

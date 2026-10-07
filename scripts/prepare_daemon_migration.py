@@ -81,7 +81,7 @@ def build_transaction(table, snapshot, approved_control, actor, event_id):
         alias = '#new_' + suffix
         put['ExpressionAttributeNames'][alias] = 'daemon_artifact_' + suffix
         put['ConditionExpression'] += ' AND attribute_not_exists(' + alias + ')'
-    operations.append({'Put': {'TableName': table, 'Item': {
+    operations.append({'Put': {'TableName': 'cloud-glider-' + approved_control['environment']['S'] + '-audit', 'Item': {
         'PK': {'S': 'AUDIT#PROPAGATION'}, 'SK': {'S': 'DAEMON_MIGRATION#' + event_id},
         'action': {'S': 'OFFLINE_DAEMON_RENAME'}, 'actor': {'S': actor},
         'previous_control': {'M': control}, 'approved_control': {'M': approved_control},

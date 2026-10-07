@@ -272,6 +272,7 @@ class Ec2SdkTests(unittest.TestCase):
             )
         )
         self.assertEqual(tx[6]["Put"]["Item"]["SK"], {"S": "LATEST_HANDOFF"})
+        self.assertEqual(tx[6]["Put"]["TableName"], self.cfg.audit_table_name)
         names = tx[1]["ConditionCheck"]["ExpressionAttributeNames"].values()
         self.assertNotIn("propagation_enabled", names)
         self.assertNotIn("request_id", names)

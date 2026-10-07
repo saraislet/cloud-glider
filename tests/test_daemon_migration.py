@@ -12,7 +12,7 @@ from request_bootstrap import fingerprint
 class DaemonMigrationTests(unittest.TestCase):
     def setUp(self):
         self.snapshot = {
-            'control': {'PK': {'S': 'CONTROL'}, 'SK': {'S': 'GLOBAL'},
+            'control': {'environment': {'S': 'sandbox'}, 'audit_table_name': {'S': 'cloud-glider-sandbox-audit'}, 'PK': {'S': 'CONTROL'}, 'SK': {'S': 'GLOBAL'},
                 'start_requested': {'BOOL': False}, 'stop_requested': {'BOOL': False},
                 'cleanup_requested': {'BOOL': False}, 'active_command': {'S': 'NONE'},
                 'command_sequence': {'N': '7'}, 'propagation_backend': {'S': 'ec2'},

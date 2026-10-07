@@ -52,6 +52,7 @@ def control(**overrides):
     values = {
         "request_id": "1", "cleanup_requested": False, "cleanup_status": "IDLE",
         "propagation_enabled": True,
+        "audit_table_name": "cloud-glider-sandbox-audit",
         "generation_table_name": "cloud-glider-sandbox-generations",
         "desired_template_version": "template-v1",
         "desired_bootstrap_version": "bootstrap-v1",

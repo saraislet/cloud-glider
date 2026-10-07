@@ -52,8 +52,8 @@ Control and coordination stay in `cloud-glider-{environment}-state`; generation 
 - `LOCK/PROVISIONING`: non-expiring submission marker; cleanup waits for a reconciled outcome.
 - Generation table `GEN#.../RESOURCE#<stack ARN>`: exact submitted stack inventory, including legacy preview stacks for cleanup.
 - `HOLD/ACTIVE`: append-only incident stop created only by the dedicated Lambda.
-- `AUDIT#PROPAGATION/LATEST_HANDOFF`, `LATEST_HOLD`, `LATEST_INITIALIZATION`, `LATEST_BOOTSTRAP`, `LATEST_MIGRATION`: latest event per action.
-- `AUDIT#RECOVERY/LATEST`: latest hold-clear result. These fixed keys replace expanding event history.
+- In `cloud-glider-{environment}-audit`: `AUDIT#PROPAGATION/LATEST_HANDOFF`, `LATEST_HOLD`, `LATEST_INITIALIZATION`, `LATEST_BOOTSTRAP`, `LATEST_MIGRATION`: latest event per action.
+- In the state table: `AUDIT#RECOVERY/LATEST`: latest hold-clear result. These fixed keys replace expanding event history.
 
 CloudTrail is authoritative for AWS API changes. The service writes structured
 JSON lifecycle events to the systemd journal; the configured EC2 status alarm

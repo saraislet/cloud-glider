@@ -31,6 +31,8 @@ class MemoryDdb:
     def check_table(self, kw):
         item = kw.get("Key", kw.get("Item"))
         expected = "cloud-glider-sandbox-generations" if item["PK"]["S"].startswith("GEN#") else "table"
+        if item["PK"]["S"] in ("AUDIT#PROPAGATION", "AUDIT#RELEASE"):
+            expected = "cloud-glider-sandbox-audit"
         assert kw["TableName"] == expected, (kw["TableName"], expected)
 
     def get_item(self, **kw):

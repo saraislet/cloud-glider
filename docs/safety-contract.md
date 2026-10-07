@@ -120,7 +120,7 @@ operations can finish. Missing or ambiguous evidence blocks additional work.
 - `CONTROL/GLOBAL` also carries the immutable daemon artifact identity tuple.
 - `CURRENT/GLOBAL`: no authoritative running generation and status
   `UNINITIALIZED`.
-- `AUDIT#PROPAGATION/EVENT#...`: attribution for the initialization operation.
+- `AUDIT#PROPAGATION/EVENT#...` in the audit table: attribution for the initialization operation.
 
 No `HOLD/ACTIVE` item means the system is not held. Its existence means the hold
 is active; the `active` Boolean is descriptive and is not used to clear it.
