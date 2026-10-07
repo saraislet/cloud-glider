@@ -33,8 +33,64 @@ after each smoke trial. Keep only the deployed image, an optional compatible
 rollback and one next-release candidate; reconcile references and preserve
 receipts before retiring superseded image/snapshot pairs.
 
-A rebuilt image does not update deployed controller/schema or CONTROL approvals.
-Follow [the coordinated release runbook](minimal-ami.md) after validation.
+A rebuilt image alone does not update deployed controller/schema or CONTROL
+approvals. Every build must finish the coordinated sandbox release below; an
+available, smoke-tested candidate is still an incomplete build task.
+
+## Mandatory sandbox release completion
+
+The operator requires every future AMI build to leave the sandbox immediately
+operable for propagation. No separate request to deploy the candidate is needed
+within that build task. Leave propagation disabled and do not start a trial as
+part of release completion.
+
+1. Verify idle, cleaned lifecycle, uninitialized CURRENT, absent HOLD, no pending
+   operator command and no in-flight or surviving generation instances. Stop and
+   clean a live cycle before changing its pins; never change a running cycle.
+2. Build, validate metadata, capture explicit cold guest smoke PASS for the exact
+   AMI/digest, and verify smoke stack, instance and volume cleanup. Preserve all
+   private receipts. Packer's `approval=candidate` manifest is intermediate.
+3. Publish immutable versioned artifacts. Review and deploy the sandbox boundary
+   image allow-list through SecurityAdmin, foundation image permissions through
+   Release, current bootstrap code/configuration and the pinned numeric launch
+   template. Preserve unrelated live IAM and audit configuration; do not blindly
+   replace live stacks from an older checkout. Wait for successful completion.
+4. While the stream trigger is paused, conditionally update the idle CONTROL and
+   BOOTSTRAP fingerprint to the same release, exact versioned artifact tuples,
+   digests and numeric launch-template version. Preserve the approved generation
+   bound. Restore the normal stream listener; keep lifecycle propagation false.
+5. Run the read-only completion gate and retain its owner-only receipt:
+
+```sh
+python scripts/verify_sandbox_release.py \
+  --profile glider-observe \
+  --image-id AMI_ID --daemon-sha256 ARCHIVE_SHA256 --source-commit FULL_COMMIT \
+  --smoke-stack-id DELETED_SMOKE_STACK_ARN \
+  --smoke-console .artifacts/release/smoke-console.txt \
+  --receipt .artifacts/release/propagation-ready.json
+```
+
+Use the deleted smoke stack's full ARN, not its reusable name. The gate checks
+actual enabled/healthy listener state, completed image pins in all four stacks,
+CONTROL/bootstrap fingerprint agreement, exact launch-template configuration,
+metadata, explicit guest proof, deleted smoke stack and empty live inventory.
+Its result is a point-in-time readiness receipt, not a guarantee against later
+changes. Run it again immediately before START. Permission denial or absent
+proof fails completion; never substitute stack success for guest proof.
+
+The supplemental policies `iam/security-admin-boundary-release.json` and
+`iam/observer-bootstrap-listener-read.json` record the narrow live permission
+repairs. They are separate inline policies alongside the identity stack's
+managed inline policy. Keep them in reconciled identity deployments; the
+listener read grant names the exact UUID and must be updated if it is replaced.
+Neither policy grants propagation or arbitrary stack access.
+
+For inherited family cycles, the supported switch is CONTROL `start_requested`
+(or `scripts/lifecycle.py start --apply` / Observer START). The controller pins
+the approved configuration and enables the new cycle. A bare legacy
+BOOTSTRAP `propagation_enabled` toggle does not bootstrap an inherited family.
+With a passing receipt, START requires no AMI rebuild or release deployment.
+Follow [the coordinated release runbook](minimal-ami.md) for deployment context.
 
 ## Bounded-root build workspace
 

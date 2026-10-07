@@ -1,0 +1,11 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadExactSandboxBootstrapListener",
+      "Effect": "Allow",
+      "Action": "lambda:GetEventSourceMapping",
+      "Resource": "arn:aws:lambda:us-west-2:482268323955:event-source-mapping:81e4253a-0dc9-4f66-8f60-f8b245512354"
+    }
+  ]
+}

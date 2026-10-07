@@ -1,0 +1,26 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "PrepareSandboxBoundaryRelease",
+      "Effect": "Allow",
+      "Action": "cloudformation:CreateChangeSet",
+      "Resource": "arn:aws:cloudformation:us-west-2:482268323955:stack/cloud-glider-sandbox-boundaries/*",
+      "Condition": {
+        "Null": {
+          "cloudformation:RoleARN": "true"
+        }
+      }
+    },
+    {
+      "Sid": "ExecuteSandboxBoundaryRelease",
+      "Effect": "Allow",
+      "Action": [
+        "cloudformation:ExecuteChangeSet",
+        "cloudformation:DeleteChangeSet",
+        "cloudformation:ContinueUpdateRollback"
+      ],
+      "Resource": "arn:aws:cloudformation:us-west-2:482268323955:stack/cloud-glider-sandbox-boundaries/*"
+    }
+  ]
+}
