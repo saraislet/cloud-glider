@@ -28,6 +28,11 @@ disabled daemon, empty state and at least 384 MiB free space. Successful tests
 shut down the instance. Collect evidence and delete the smoke stack through
 CloudFormation to end storage charges. Preserve the AMI and its root snapshot.
 
+Complete the [verified cleanup and AMI retention checklist](trial-cleanup-and-ami-retention.md)
+after each smoke trial. Keep only the deployed image, an optional compatible
+rollback and one next-release candidate; reconcile references and preserve
+receipts before retiring superseded image/snapshot pairs.
+
 A rebuilt image does not update deployed controller/schema or CONTROL approvals.
 Follow [the coordinated release runbook](minimal-ami.md) after validation.
 
@@ -42,3 +47,14 @@ construction. The target remains 2 GiB and the 384 MiB final/boot headroom check
 remain required. Build failure creates no approved image; Packer cleans up the
 builder with `-on-error=cleanup`. The selected kernel and package inventory are
 recorded by the normal image manifest/package evidence.
+
+## Private trial automation
+
+Use the implemented `scripts/trial_receipt.py preflight`, `capture`, and `verify`
+commands in [the trial evidence runbook](trial-cleanup-and-ami-retention.md#implemented-private-evidence-commands).
+Capture exact resource IDs and evidence before supported cleanup, then verify
+fresh resource/state readback afterward. STOP alone is not cleanup. The tool
+performs read-only AWS calls, preserves owner-only ignored receipts, and leaves
+missing evidence, incomplete cleanup and retained exceptions explicit. Live
+trials, cleanup writes, deployment and AMI retention changes still require their
+existing operator authorization; the tool adds no scheduled deletion workflow.

@@ -4,6 +4,10 @@ The depth-2 release was deployed and tested live on 2026-10-06. Larger tests
 require separate operator approval. This runbook covers version-3 EC2 family cycles. Architectural
 changes and preserved gates are recorded in [decision 0023](decisions/0023-independent-inherited-ec2-families.md).
 
+Every live trial ends with the [verified cleanup checklist](trial-cleanup-and-ami-retention.md).
+STOP alone leaves instances running. Collect evidence, use supported CLEANUP,
+verify resources are gone and record any operator-approved retained exceptions.
+
 ## Operator configuration
 
 On an offline, cleaned-up environment, prepare CONTROL/GLOBAL with:
@@ -260,3 +264,14 @@ disabled. Both in-progress candidate image builds were canceled with Packer's
 normal cleanup; this repair has not yet completed a fresh 31-instance live trial.
 Local validation passed 420 Python tests, the deterministic Observer UI check,
 repository safety checks, generated bootstrap consistency and CloudFormation lint.
+
+## Private trial automation
+
+Use the implemented `scripts/trial_receipt.py preflight`, `capture`, and `verify`
+commands in [the trial evidence runbook](trial-cleanup-and-ami-retention.md#implemented-private-evidence-commands).
+Capture exact resource IDs and evidence before supported cleanup, then verify
+fresh resource/state readback afterward. STOP alone is not cleanup. The tool
+performs read-only AWS calls, preserves owner-only ignored receipts, and leaves
+missing evidence, incomplete cleanup and retained exceptions explicit. Live
+trials, cleanup writes, deployment and AMI retention changes still require their
+existing operator authorization; the tool adds no scheduled deletion workflow.
