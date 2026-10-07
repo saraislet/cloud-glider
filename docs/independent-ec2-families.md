@@ -164,3 +164,42 @@ parent receipt validation and asynchronous emergency-hold fixes are preserved.
 AMI `ami-020e1d14a1a081269` predates this integration and must not replace the
 audit-separated deployment. Build and cold-smoke a new immutable image before
 coordinating release pins or starting the authorized depth-3 family trial.
+
+### Audit-compatible depth-3 live validation — 2026-10-06 Pacific
+
+After the audit separation AWS rollout completed, source commit
+`a76063076c9cd4a85311f32a24b85d682b3dc7d0` combined that implementation with
+inherited families and the terminated-parent/asynchronous-hold fixes. All 407
+Python tests, repository checks, bootstrap rendering and CloudFormation template
+validation passed. The immutable daemon artifact digest is
+`d2d16fd54e330f959225b8bda47b507df46b44b204c3133ed42eb7808dce7276`.
+
+AMI `ami-0e287059866c01bac` passed metadata and isolated guest cold-boot smoke
+validation, then was deployed through coordinated image permissions, bootstrap,
+launch-template version 12 and CONTROL pins. Release templates preserved the
+already deployed explicit IAM permissions and audit resources; they did not
+apply the older instance-profile wildcard from the rebased template. The exact
+release templates and change-set reviews are retained in local artifacts.
+
+The inspected cycle-19 hold was cleared with an exact-record conditional operator
+recovery transaction after checking the deployed fix, idle state and cold-smoke
+result. Normal stream delivery processed START for cycle 20 at depth 3. All 15
+expected nodes launched, all seven parents terminated after handoff, and eight
+terminal leaves reached LEAF. No new identity mismatch, generation error or hold
+occurred. Root EC2 launch to the last leaf handoff took 147 seconds in this single
+trial; this excludes the operator START stream-delivery delay and is not a
+repeated performance benchmark.
+
+Normal STOP disabled propagation and all eight leaves published durable stop
+records. Timing validation captured 2,313 records from all 15 producers with
+complete collection. Normal cleanup terminated every instance, deleted the seed
+stack and remaining volumes, and removed generation records. Resource cleanup
+finished before the operator busy flag acknowledged completion; an additional
+idempotent STOP through the normal stream path reconciled that flag. This
+acknowledgement issue remains an implementation follow-up.
+
+Final state: propagation disabled, CURRENT UNINITIALIZED, lifecycle READY,
+cleanup COMPLETE, CONTROL command NONE, next request 21, no hold, no generation
+records and no live Glider instances. The retained binary depth setting is 3.
+Evidence is under ignored `.artifacts/family-audit/`, especially `completion.json`
+and `cycle-20/`; no diagnostic Lambda replay was used.
