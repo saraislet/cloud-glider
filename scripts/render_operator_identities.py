@@ -108,6 +108,7 @@ def render(config, image_policy):
         statement("LaunchSmallTaggedSmokeInstance", "ec2:RunInstances", regional("ec2") + "instance/*", {"StringEquals": {"aws:RequestTag/project": "cloud-glider", "aws:RequestTag/purpose": "image-smoke-test", "ec2:InstanceType": "t4g.micro", "ec2:MetadataHttpTokens": "required"}}),
         statement("LaunchSmokeInterfaceAndRoot", "ec2:RunInstances", [regional("ec2") + "network-interface/*", regional("ec2") + "volume/*"], {"StringEquals": {"aws:RequestedRegion": region}, "ForAnyValue:StringEquals": {"aws:CalledVia": "cloudformation.amazonaws.com"}}),
         statement("CleanTaggedSmokeInstances", "ec2:TerminateInstances", regional("ec2") + "instance/*", {"StringEquals": {"ec2:ResourceTag/project": "cloud-glider", "ec2:ResourceTag/purpose": "image-smoke-test"}}),
+        statement("ReadOwnedImageSmokeConsole", "ec2:GetConsoleOutput", regional("ec2") + "instance/*", {"StringEquals": {"ec2:ResourceTag/project": "cloud-glider", "ec2:ResourceTag/purpose": "image-smoke-test"}}),
     ]
     release_stacks = [regional("cloudformation") + "stack/" + n + "/*" for n in
                       (base, base + "-foundation", base + "-bootstrap", base + "-launch-template", base + "-image-permissions")]

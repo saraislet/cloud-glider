@@ -16,6 +16,37 @@ PROFILE_NAMES = {
 }
 
 
+def validate_smoke_console_scope(iam, policies, *, account, region):
+    """Evaluate the complete proposed builder policy with positive/negative inputs."""
+    documents = [json.dumps(policies[name]) for name in ("GliderImageBuilder", "GliderImageBuilderSmoke")]
+    resource = "arn:aws:ec2:" + region + ":" + account + ":instance/i-0123456789abcdef0"
+    tags = {"project": "cloud-glider", "purpose": "image-smoke-test"}
+    cases = [
+        ("owned smoke instance", resource, tags, True),
+        ("wrong project", resource, {**tags, "project": "unrelated"}, False),
+        ("wrong purpose", resource, {**tags, "purpose": "image-build"}, False),
+        ("generation compute", resource, {**tags, "purpose": "generation-compute"}, False),
+        ("missing project", resource, {"purpose": tags["purpose"]}, False),
+        ("missing purpose", resource, {"project": tags["project"]}, False),
+        ("missing both tags", resource, {}, False),
+        ("other account", resource.replace(":" + account + ":", ":000011112222:"), tags, False),
+        ("other Region", resource.replace(":" + region + ":", ":us-east-1:"), tags, False),
+        ("volume resource", resource.replace(":instance/i-", ":volume/vol-"), tags, False),
+    ]
+    results = []
+    for label, arn, values, allowed in cases:
+        response = iam.simulate_custom_policy(PolicyInputList=documents,
+            ActionNames=["ec2:GetConsoleOutput"], ResourceArns=[arn],
+            ContextEntries=[{"ContextKeyName": "ec2:ResourceTag/" + key,
+                             "ContextKeyValues": [value], "ContextKeyType": "string"}
+                            for key, value in values.items()])
+        evaluations = response["EvaluationResults"]
+        if len(evaluations) != 1 or (evaluations[0]["EvalDecision"] == "allowed") != allowed:
+            raise ValueError("Unexpected console scope decision for " + label + ": " + json.dumps(evaluations))
+        results.append({"case": label, "decision": evaluations[0]["EvalDecision"]})
+    return results
+
+
 def main():
     import boto3
     from botocore.exceptions import ClientError
@@ -25,6 +56,7 @@ def main():
     parser.add_argument("--source-profile", default="default")
     parser.add_argument("--task-profiles", action="store_true", help="Use the configured task profiles (SSO path) instead of direct assumption")
     parser.add_argument("--artifact-key", help="Known existing, nonsecret artifact to read without changing it")
+    parser.add_argument("--simulate-smoke-console", action="store_true", help="Check proposed console-read scope using IAM simulation; does not prove live deployment")
     parser.add_argument("--receipt", type=Path, required=True)
     args = parser.parse_args()
     config = json.loads(args.config.read_text())
@@ -173,6 +205,11 @@ def main():
                     if findings:
                         raise ValueError(json.dumps(findings))
                 record("GliderSecurityAdmin", "policy validation " + name, validate)
+            if args.simulate_smoke_console:
+                def console_scope():
+                    receipt["smoke_console_simulation"] = validate_smoke_console_scope(
+                        sessions["GliderSecurityAdmin"].client("iam"), expected, account=account, region=region)
+                record("GliderSecurityAdmin", "proposed builder console scope simulation", console_scope)
         record(next(iter(receipt["roles"])), "existing source still works", lambda: original.client("sts").get_caller_identity())
     finally:
         args.receipt.parent.mkdir(parents=True, exist_ok=True)

@@ -82,6 +82,17 @@ class OperatorIdentityTests(unittest.TestCase):
         self.assertEqual(self.image, original)
         self.assertTrue(all(len(json.dumps(d, separators=(",", ":"))) <= 6144 for d in managed))
 
+    def test_smoke_console_access_has_exact_instance_and_tag_scope(self):
+        smoke = self.result["template"]["Resources"]["GliderImageBuilder"]["Properties"]["Policies"][0]["PolicyDocument"]
+        reads = [s for s in smoke["Statement"] if s["Action"] == "ec2:GetConsoleOutput"]
+        self.assertEqual(reads, [{
+            "Sid": "ReadOwnedImageSmokeConsole", "Effect": "Allow",
+            "Action": "ec2:GetConsoleOutput",
+            "Resource": "arn:aws:ec2:us-west-2:111122223333:instance/*",
+            "Condition": {"StringEquals": {"ec2:ResourceTag/project": "cloud-glider",
+                                           "ec2:ResourceTag/purpose": "image-smoke-test"}},
+        }])
+
     def test_invalid_scope_and_same_security_permission_set_fail(self):
         for overrides in ({"account_id": "123456789012"}, {"region": "us-east-1"}, {"environment": "production"}, {"security_permission_set": "GliderAccess"}):
             with self.assertRaises(ValueError):

@@ -97,6 +97,13 @@ path. Inspect exact physical inventory and control state before exceptional
 deletion; preserve receipts and reconcile controller feedback afterward. Cleanup
 has no generation-state deletion or launch permissions. Image smoke tests use
 `cloud-glider-sandbox-ami-smoke-*` stack names and `image-smoke-test` purpose tags.
+The builder's smoke supplement includes `ec2:GetConsoleOutput` only for instances
+in the configured account and Region with both `project=cloud-glider` and
+`purpose=image-smoke-test`. AWS supports instance resources and
+`ec2:ResourceTag/${TagKey}` for this action; see the
+[EC2 authorization reference](https://docs.aws.amazon.com/service-authorization/latest/reference/list_ec2.html).
+Wrong or missing tags, another account, another Region and generation-compute
+instances receive no console-read grant from this supplement.
 
 Operator CONTROL access can change values beyond normal command switches.
 Release can publish executable code and exercise its CloudFormation service
@@ -137,6 +144,11 @@ artifact to test object reads. Transaction probes require the specific
 Cleanup termination DryRun is recorded as untested when no matching instance
 exists. Identity Center validation uses `--task-profiles` and verifies both
 permission-set source identities before testing the task roles.
+`--simulate-smoke-console` evaluates the complete proposed builder permissions
+with one allowed smoke-instance case and nine denied cases: wrong project,
+wrong purpose, generation compute, missing either/both tags, another account,
+another Region and a volume resource. Simulation does not prove deployment or
+a successful console API call against an actual smoke instance.
 
 ## Initial rollout evidence
 
@@ -148,6 +160,15 @@ unchanged. Nonmutating authorization checks passed, including DynamoDB rejection
 conditions, Streams iterator/record reads, artifact reads and the approved
 builder launch DryRun. The complete Python suite passed 418 tests, and the
 rendered template passed CloudFormation validation and cfn-lint.
+
+A subsequent isolated smoke operation using the migration builder role launched
+its instance and received the guest's success signal, but console collection
+failed because the original smoke supplement lacked `ec2:GetConsoleOutput`.
+The scoped console-read correction is included in this source change; deployment
+and a successful console read through the replacement role still require proof.
+AWS policy validation and all ten console-scope simulations passed for the
+proposed complete builder policy. No smoke instance or lifecycle state was
+changed while validating this permission correction.
 
 Identity Center provisioning/sign-in validation is pending. Actual build/smoke,
 release, normal command/cleanup and exceptional recovery/deletion workflows remain
