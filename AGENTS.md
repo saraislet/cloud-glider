@@ -79,6 +79,20 @@
 
 ### Completion checks
 
+Every AMI build is a sandbox release task. Packer success or an available image is
+an intermediate candidate, never completion. After metadata and isolated guest
+smoke validation and verified smoke cleanup, deploy the coordinated image
+allow-lists, bootstrap code/configuration and pinned numeric launch-template
+version, update CONTROL and BOOTSTRAP fingerprints conditionally while idle,
+and restore the normal bootstrap stream listener. Run
+`scripts/verify_sandbox_release.py` and retain its passing private receipt before
+calling the build complete. Keep propagation disabled; the completed release must
+be operable immediately through the supported START/DynamoDB operator switch.
+Never enable a bare legacy lifecycle boolean for inherited families. Do not
+replace a live cycle's release: stop and clean it first. A denied permission,
+failed smoke, incomplete cleanup or mismatched pin is an incomplete release to
+fix or report, not permission to skip deployment. See `docs/ami-build.md`.
+
 Before completing a change:
 
 1. Validate it against these invariants and the simplified design document.
