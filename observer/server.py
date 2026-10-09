@@ -50,11 +50,17 @@ def project(rows, region):
                        and proof.get('configuration_sha256') == node.get('configuration_sha256')
                        and proof.get('node_path') == path and proof.get('daemon_live') is True
                        and isinstance(proof.get('ready_at'), (int, float))
-                       and proof.get('continuation') in ('DRY_RUN_PASSED', 'BOUNDARY')
+                       and proof.get('continuation') in ('DRY_RUN_PASSED', 'DAEMON_READY', 'BOUNDARY')
                        and not proof.get('error_code'))
+        propagation = records.get('PROPAGATION', {})
+        reported_launch = (propagation.get('instance_id') == identity and propagation.get('request_id') == cycle
+                           and propagation.get('configuration_sha256') == node.get('configuration_sha256')
+                           and propagation.get('node_path') == path and propagation.get('result') == 'LIVE_LAUNCH_PASSED'
+                           and isinstance(propagation.get('children'), list) and bool(propagation['children'])
+                           and isinstance(propagation.get('demonstrated_at'), (int, float)))
         merged = {**proof, **node, 'generation': len(path)-1, 'node_path': path, '_family': True,
                   '_proof_valid': valid_proof, '_stopped': 'STOP' in records,
-                  '_proof': proof}
+                  '_proof': proof, '_propagation': propagation if reported_launch else {}}
         if proof.get('error_code') or proof.get('status') == 'ERROR': merged['status'] = 'ERROR'
         legacy.append(merged)
     rows = legacy
@@ -96,6 +102,12 @@ def project(rows, region):
                          readiness_basis='accepted family ownership' if r.get('owner') == r['instance_id'] and r.get('_proof_valid') else 'reported family functional proof' if r.get('_proof_valid') else 'no authoritative readiness evidence',
                          source_ready_at=iso(proof['ready_at']) if r.get('_proof_valid') else None,
                          ownership_at=iso(r['handoff_at']) if r.get('handoff_at') else None)
+            if proof.get('continuation') == 'DAEMON_READY':
+                propagation = r['_propagation']
+                event['propagation_demonstrated'] = bool(propagation)
+                event['propagation_at'] = iso(propagation['demonstrated_at']) if propagation else None
+                if r.get('_proof_valid'):
+                    event['readiness_basis'] += '; live propagation reported' if propagation else '; continuation not yet demonstrated'
             if r.get('_proof_valid'):
                 event['heartbeat_at'] = iso(proof['ready_at'])
                 if proof.get('first_ready_at') is not None: event['ready_at'] = iso(proof['first_ready_at'])

@@ -78,16 +78,13 @@ class FamilySdkTests(unittest.TestCase):
         self.assertIn("request_id", check["ConditionExpression"])
         self.assertIn("cycle_configuration_sha256", check["ConditionExpression"])
 
-    def test_ec2_request_uses_exact_template_token_and_inherited_user_data(self):
+    def test_ec2_request_uses_exact_template_without_dry_run(self):
         from cloud_glider.inherited import specification
-        spec = specification(self.cfg, "r0", self.cfg.instance_id, "handoff-r0")
-        self.response = {"_code": "DryRunOperation"}
-        self.gateway.dry_run_child(spec)
-        request = self.calls[-1][2]
+        request = self.gateway.child_request(specification(self.cfg, "r0", self.cfg.instance_id, "handoff-r0"))
         self.assertEqual(request["LaunchTemplate"]["Version"], "1")
         self.assertEqual(request["MaxCount"], 1)
         self.assertIn("UserData", request)
-        self.assertTrue(request["DryRun"])
+        self.assertNotIn("DryRun", request)
 
     def test_botocore_encodes_user_data_exactly_once(self):
         from cloud_glider.inherited import specification
@@ -126,12 +123,12 @@ class FamilySdkTests(unittest.TestCase):
             "generation": f"{len(path)-1:06d}", "configuration_sha256": self.gateway.configuration_sha256,
             "predecessor_instance_id": self.cfg.instance_id, "handoff_token": "handoff-" + path,
             "daemon_live": True, "ready_at": 100,
-            "continuation": "BOUNDARY" if len(path) == 3 else "DRY_RUN_PASSED"}
+            "continuation": "BOUNDARY" if len(path) == 3 else "DAEMON_READY"}
 
     def test_ambiguous_or_stale_child_proof_never_changes_ownership(self):
         for change in ({"ready_at": 84}, {"ready_at": 101}, {"request_id": "2"},
                        {"configuration_sha256": "bad"}, {"daemon_live": False},
-                       {"generation": "000002"}, {"continuation": "BOUNDARY"}):
+                       {"generation": "000002"}, {"continuation": "BOUNDARY"}, {"continuation": "DRY_RUN_PASSED"}):
             state = {**self.proof(), **change}
             self.gateway.get_node_item = Mock(return_value=state)
             self.assertIsNone(self.gateway.eligible("r0", "i-child", 100))
@@ -151,6 +148,7 @@ class FamilySdkTests(unittest.TestCase):
     def test_family_retirement_checks_both_children_and_durable_exact_plan(self):
         self.gateway.read_node = Mock(side_effect=lambda path: {"instance_id": "i-" + path, "owner": "i-" + path})
         self.gateway.eligible = Mock(side_effect=lambda path, instance, now: {**self.proof(path), "instance_id": instance})
+        self.gateway.propagation_checks = Mock(return_value=[])
         with patch("cloud_glider.family_sdk.time.time", return_value=100):
             self.assertTrue(self.gateway.authorize_retirement(("r0", "r1"), 100))
         request = self.calls[-1][2]
@@ -297,3 +295,108 @@ class FamilySdkTests(unittest.TestCase):
         self.gateway.submit_child = Mock()
         self.assertEqual(self.gateway.launch_child(spec), 'i-child')
         self.gateway.submit_child.assert_not_called()
+
+    def launch_receipts(self, path, instance):
+        from cloud_glider.inherited import child_paths, specification
+        records = {}; children = []
+        for child in child_paths(path, self.gateway.settings):
+            spec = specification(self.cfg, child, instance, "handoff-" + child)
+            iid = "i-" + child
+            children.append({"node_path": child, "instance_id": iid, "client_token": spec["client_token"]})
+            records[(child, "SUBMISSION")] = {"PK": "GEN#" + child, "SK": "SUBMISSION", "request_id": "1",
+                "token": spec["client_token"], "instance_id": iid, "settled": True}
+            records[(child, "RESOURCE#" + iid)] = {"PK": "GEN#" + child, "SK": "RESOURCE#" + iid,
+                "request_id": "1", "instance_id": iid, "client_token": spec["client_token"],
+                "launch_template_id": spec["launch_template_id"], "launch_template_version": spec["launch_template_version"]}
+        receipt = {"PK": "GEN#" + path, "SK": "PROPAGATION", "request_id": "1", "node_path": path,
+            "instance_id": instance, "configuration_sha256": self.gateway.configuration_sha256,
+            "result": "LIVE_LAUNCH_PASSED", "children": children, "demonstrated_at": 100}
+        return records, receipt
+
+    def test_real_launch_proof_is_durable_cycle_fenced_and_reusable(self):
+        records, receipt = self.launch_receipts("r", self.cfg.instance_id)
+        self.gateway.get_node_item = Mock(side_effect=lambda p, sk: records.get((p, sk), {}))
+        self.gateway.describe_instance = Mock(side_effect=lambda iid: {"InstanceId": iid, "State": {"Name": "running"}})
+        self.gateway.verify_instance = Mock()
+        self.gateway.publish_propagation(("r0", "r1"), ["i-r0", "i-r1"], 100)
+        operations = self.calls[-1][2]["TransactItems"]
+        self.assertIn("LIVE_LAUNCH_PASSED", str(operations))
+        self.assertIn("HOLD", str(operations))
+        self.assertIn("SUBMISSION", str(operations))
+        self.assertIn("RESOURCE#", str(operations))
+        self.assertFalse(any(op == "run_instances" for _, op, _ in self.calls))
+        records[("r", "PROPAGATION")] = receipt
+        count = len(self.calls)
+        self.gateway.publish_propagation(("r0", "r1"), ["i-r0", "i-r1"], 105)
+        self.assertEqual(len(self.calls), count)
+
+    def test_retirement_requires_successors_exact_live_launch_receipts(self):
+        records = {}
+        for p in ("r0", "r1"):
+            more, receipt = self.launch_receipts(p, "i-" + p)
+            records.update(more); records[(p, "PROPAGATION")] = receipt
+        self.gateway.get_node_item = Mock(side_effect=lambda p, sk: records.get((p, sk), {}))
+        self.gateway.read_node = Mock(side_effect=lambda p: {"instance_id": "i-" + p, "owner": "i-" + p})
+        self.gateway.eligible = Mock(side_effect=lambda p, i, now: {**self.proof(p), "instance_id": i})
+        self.gateway.describe_instance = Mock(side_effect=lambda iid: {"InstanceId": iid, "State": {"Name": "running"}})
+        self.gateway.verify_instance = Mock()
+        with patch("cloud_glider.family_sdk.time.time", return_value=100):
+            self.assertTrue(self.gateway.authorize_retirement(("r0", "r1"), 100))
+        transaction = self.calls[-1][2]["TransactItems"]
+        self.assertLessEqual(len(transaction), 25)
+        self.assertIn("GEN#r00", str(transaction)); self.assertIn("GEN#r11", str(transaction))
+        self.calls.clear(); missing = records.pop(("r1", "PROPAGATION"))
+        self.assertFalse(self.gateway.authorize_retirement(("r0", "r1"), 100))
+        self.assertEqual(self.calls, [])
+        records[("r1", "PROPAGATION")] = {**missing, "configuration_sha256": "foreign"}
+        with self.assertRaises(SafetyViolation): self.gateway.authorize_retirement(("r0", "r1"), 100)
+        self.assertEqual(self.calls, [])
+        records[("r1", "PROPAGATION")] = missing
+        records[("r11", "SUBMISSION")]["settled"] = False
+        with self.assertRaises(TransientFailure): self.gateway.authorize_retirement(("r0", "r1"), 100)
+        self.assertEqual(self.calls, [])
+
+    def test_terminated_or_mismatched_continuation_child_cannot_prove_launch(self):
+        records, receipt = self.launch_receipts("r", self.cfg.instance_id)
+        records[("r", "PROPAGATION")] = receipt
+        self.gateway.get_node_item = Mock(side_effect=lambda p, sk: records.get((p, sk), {}))
+        self.gateway.describe_instance = Mock(return_value={"State": {"Name": "terminated"}})
+        with self.assertRaises(TransientFailure): self.gateway.propagation_checks("r", self.cfg.instance_id)
+        self.gateway.describe_instance = Mock(return_value={"State": {"Name": "running"}})
+        self.gateway.verify_instance = Mock(side_effect=SafetyViolation("INSTANCE_IDENTITY_MISMATCH", "foreign"))
+        with self.assertRaises(SafetyViolation): self.gateway.propagation_checks("r", self.cfg.instance_id)
+        self.assertEqual(self.calls, [])
+
+    def test_terminal_boundary_needs_no_propagation_receipt(self):
+        self.gateway.get_node_item = Mock(side_effect=AssertionError("no out of bound read"))
+        self.assertEqual(self.gateway.propagation_checks("r00", "i-leaf"), [])
+
+    def test_single_launch_waits_for_exact_grandparent_termination(self):
+        from dataclasses import replace
+        self.gateway.config = replace(self.cfg, node_path="r00", predecessor_instance_id="i-parent")
+        self.gateway.get_node_item = Mock(return_value={"instance_id": "i-parent", "request_id": "1",
+            "configuration_sha256": self.gateway.configuration_sha256, "predecessor_instance_id": "i-grandparent"})
+        self.gateway.read_node = Mock(return_value={"instance_id": "i-grandparent"})
+        for state in ("running", "shutting-down", "terminated"):
+            self.gateway.ancestor_state = Mock(return_value=state)
+            self.assertEqual(self.gateway.single_launch_ready(), state == "terminated")
+        self.gateway.read_node = Mock(return_value={"instance_id": "foreign"})
+        with self.assertRaises(SafetyViolation): self.gateway.single_launch_ready()
+
+    def test_corrupt_live_launch_receipts_never_authorize_retirement(self):
+        import copy
+        records, receipt = self.launch_receipts("r", self.cfg.instance_id)
+        changes = [{"request_id": "other"}, {"instance_id": "foreign"},
+                   {"demonstrated_at": -1}, {"demonstrated_at": True},
+                   {"demonstrated_at": 999999999999}, {"children": receipt["children"][:1]}]
+        wrong_token = copy.deepcopy(receipt["children"]); wrong_token[0]["client_token"] = "foreign"
+        duplicate = copy.deepcopy(receipt["children"]); duplicate[1]["instance_id"] = duplicate[0]["instance_id"]
+        changes += [{"children": wrong_token}, {"children": duplicate}, {"children": list(reversed(receipt["children"]))}]
+        self.gateway.describe_instance = Mock(return_value={"State": {"Name": "running"}})
+        self.gateway.verify_instance = Mock()
+        for change in changes:
+            with self.subTest(change=change):
+                records[("r", "PROPAGATION")] = {**receipt, **change}
+                self.gateway.get_node_item = Mock(side_effect=lambda p, sk: records.get((p, sk), {}))
+                with self.assertRaises(SafetyViolation): self.gateway.propagation_checks("r", self.cfg.instance_id)
+                self.assertEqual(self.calls, [])

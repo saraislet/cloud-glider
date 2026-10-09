@@ -129,3 +129,22 @@ Use `scripts/clear_emergency_hold.py --table-name cloud-glider-sandbox-state
 --audit-table-name cloud-glider-sandbox-audit` with the scoped recovery identity
 and incident reason. Verify cleaned idle state and exact incident before applying;
 do not grant audit writes into the state table to compensate for a stale helper.
+
+### Activating live-propagation readiness
+
+Decision [0028](decisions/0028-live-propagation-readiness.md) changes inherited
+single-successor and binary-family daemon readiness. Build a fresh immutable AMI
+and matching artifact; do not deploy source changes into an existing live cycle.
+Complete the normal guest smoke, cleanup, coordinated pins/fingerprints and
+release-verifier receipt before activation. The new family daemon publishes
+DAEMON_READY (or terminal BOUNDARY), then an independently stored PROPAGATION
+receipt after real launches. A readiness receipt from the older DryRun protocol
+cannot qualify a nonterminal successor under the new family runtime.
+
+Inherited single mode needs max_live_generations=3 for runs reaching generation
+2 or deeper. Verify the exact grandparent has terminated before extending beyond
+three live generations. Preserve terminal leaves for explicit operator cleanup.
+During validation, record readiness and propagation-demonstration times
+separately and verify predecessors remain until real continuation evidence is
+accepted. Confirm zero inherited-family continuation DryRuns in API timing;
+legacy non-inherited EC2 cycles still use their existing DryRun protocol.
