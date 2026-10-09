@@ -70,6 +70,15 @@ python scripts/verify_sandbox_release.py \
   --receipt .artifacts/release/propagation-ready.json
 ```
 
+If EC2 console output is empty, retain the actual guest callback by exposing
+`SmokeResult.Data` as the `SmokeResultData` stack output. This is a standard
+CloudFormation attribute and requires no LanguageExtensions transform. The
+signal is emitted only after the guest produces explicit PASS. Use
+`--smoke-signal` instead of `--smoke-console`; the gate reads the retained signal
+from the exact deleted stack ARN and validates its digest, contract and headroom.
+Stack completion alone remains insufficient. Preserve raw signal/provenance
+before cleanup. Do not synthesize a guest result from expected values.
+
 Use the deleted smoke stack's full ARN, not its reusable name. The gate checks
 actual enabled/healthy listener state, completed image pins in all four stacks,
 CONTROL/bootstrap fingerprint agreement, exact launch-template configuration,
@@ -114,3 +123,9 @@ performs read-only AWS calls, preserves owner-only ignored receipts, and leaves
 missing evidence, incomplete cleanup and retained exceptions explicit. Live
 trials, cleanup writes, deployment and AMI retention changes still require their
 existing operator authorization; the tool adds no scheduled deletion workflow.
+
+HOLD recovery must write its atomic receipt to the pinned separate audit table.
+Use `scripts/clear_emergency_hold.py --table-name cloud-glider-sandbox-state
+--audit-table-name cloud-glider-sandbox-audit` with the scoped recovery identity
+and incident reason. Verify cleaned idle state and exact incident before applying;
+do not grant audit writes into the state table to compensate for a stale helper.

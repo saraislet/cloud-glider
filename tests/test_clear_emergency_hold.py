@@ -15,6 +15,7 @@ class ClearEmergencyHoldTests(unittest.TestCase):
     def test_delete_and_audit_are_atomic(self):
         args = argparse.Namespace(
             table_name="cloud-glider-sandbox-state",
+            audit_table_name="cloud-glider-sandbox-audit",
             operator_id="arn:aws:iam::111122223333:role/operator",
             reason="incident reconciled",
             environment="sandbox",
@@ -22,6 +23,8 @@ class ClearEmergencyHoldTests(unittest.TestCase):
         transaction = clear_hold.build_transaction(
             args, now="2026-09-14T00:00:00.000Z", event_id="event-1"
         )
+        self.assertEqual(transaction[0]["Delete"]["TableName"], "cloud-glider-sandbox-state")
+        self.assertEqual(transaction[1]["Put"]["TableName"], "cloud-glider-sandbox-audit")
         self.assertEqual(transaction[0]["Delete"]["Key"]["PK"], {"S": "HOLD"})
         self.assertEqual(transaction[0]["Delete"]["Key"]["SK"], {"S": "ACTIVE"})
         self.assertEqual(
@@ -32,7 +35,7 @@ class ClearEmergencyHoldTests(unittest.TestCase):
             transaction[1]["Put"]["Item"]["action"], {"S": "CLEAR_EMERGENCY_HOLD"}
         )
     def test_recovery_reuses_latest_key_and_rejects_older_feedback(self):
-        args = argparse.Namespace(table_name="table", operator_id="operator", reason="resolved", environment="sandbox")
+        args = argparse.Namespace(table_name="table", audit_table_name="audit", operator_id="operator", reason="resolved", environment="sandbox")
         before = clear_hold.build_transaction(args, now="2026-10-02T01:00:00.000Z", event_id="old")[1]["Put"]
         after = clear_hold.build_transaction(args, now="2026-10-02T02:00:00.000Z", event_id="new")[1]["Put"]
         self.assertEqual((before["Item"]["PK"], before["Item"]["SK"]), (after["Item"]["PK"], after["Item"]["SK"]))

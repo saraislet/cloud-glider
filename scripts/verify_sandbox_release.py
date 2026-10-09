@@ -58,6 +58,19 @@ def smoke_result(text, digest):
     raise ValueError('Explicit guest smoke result is missing')
 
 
+def smoke_signal_result(stack, digest):
+    """Read the exact guest result retained by the fresh wait-condition handle."""
+    outputs = {x['OutputKey']: x['OutputValue'] for x in stack.get('Outputs', [])}
+    require('SmokeResultData' in outputs, 'Explicit smoke signal data is missing')
+    try:
+        signals = json.loads(outputs['SmokeResultData'])
+        require(isinstance(signals, dict) and set(signals) == {'runtime'}, 'Unexpected smoke signal identity')
+        result = smoke_result(signals['runtime'], digest)
+    except (TypeError, json.JSONDecodeError) as exc:
+        raise ValueError('Invalid smoke signal data') from exc
+    return result
+
+
 def main():
     import boto3
     p = argparse.ArgumentParser(description=__doc__)
@@ -67,7 +80,10 @@ def main():
     p.add_argument('--daemon-sha256', required=True)
     p.add_argument('--source-commit', required=True)
     p.add_argument('--smoke-stack-id', required=True)
-    p.add_argument('--smoke-console', type=Path, required=True)
+    evidence = p.add_mutually_exclusive_group(required=True)
+    evidence.add_argument('--smoke-console', type=Path)
+    evidence.add_argument('--smoke-signal', action='store_true',
+                          help='Validate the retained explicit guest result from SmokeResultData')
     p.add_argument('--receipt', type=Path, required=True)
     a = p.parse_args()
     s = boto3.Session(profile_name=a.profile, region_name='us-west-2')
@@ -113,7 +129,8 @@ def main():
     require(smoke['StackStatus'] == 'DELETE_COMPLETE', 'Smoke stack cleanup incomplete')
     require({x['ParameterKey']: x['ParameterValue'] for x in smoke['Parameters']}.get('CandidateImageId') == a.image_id,
             'Smoke evidence belongs to another AMI')
-    result = smoke_result(a.smoke_console.read_text(), a.daemon_sha256)
+    result = (smoke_signal_result(smoke, a.daemon_sha256) if a.smoke_signal else
+              smoke_result(a.smoke_console.read_text(), a.daemon_sha256))
     # Re-read mutable controls after collection; never publish stale idle proof.
     require(control == get('CONTROL') and request == get('BOOTSTRAP', 'REQUEST') and
             current == get('CURRENT') and hold == get('HOLD', 'ACTIVE'), 'State changed during validation')
@@ -121,7 +138,8 @@ def main():
                'identity': identity['Arn'], 'image_id': a.image_id, 'source_commit': a.source_commit,
                'daemon_sha256': a.daemon_sha256, 'launch_template_version': out['LaunchTemplateVersion'],
                'max_generation': int(control['max_generation']['N']), 'metadata': metadata,
-               'smoke': result, 'propagation_started': False}
+               'smoke': result, 'smoke_evidence_source': 'CloudFormation WaitCondition.Data' if a.smoke_signal else 'EC2 console',
+               'propagation_started': False}
     a.receipt.parent.mkdir(parents=True, exist_ok=True)
     a.receipt.write_text(json.dumps(receipt, indent=2) + '\n')
     a.receipt.chmod(0o600)

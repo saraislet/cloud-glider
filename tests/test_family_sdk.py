@@ -251,6 +251,33 @@ class FamilySdkTests(unittest.TestCase):
         with self.assertRaises(TransientFailure): self.gateway.submit_child(spec)
         self.assertIn('launch_rejected', str(self.calls[-1]))
 
+    def test_throttle_receipt_retries_bookkeeping_without_relaunch(self):
+        from cloud_glider.inherited import specification
+        spec = specification(self.cfg, 'r0', self.cfg.instance_id, 'handoff-r0')
+        self.gateway._call = Mock(return_value={'_code': 'RequestLimitExceeded'})
+        self.gateway.transact = Mock(side_effect=[TransientFailure('transaction conflict'), None])
+        with patch('cloud_glider.family_sdk.time.sleep') as sleep:
+            with self.assertRaisesRegex(TransientFailure, 'child launch throttled'):
+                self.gateway.submit_child(spec)
+        self.gateway._call.assert_called_once()
+        self.assertEqual(self.gateway.transact.call_count, 2)
+        self.assertEqual(self.gateway.transact.call_args_list[0], self.gateway.transact.call_args_list[1])
+        sleep.assert_called_once()
+
+    def test_exhausted_throttle_receipt_preserves_parent_and_fails_closed(self):
+        from cloud_glider.inherited import specification
+        spec = specification(self.cfg, 'r0', self.cfg.instance_id, 'handoff-r0')
+        self.gateway._call = Mock(return_value={'_code': 'RequestLimitExceeded'})
+        self.gateway.transact = Mock(side_effect=TransientFailure('transaction unavailable'))
+        with patch('cloud_glider.family_sdk.time.sleep') as sleep:
+            with self.assertRaises(SafetyViolation) as failure:
+                self.gateway.submit_child(spec)
+        self.assertEqual(failure.exception.code, 'LAUNCH_REJECTION_RECEIPT_FAILED')
+        self.gateway._call.assert_called_once()
+        self.assertEqual(self.gateway.transact.call_count, 8)
+        self.assertEqual(sleep.call_count, 7)
+        self.assertTrue(all(call.kwargs['bookkeeping'] for call in self.gateway.transact.call_args_list))
+
     def test_retryable_intent_is_cleared_before_same_token_submission(self):
         from cloud_glider.inherited import specification
         spec = specification(self.cfg, 'r0', self.cfg.instance_id, 'handoff-r0')
