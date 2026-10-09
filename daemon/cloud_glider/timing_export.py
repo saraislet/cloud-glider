@@ -9,7 +9,7 @@ import uuid
 
 EVENTS = {'boot_timing', 'api_timing', 'phase_timing'}
 FIELDS = {'event', 'phase', 'service', 'operation', 'duration_seconds', 'outcome',
-          'boot_context', 'startup_invocation', 'error_code', 'dry_run', 'timestamp', 'started_at', 'boot_elapsed_seconds'}
+          'boot_context', 'startup_invocation', 'error_code', 'dry_run', 'timestamp', 'started_at', 'boot_elapsed_seconds', 'ec2_state', 'retiring', 'inspected_instance_id', 'mismatch_fields'}
 
 
 def sanitize(raw):
@@ -37,7 +37,7 @@ class Exporter:
         self.queue = queue.Queue(capacity)
         self.lock = threading.Lock()
         self.max_bytes, self.bytes = max_bytes, 0
-        self.accepted = self.dropped = self.uploaded = self.errors = 0
+        self.accepted = self.dropped = self.uploaded = self.errors = self.upload_retries = 0
         self.digest = hashlib.sha256()
         self.batch_count, self.interval = min(batch_count, 32), interval
         self.sealed = threading.Event()
@@ -80,12 +80,23 @@ class Exporter:
 
     def _upload(self, messages):
         events = [{'timestamp': int(time.time()*1000), 'message': m} for m in messages]
-        # Exactly one SDK attempt: retries/transport timeout are configured on the
-        # dedicated client. Never log the request, response or exception text.
-        response = self.client.put_log_events(logGroupName=self.group,
-            logStreamName=self.stream, logEvents=events)
-        if response.get('rejectedLogEventsInfo'):
-            raise ValueError('RejectedTimingBatch')
+        # Retry only within the diagnostic worker, never the lifecycle thread.
+        # An ambiguous transport result may duplicate records; record_id permits
+        # exact deduplication by the collection verifier.
+        for attempt in range(3):
+            try:
+                response = self.client.put_log_events(logGroupName=self.group,
+                    logStreamName=self.stream, logEvents=events)
+                if response.get('rejectedLogEventsInfo'):
+                    raise ValueError('RejectedTimingBatch')
+                return
+            except ValueError:
+                raise  # Rejected event content will not improve with retries.
+            except Exception:
+                if attempt == 2:
+                    raise
+                self.upload_retries += 1
+                time.sleep(.05 * 2 ** attempt)
 
     def _run(self):
         try:
@@ -125,6 +136,7 @@ class Exporter:
                             'event': 'timing_collection_complete', 'producer_id': self.producer,
                             'accepted': self.accepted, 'uploaded': self.uploaded,
                             'dropped': self.dropped, 'upload_errors': self.errors,
+                            'upload_retries': self.upload_retries,
                             'sha256': self.digest.hexdigest(),
                             'complete': self.dropped == 0 and self.errors == 0 and self.uploaded == self.accepted}
                     try:

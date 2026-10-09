@@ -31,3 +31,19 @@ The six-generation local simulation must produce 63 nodes and 31 successful dry
 runs, one per interior instance. This is local validation, not a live benchmark.
 Release requires a new immutable AMI and the complete sandbox release procedure
 in docs/ami-build.md before any live evaluation.
+
+## Retirement observation correction
+
+The October 8 trial also exposed a shutdown observation race: EC2 can detach
+network and profile fields while a parent is shutting-down. An exact parent
+with the cycle/configuration/owner/children-matched RETIRING receipt may omit
+those three fields during shutdown. All remaining identity fields and any
+present conflicting network/profile values remain strict. A running parent
+retains full validation. Only observed terminated state records termination
+confirmation; shutting-down does not authorize descendant retirement.
+Identity-validation failures emit structured state and mismatched field
+names into private timing evidence before the normal HOLD path.
+
+Diagnostic uploads now retry a batch at most three times in the independent
+export worker, retaining record IDs for deduplication. Shutdown drain is bounded
+to three seconds. Exhausted or rejected uploads still report incomplete evidence.

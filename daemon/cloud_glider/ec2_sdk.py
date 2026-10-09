@@ -8,6 +8,7 @@ from typing import Any
 import boto3
 from botocore.config import Config
 from .daemon import SafetyViolation, TransientFailure
+from .timing import emit
 from .aws_sdk import AwsSdkGateway, _av, _ddb_item, _imds
 
 
@@ -241,7 +242,7 @@ class Ec2SdkGateway(AwsSdkGateway):
             )
         self._template_data = data
 
-    def verify_instance(self, instance: dict, specification: dict) -> None:
+    def verify_instance(self, instance: dict, specification: dict, *, retiring=False) -> None:
         if self._template_data is None:
             raise TransientFailure("launch template has not been verified")
         data = self._template_data
@@ -274,8 +275,20 @@ class Ec2SdkGateway(AwsSdkGateway):
             "metadata_tags": (metadata.get("InstanceMetadataTags"), "enabled"),
         }
         comparisons.update({"tag:" + k: (tags.get(k), v) for k, v in specification["tags"].items()})
-        mismatches = [name for name, (actual, expected) in comparisons.items() if actual != expected]
+        # Only an accepted retiring parent may omit fields EC2 detaches during
+        # shutdown. Present conflicting values and immutable identity stay strict.
+        detached = set()
+        if retiring and instance.get("State", {}).get("Name") == "shutting-down":
+            detached = {name for name in ("subnet_id", "security_groups", "instance_profile")
+                        if comparisons[name][0] in (None, [], "")}
+        mismatches = [name for name, (actual, expected) in comparisons.items()
+                      if actual != expected and name not in detached]
         if mismatches:
+            emit("phase_timing", phase="instance_identity_validation", outcome="FAILED",
+                 instance_id=instance.get("InstanceId"), request_id=self.config.request_id,
+                 ec2_state=instance.get("State", {}).get("Name"), retiring=retiring,
+                 inspected_instance_id=instance.get("InstanceId"),
+                 mismatch_fields=" ".join(mismatches))
             raise SafetyViolation("INSTANCE_IDENTITY_MISMATCH",
                                   "EC2 identity differs in: " + ", ".join(mismatches))
 
