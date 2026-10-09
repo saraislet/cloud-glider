@@ -1,5 +1,6 @@
 # 0021: Successor-produced functional agent readiness
 
+For inherited EC2 families, the continuation requirement is superseded by [0028](0028-live-propagation-readiness.md).
 Status: accepted by the operator on October 3, 2026; source implementation only.
 Deployment and an AWS benchmark require separate authorization.
 

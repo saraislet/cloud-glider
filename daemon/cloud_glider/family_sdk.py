@@ -134,12 +134,6 @@ class FamilySdkGateway(Ec2SdkGateway):
     def child_request(self, spec):
         return {**self._run_request(spec), "UserData": user_data(self.config)}
 
-    def dry_run_child(self, spec):
-        result = self._call("ec2", "run_instances", allow_failure=True,
-                            **self.child_request(spec), DryRun=True)
-        if result.get("_code") != "DryRunOperation":
-            raise TransientFailure("successor continuation authorization not confirmed")
-
     def launch_child(self, spec):
         path = spec["node_path"]
         intent = self.get_node_item(path, "SUBMISSION")
@@ -237,7 +231,7 @@ class FamilySdkGateway(Ec2SdkGateway):
                  "predecessor_instance_id": self.config.predecessor_instance_id,
                  "handoff_token": self.config.handoff_token, "ready_at": int(now),
                  "first_ready_at": self.first_ready_at,
-                 "daemon_live": True, "continuation": "DRY_RUN_PASSED" if has_children else "BOUNDARY"}
+                 "daemon_live": True, "continuation": "DAEMON_READY" if has_children else "BOUNDARY"}
         self.transact([{"Put": {"TableName": self.config.generation_table_name,
             "Item": _ddb_item(state), "ConditionExpression": "attribute_not_exists(PK) OR (instance_id = :instance AND attribute_not_exists(error_code))",
             "ExpressionAttributeValues": {":instance": _av(self.instance_id)}}}])
@@ -254,7 +248,7 @@ class FamilySdkGateway(Ec2SdkGateway):
             or state.get("daemon_live") is not True
             or type(state.get("ready_at")) is not int
             or not 0 <= now - state["ready_at"] <= 15
-            or state.get("continuation") != ("BOUNDARY" if len(path)-1 >= self.settings["max_generation"] else "DRY_RUN_PASSED")):
+            or state.get("continuation") != ("BOUNDARY" if len(path)-1 >= self.settings["max_generation"] else "DAEMON_READY")):
             return None
         instance = self.describe_instance(instance_id)
         if instance["State"]["Name"] != "running":
@@ -288,39 +282,131 @@ class FamilySdkGateway(Ec2SdkGateway):
                     ":empty": _av(""), ":config": _av(self.configuration_sha256), ":now": _av(int(now))}}}], final=True)
         return True
 
+    def exact_record_check(self, path, sk, record):
+        names = {f"#r{i}": k for i, k in enumerate(sorted(record))}
+        values = {f":r{i}": _av(record[k]) for i, k in enumerate(sorted(record))}
+        return {"ConditionCheck": {"TableName": self.config.generation_table_name,
+            "Key": self.node_key(path, sk),
+            "ConditionExpression": " AND ".join(f"#r{i} = :r{i}" for i in range(len(record))),
+            "ExpressionAttributeNames": names, "ExpressionAttributeValues": values}}
+
+    def launch_evidence_checks(self, path, instance_id, children):
+        paths = child_paths(path, self.settings)
+        if not isinstance(children, list) or len(children) != len(paths):
+            raise SafetyViolation("PROPAGATION_IDENTITY_MISMATCH", "incorrect continuation child set")
+        if len({child.get("instance_id") for child in children if isinstance(child, dict)
+                and isinstance(child.get("instance_id"), str)}) != len(paths):
+            raise SafetyViolation("PROPAGATION_IDENTITY_MISMATCH", "continuation instances are missing or duplicated")
+        checks = []
+        for child, expected_path in zip(children, paths):
+            spec = specification(self.config, expected_path, instance_id, "handoff-" + expected_path)
+            if (not isinstance(child, dict) or set(child) != {"node_path", "instance_id", "client_token"}
+                or child["node_path"] != expected_path or child["client_token"] != spec["client_token"]
+                or not isinstance(child["instance_id"], str) or not child["instance_id"]):
+                raise SafetyViolation("PROPAGATION_IDENTITY_MISMATCH", "incorrect continuation lineage or token")
+            submission = self.get_node_item(expected_path, "SUBMISSION")
+            resource = self.get_node_item(expected_path, "RESOURCE#" + child["instance_id"])
+            if (submission.get("request_id") != self.config.request_id
+                or submission.get("token") != spec["client_token"] or submission.get("settled") is not True
+                or submission.get("instance_id") != child["instance_id"]
+                or submission.get("aborted") or submission.get("launch_rejected")
+                or any(resource.get(k) != v for k, v in {
+                    "request_id": self.config.request_id, "instance_id": child["instance_id"],
+                    "client_token": spec["client_token"], "launch_template_id": spec["launch_template_id"],
+                    "launch_template_version": spec["launch_template_version"]}.items())):
+                raise TransientFailure("continuation launch lacks exact settled resource evidence")
+            instance = self.describe_instance(child["instance_id"])
+            if instance["State"]["Name"] not in ("pending", "running"):
+                raise TransientFailure("continuation child is not provisioned; preserve predecessor")
+            self.verify_instance(instance, spec)
+            checks.extend([self.exact_record_check(expected_path, "SUBMISSION", submission),
+                           self.exact_record_check(expected_path, "RESOURCE#" + child["instance_id"], resource)])
+        return checks
+
+    def propagation_checks(self, path, instance_id):
+        if not child_paths(path, self.settings):
+            return []  # Explicit terminal boundary; never launch beyond it.
+        receipt = self.get_node_item(path, "PROPAGATION")
+        if not receipt:
+            return None
+        if (type(receipt.get("demonstrated_at")) is not int
+            or not 0 <= receipt["demonstrated_at"] <= time.time()):
+            raise SafetyViolation("PROPAGATION_IDENTITY_MISMATCH", "continuation receipt time is invalid")
+        if any(receipt.get(k) != v for k, v in {
+            "request_id": self.config.request_id, "instance_id": instance_id, "node_path": path,
+            "configuration_sha256": self.configuration_sha256, "result": "LIVE_LAUNCH_PASSED"}.items()):
+            raise SafetyViolation("PROPAGATION_IDENTITY_MISMATCH", "continuation receipt belongs to another identity")
+        checks = self.launch_evidence_checks(path, instance_id, receipt.get("children"))
+        return [self.exact_record_check(path, "PROPAGATION", receipt)] + checks
+
+    def publish_propagation(self, paths, instances, now):
+        if tuple(paths) != child_paths(self.config.node_path, self.settings) or len(instances) != len(paths):
+            raise SafetyViolation("PROPAGATION_LINEAGE_INVALID", "incorrect continuation launch set")
+        if not paths:
+            raise SafetyViolation("PROPAGATION_LINEAGE_INVALID", "terminal nodes cannot publish a launch proof")
+        previous = self.propagation_checks(self.config.node_path, self.instance_id)
+        if previous is not None:
+            return  # Restart reconciliation uses durable receipts, never a new launch.
+        children = [{"node_path": path, "instance_id": instance,
+                     "client_token": specification(self.config, path, self.instance_id, "handoff-" + path)["client_token"]}
+                    for path, instance in zip(paths, instances)]
+        checks = self.launch_evidence_checks(self.config.node_path, self.instance_id, children)
+        receipt = {"PK": "GEN#" + self.config.node_path, "SK": "PROPAGATION", "request_id": self.config.request_id,
+            "instance_id": self.instance_id, "node_path": self.config.node_path,
+            "configuration_sha256": self.configuration_sha256, "result": "LIVE_LAUNCH_PASSED",
+            "children": children, "demonstrated_at": int(now)}
+        self.transact([self.owner_check()] + checks + [{"Put": {
+            "TableName": self.config.generation_table_name, "Item": _ddb_item(receipt),
+            "ConditionExpression": "attribute_not_exists(PK)"}}], final=True)
+
+    def single_launch_ready(self):
+        if len(self.config.node_path) <= 2:
+            return True  # Root and its child may produce the third live generation.
+        parent = self.get_node_item(self.config.node_path[:-1], "STATE")
+        grandparent = self.read_node(self.config.node_path[:-2])
+        if (parent.get("instance_id") != self.config.predecessor_instance_id
+            or parent.get("request_id") != self.config.request_id
+            or parent.get("configuration_sha256") != self.configuration_sha256
+            or grandparent.get("instance_id") != parent.get("predecessor_instance_id")):
+            raise SafetyViolation("PARENT_RETIREMENT_IDENTITY_MISMATCH", "grandparent lineage is ambiguous")
+        return self.ancestor_state(self.config.node_path[:-2], parent["predecessor_instance_id"], record_termination=False) == "terminated"
+
     def parent_state(self):
         if self.config.predecessor_instance_id == "NONE":
             return "terminated"
-        parent = self.describe_instance(self.config.predecessor_instance_id)
+        return self.ancestor_state(self.config.node_path[:-1], self.config.predecessor_instance_id)
+
+    def ancestor_state(self, path, instance_id, *, record_termination=True):
+        parent = self.describe_instance(instance_id)
         tags = parent.get("Tags", {})
-        spec = specification(self.config, self.config.node_path[:-1],
+        spec = specification(self.config, path,
                              tags.get("predecessor-instance-id"), tags.get("handoff-token"))
         if parent["State"]["Name"] in ("shutting-down", "terminated"):
             # EC2 removes network/profile fields after termination. Anchor the
             # exact parent to its cycle-fenced, accepted retirement receipt.
-            receipt = self.read_node(self.config.node_path[:-1])
+            receipt = self.read_node(path)
             expected = {"request_id": self.config.request_id,
-                        "instance_id": self.config.predecessor_instance_id,
-                        "owner": self.config.predecessor_instance_id,
+                        "instance_id": instance_id,
+                        "owner": instance_id,
                         "configuration_sha256": self.configuration_sha256,
                         "status": "RETIRING"}
-            if (parent.get("InstanceId") != self.config.predecessor_instance_id
+            if (parent.get("InstanceId") != instance_id
                 or any(receipt.get(k) != v for k, v in expected.items())
-                or receipt.get("retirement_children") != list(child_paths(self.config.node_path[:-1], self.settings))
+                or receipt.get("retirement_children") != list(child_paths(path, self.settings))
                 or any(tags.get(k) != v for k, v in spec["tags"].items())):
                 raise SafetyViolation("PARENT_RETIREMENT_IDENTITY_MISMATCH", "retiring parent differs from durable retirement receipt or lineage tags")
             if parent["State"]["Name"] == "shutting-down":
                 self.verify_instance(parent, spec, retiring=True)
                 return "shutting-down"  # Never confirmation of termination.
-            if not self.confirmed_parent_termination:
+            if record_termination and not self.confirmed_parent_termination:
                 proof = json.dumps(parent, sort_keys=True, default=str, separators=(",", ":"))
                 self.transact([{"Update": {"TableName": self.config.generation_table_name,
-                    "Key": self.node_key(self.config.node_path[:-1], "RESOURCE#" + self.config.predecessor_instance_id),
+                    "Key": self.node_key(path, "RESOURCE#" + instance_id),
                     "UpdateExpression": "SET termination_confirmed = :yes, termination_observed_at = if_not_exists(termination_observed_at, :at), termination_evidence_sha256 = if_not_exists(termination_evidence_sha256, :sha)",
                     "ConditionExpression": "request_id = :id AND instance_id = :instance AND launch_template_id = :lt AND launch_template_version = :version AND client_token = :token",
                     "ExpressionAttributeValues": {":yes": _av(True), ":at": _av(datetime.now(timezone.utc).isoformat()),
                         ":sha": _av(hashlib.sha256(proof.encode()).hexdigest()), ":id": _av(self.config.request_id),
-                        ":instance": _av(self.config.predecessor_instance_id), ":lt": _av(self.config.launch_template_id),
+                        ":instance": _av(instance_id), ":lt": _av(self.config.launch_template_id),
                         ":version": _av(self.config.launch_template_version), ":token": _av(parent.get("ClientToken", ""))}}}], bookkeeping=True)
                 self.confirmed_parent_termination = True
         else:
@@ -342,6 +428,10 @@ class FamilySdkGateway(Ec2SdkGateway):
             state = self.eligible(path, child.get("instance_id"), now)
             if not state or child.get("owner") != state["instance_id"]:
                 return False
+            continuation = self.propagation_checks(path, state["instance_id"])
+            if continuation is None:
+                return False
+            operations += continuation
             operations += [self.no_stop_check(path), self.readiness_check(path, state), {"ConditionCheck": {
                 "TableName": self.config.generation_table_name, "Key": self.node_key(path),
                 "ConditionExpression": "#owner = :instance AND #status IN (:owner, :leaf)",

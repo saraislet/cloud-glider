@@ -31,7 +31,9 @@ class World:
         self.configs = {"r": family_config(binary)}
         self.nodes, self.ready, self.intents, self.retired = {}, {}, {}, set()
         self.stops, self.events = set(), []
+        self.propagated = set()
         self.now = 100
+        self.peak_live = 0
         self.agents = {}
 
     def gateway(self, path):
@@ -42,7 +44,10 @@ class World:
             def dry_run_child(self, spec): world.events.append(("dryrun", spec["node_path"]))
             def publish_readiness(self, now, has_children): world.ready[path] = now
             def parent_terminated(self): return path == "r" or path[:-1] in world.retired
-            def parent_launch_ready(self): return self.parent_terminated()
+            def single_launch_ready(self): return len(path) <= 2 or path[:-2] in world.retired
+            def publish_propagation(self, children, instances, now):
+                world.propagated.add(path)
+                world.events.append(("propagated", path))
             def launch_child(self, spec):
                 p = spec["node_path"]
                 if p not in world.configs:
@@ -52,6 +57,7 @@ class World:
                         node_path=p, instance_id=instance, predecessor_instance_id=world.configs[path].instance_id,
                         handoff_token=spec["tags"]["handoff-token"])
                     world.nodes[p] = {"owner": "", "instance_id": instance, "status": "CANDIDATE"}
+                    world.peak_live = max(world.peak_live, len(world.configs)-len(world.retired))
                 return world.configs[p].instance_id
             def accept_child(self, spec, instance, now):
                 p = spec["node_path"]
@@ -63,7 +69,8 @@ class World:
                 return True
             def mark_leaf(self): world.nodes[path]["status"] = "LEAF"
             def authorize_retirement(self, children, now):
-                if not all(world.nodes[p]["owner"] and now-world.ready.get(p, -100) <= 15 for p in children):
+                if not all(world.nodes[p]["owner"] and now-world.ready.get(p, -100) <= 15
+                    and (not child_paths(p, validate(world.configs[p])) or p in world.propagated) for p in children):
                     return False
                 world.nodes[path]["status"] = "RETIRING"
                 return True
@@ -100,76 +107,22 @@ class FamilyDaemonTests(unittest.TestCase):
                 monitor.close.assert_called_once()
 
 
-    def test_readiness_refreshes_without_repeating_continuation(self):
+    def test_candidate_readiness_needs_no_launch_or_dry_run(self):
         world = World()
-        agent = world.agent("r")  # Candidate keeps waiting for ownership.
         for now in (100, 106, 112):
             world.now = now
-            self.assertEqual(agent.cycle(), "CANDIDATE")
+            self.assertEqual(world.agent("r").cycle(), "CANDIDATE")
             self.assertEqual(world.ready["r"], now)
-        self.assertEqual(world.events, [("dryrun", "r0")])
-
-    def test_receipt_survives_restart_and_rejects_changed_instance(self):
-        world = World()
-        with tempfile.TemporaryDirectory() as directory:
-            receipt = Path(directory) / "continuation.json"
-            first = world.agent("r")
-            first.continuation_file = receipt
-            first.cycle()
-            restarted = FamilyDaemon(first.config, world.gateway("r"),
-                clock=lambda: world.now, monitor=FixedMonitor())
-            restarted.continuation_file = receipt
-            restarted.cycle()
-            self.assertEqual(world.events, [("dryrun", "r0")])
-            changed = FamilyDaemon(replace(first.config, instance_id="i-other"),
-                world.gateway("r"), clock=lambda: world.now, monitor=FixedMonitor())
-            changed.continuation_file = receipt
-            with self.assertRaises(SafetyViolation) as raised:
-                changed.cycle()
-            self.assertEqual(raised.exception.code, "CONTINUATION_RECEIPT_INVALID")
-
-    def test_throttled_authorization_does_not_publish_and_has_bounded_retry(self):
-        world = World()
-        agent = world.agent("r")
-        agent.gateway.dry_run_child = Mock(side_effect=TransientFailure("throttled"))
-        with self.assertRaises(TransientFailure): agent.cycle()
-        self.assertNotIn("r", world.ready)
-        self.assertFalse(agent.continuation_verified)
-        world.now += agent.settings["readiness_timeout_seconds"]
-        with self.assertRaises(SafetyViolation) as raised: agent.cycle()
-        self.assertEqual(raised.exception.code, "CONTINUATION_AUTHORIZATION_TIMEOUT")
-        agent.gateway.dry_run_child.assert_called_once()
-
-    def test_authorization_retry_success_is_cached(self):
-        world = World()
-        agent = world.agent("r")
-        agent.gateway.dry_run_child = Mock(side_effect=[TransientFailure("throttled"), None])
-        with self.assertRaises(TransientFailure): agent.cycle()
-        agent.cycle()
-        world.now += 6
-        agent.cycle()
-        self.assertEqual(agent.gateway.dry_run_child.call_count, 2)
-
-    def test_stop_and_terminal_boundary_do_not_dry_run(self):
-        world = World()
-        agent = world.agent("r")
-        agent.monitor.stopped = True
-        self.assertEqual(agent.cycle(), "STOPPED")
         self.assertEqual(world.events, [])
-        world = World()
-        world.run()
-        self.assertEqual([p for event, p in world.events if event == "dryrun"],
-                         ["r0", "r00", "r10"])
 
-    def test_configuration_change_cannot_reuse_authorization(self):
-        world = World()
-        agent = world.agent("r")
+    def test_configuration_change_rejects_readiness(self):
+        world = World(); agent = world.agent("r")
         agent.cycle()
         agent.config.inherited_configuration["settings"]["max_generation"] = 3
         with self.assertRaises(SafetyViolation): agent.cycle()
-        self.assertEqual(world.events, [("dryrun", "r0")])
+        self.assertEqual(world.events, [])
 
-    def test_six_generation_tree_checks_once_per_interior_instance(self):
+    def test_six_generation_tree_has_no_dry_runs_and_preserves_parents_until_launch(self):
         world = World()
         settings = world.configs["r"].inherited_configuration["settings"]
         settings["max_generation"] = 5
@@ -177,25 +130,56 @@ class FamilyDaemonTests(unittest.TestCase):
         world.run()
         self.assertEqual(len(world.configs), 63)
         self.assertEqual(len(world.retired), 31)
-        self.assertEqual(sum(event == "dryrun" for event, _ in world.events), 31)
+        self.assertFalse(any(event == "dryrun" for event, _ in world.events))
+        for path in world.retired:
+            for child in child_paths(path, validate(world.configs[path])):
+                if child_paths(child, validate(world.configs[child])):
+                    self.assertLess(world.events.index(("propagated", child)), world.events.index(("retire", path)))
 
-    def test_stop_during_authorization_prevents_readiness_and_launch(self):
-        world = World()
+    def test_failed_real_child_launch_preserves_predecessor(self):
+        world = World(); world.nodes["r"] = {"owner": world.configs["r"].instance_id, "status": "OWNER"}
+        world.agent("r").cycle(); world.agent("r0").cycle(); world.agent("r1").cycle()
+        self.assertEqual(world.agent("r").cycle(), "WAITING_FOR_CONTINUATION")
+        child = world.agent("r0")
+        child.gateway.launch_child = Mock(side_effect=TransientFailure("ambiguous launch"))
+        with self.assertRaises(TransientFailure): child.cycle()
+        self.assertNotIn("r0", world.propagated)
+        self.assertNotIn("r", world.retired)
+
+    def test_unproven_real_launch_times_out_without_replay_or_retirement(self):
+        world = World(); world.nodes["r"] = {"owner": world.configs["r"].instance_id, "status": "OWNER"}
         agent = world.agent("r")
-        agent.gateway.dry_run_child = lambda spec: setattr(agent.monitor, "stopped", True)
-        self.assertEqual(agent.cycle(), "STOPPED")
-        self.assertNotIn("r", world.ready)
-        self.assertEqual(world.events, [])
+        agent.gateway.launch_child = Mock(side_effect=TransientFailure("unknown response"))
+        with self.assertRaises(TransientFailure): agent.cycle()
+        calls = agent.gateway.launch_child.call_count
+        world.now += agent.settings["readiness_timeout_seconds"]
+        with self.assertRaises(SafetyViolation) as error: agent.cycle()
+        self.assertEqual(error.exception.code, "CONTINUATION_LAUNCH_TIMEOUT")
+        self.assertEqual(agent.gateway.launch_child.call_count, calls)
+        self.assertFalse(world.retired)
 
-    def test_invalid_receipt_fails_closed_without_new_dry_run(self):
-        world = World()
-        with tempfile.TemporaryDirectory() as directory:
-            agent = world.agent("r")
-            agent.continuation_file = Path(directory) / "continuation.json"
-            agent.continuation_file.write_text("broken json")
-            with self.assertRaises(SafetyViolation) as raised: agent.cycle()
-            self.assertEqual(raised.exception.code, "CONTINUATION_RECEIPT_INVALID")
-            self.assertEqual(world.events, [])
+    def test_single_live_demonstration_never_exceeds_three_generations(self):
+        world = World(False)
+        settings = world.configs["r"].inherited_configuration["settings"]
+        settings["max_generation"] = 5
+        world.configs["r"].inherited_configuration["sha256"] = digest(settings)
+        world.run()
+        self.assertEqual(len(world.configs), 6)
+        self.assertEqual(len(world.retired), 5)
+        self.assertEqual(world.peak_live, 3)
+        settings["max_live_generations"] = 2
+        world.configs["r"].inherited_configuration["sha256"] = digest(settings)
+        with self.assertRaises(SafetyViolation): FamilyDaemon(world.configs["r"], world.gateway("r"))
+
+    def test_stop_after_launch_prevents_propagation_receipt_and_retirement(self):
+        world = World(); world.nodes["r"] = {"owner": world.configs["r"].instance_id, "status": "OWNER"}
+        agent = world.agent("r"); launch = agent.gateway.launch_child
+        def stopped_launch(spec):
+            result = launch(spec); agent.monitor.stopped = True; return result
+        agent.gateway.launch_child = stopped_launch
+        self.assertEqual(agent.cycle(), "STOPPED")
+        self.assertFalse(world.propagated)
+        self.assertFalse(world.retired)
 
     def test_actual_agent_binary_tree_inherits_configuration_and_retains_leaves(self):
         world = World()
@@ -207,11 +191,11 @@ class FamilyDaemonTests(unittest.TestCase):
         for cfg in world.configs.values():
             self.assertEqual(cfg.inherited_configuration, world.configs["r"].inherited_configuration)
 
-    def test_single_successor_uses_same_inheritance_and_waits_for_parent_retirement(self):
+    def test_single_successor_launch_proof_precedes_parent_retirement(self):
         world = World(False)
         world.run()
         self.assertEqual(set(world.configs), {"r", "r0", "r00"})
-        self.assertLess(world.events.index(("retire", "r")), world.events.index(("launch", "r00")))
+        self.assertLess(world.events.index(("launch", "r00")), world.events.index(("retire", "r")))
 
     def test_depth_is_local_and_tokens_distinguish_siblings_and_cycles(self):
         cfg = family_config()

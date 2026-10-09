@@ -1,5 +1,6 @@
 # 0027: Once-per-instance continuation authorization
 
+For inherited EC2 families, the continuation requirement is superseded by [0028](0028-live-propagation-readiness.md).
 Status: Operator approved, 2026-10-08; source implementation, awaiting AMI release.
 
 Anna Sarai requested that continuation dry runs run no more than once per

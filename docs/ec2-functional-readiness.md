@@ -1,5 +1,6 @@
 # EC2 functional readiness: source review
 
+Inherited EC2 families now use the operator-approved [live-propagation readiness protocol](decisions/0028-live-propagation-readiness.md). The DryRun analysis below remains historical and applies to legacy non-inherited EC2 cycles.
 This change builds on the polling work merged into main in PR #14. It implements
 [decision 0021](decisions/0021-successor-functional-readiness.md), explicitly
 approved by the operator. No AWS deployment, live benchmark, AMI build or control

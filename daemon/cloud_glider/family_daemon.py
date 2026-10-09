@@ -77,15 +77,16 @@ class FamilyDaemon:
                  logger=print, monitor=None):
         self.config, self.gateway = config, gateway
         self.settings = validate(config)
+        if (not self.settings["binary_fanout_enabled"] and self.settings["max_generation"] >= 2
+            and self.settings.get("max_live_generations") != 3):
+            raise SafetyViolation("LIVE_CONTINUATION_CAPACITY_INVALID", "single live continuation requires the three-generation ceiling")
         self.clock, self.sleep, self.logger = clock, sleep, logger
         self.monitor = monitor or ControlMonitor(gateway, self.settings)
         self.correlation_id = str(uuid.uuid4())
         self.children = child_paths(config.node_path, self.settings)
         self.last_ready = 0
-        self.continuation_verified = False
-        self.continuation_started = None
-        self.continuation_file = None
-        self.continuation_identity = digest(asdict(config))
+        self.propagation_recorded = False
+        self.configuration_identity = digest(asdict(config))
         self.wait_started = None
         self.stop_file = None
         self.cancelled_paths = set()
@@ -116,37 +117,10 @@ class FamilyDaemon:
         if node.get("status") == "RETIRING":
             self.gateway.retire_self()
             return "RETIRING"
-        # Bind the cached proof to the complete immutable instance configuration.
+        # Readiness and live launch receipts require immutable instance configuration.
         validate(self.config)
-        if digest(asdict(self.config)) != self.continuation_identity:
-            raise SafetyViolation("CONTINUATION_CONFIG_CHANGED", "cached authorization configuration changed")
-        if self.children and not self.continuation_verified:
-            receipt = {"configuration": self.continuation_identity,
-                       "instance_id": self.config.instance_id, "result": "DRY_RUN_PASSED"}
-            if self.continuation_file is not None and self.continuation_file.exists():
-                try:
-                    saved = json.loads(self.continuation_file.read_text())
-                except (ValueError, OSError) as exc:
-                    raise SafetyViolation("CONTINUATION_RECEIPT_INVALID", "cannot read authorization receipt") from exc
-                if saved != receipt:
-                    raise SafetyViolation("CONTINUATION_RECEIPT_INVALID", "authorization receipt belongs to another configuration")
-            else:
-                if self.continuation_started is None:
-                    self.continuation_started = self.clock()
-                if self.clock() - self.continuation_started >= self.settings["readiness_timeout_seconds"]:
-                    raise SafetyViolation("CONTINUATION_AUTHORIZATION_TIMEOUT", "authorization never confirmed; parent preserved")
-                # Both children use the same pinned launch configuration and IAM
-                # constraints. Lineage tags/tokens are checked at actual launch.
-                self.gateway.dry_run_child(self.spec(self.children[0]))
-                if self.continuation_file is not None:
-                    temporary = self.continuation_file.with_suffix(".tmp")
-                    with temporary.open("w") as stream:
-                        os.chmod(temporary, 0o600)
-                        stream.write(json.dumps(receipt, sort_keys=True))
-                        stream.flush()
-                        os.fsync(stream.fileno())
-                    temporary.replace(self.continuation_file)
-            self.continuation_verified = True
+        if digest(asdict(self.config)) != self.configuration_identity:
+            raise SafetyViolation("CONTINUATION_CONFIG_CHANGED", "immutable readiness configuration changed")
         if self.clock() - self.last_ready >= 5:
             if self.monitor.tick():
                 self.stop_children()
@@ -159,11 +133,14 @@ class FamilyDaemon:
             if node.get("status") != "LEAF":
                 self.gateway.mark_leaf()
             return "LEAF"  # Keep terminal leaves until explicit operator cleanup.
-        # Single mode retains accepted-retirement overlap without a global count.
-        if not self.settings["binary_fanout_enabled"] and not self.gateway.parent_launch_ready():
+        # Live continuation needs one launch ahead of a preserved predecessor.
+        # In single mode its grandparent must be gone before extending again.
+        if not self.settings["binary_fanout_enabled"] and not self.gateway.single_launch_ready():
             return "WAITING_FOR_PARENT"
         if self.wait_started is None:
             self.wait_started = self.clock()
+        if not self.propagation_recorded and self.clock() - self.wait_started >= self.settings["readiness_timeout_seconds"]:
+            raise SafetyViolation("CONTINUATION_LAUNCH_TIMEOUT", "real continuation was not proven; preserve predecessor")
         # Separate child submissions can overlap; no global owner/capacity lock.
         with ThreadPoolExecutor(max_workers=len(self.children)) as workers:
             futures = []
@@ -173,6 +150,12 @@ class FamilyDaemon:
                     return "STOPPED"
                 futures.append(workers.submit(self.gateway.launch_child, self.spec(path)))
             instances = [future.result() for future in futures]
+        if not self.propagation_recorded:
+            if self.monitor.tick():
+                self.stop_children()
+                return "STOPPED"
+            self.gateway.publish_propagation(self.children, instances, self.clock())
+            self.propagation_recorded = True
         for path, instance in zip(self.children, instances):
             if self.monitor.tick():
                 self.stop_children()
@@ -189,7 +172,9 @@ class FamilyDaemon:
             self.stop_children()
             return "STOPPED"
         if not self.gateway.authorize_retirement(self.children, self.clock()):
-            return "WAITING_FOR_CHILD"
+            if self.clock() - self.wait_started >= self.settings["readiness_timeout_seconds"]:
+                raise SafetyViolation("CONTINUATION_LAUNCH_TIMEOUT", "successor continuation was not proven; preserve predecessor")
+            return "WAITING_FOR_CONTINUATION"
         self.gateway.retire_self()
         return "RETIRING"
 
@@ -199,7 +184,6 @@ class FamilyDaemon:
                 self.monitor.start()
             state_dir = Path("/var/lib/cloud-glider")
             state_dir.mkdir(parents=True, exist_ok=True)
-            self.continuation_file = state_dir / f"continuation-{self.config.request_id}-{self.config.node_path}.json"
             self.stop_file = state_dir / f"stop-{self.config.request_id}-{self.config.node_path}"
             if self.stop_file.exists():
                 if self.stop_file.read_text() != self.config.inherited_configuration["sha256"]:

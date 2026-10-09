@@ -243,6 +243,22 @@ class FamilyProjectionTests(unittest.TestCase):
             self.assertEqual(event['ownership_at'],iso(102))
             self.assertEqual(event['heartbeat_at'],iso(105))
             self.assertEqual(event['parent_id'],'1:i-root')
+    def test_daemon_readiness_and_live_propagation_are_distinct(self):
+        rows = self.rows(); rows[1]['continuation'] = 'DAEMON_READY'
+        event = project(rows, 'r')[0]
+        self.assertEqual(event['state'], 'READY')
+        self.assertFalse(event['propagation_demonstrated'])
+        self.assertIn('not yet demonstrated', event['readiness_basis'])
+        receipt = dict(PK='GEN#r0', SK='PROPAGATION', request_id='1', instance_id='i-child',
+                       node_path='r0', configuration_sha256='digest', result='LIVE_LAUNCH_PASSED',
+                       children=[dict(node_path='r00', instance_id='i-grandchild', client_token='token')], demonstrated_at=106)
+        event = project(rows + [receipt], 'r')[0]
+        self.assertTrue(event['propagation_demonstrated'])
+        self.assertEqual(event['propagation_at'], iso(106))
+        self.assertEqual(event['ready_at'], iso(101))
+        receipt['configuration_sha256'] = 'foreign'
+        self.assertFalse(project(rows + [receipt], 'r')[0]['propagation_demonstrated'])
+
     def test_family_conflicting_proof_never_claims_ready(self):
         rows=self.rows(); rows[1]['configuration_sha256']='other'
         self.assertEqual(project(rows,'r')[0]['state'],'BOOTING')
