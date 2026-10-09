@@ -60,3 +60,15 @@ preserve the parent, and require exact submission reconciliation before cleanup.
 The existing safe launch retry still consumes the durable rejection receipt
 before submitting the deterministic token again. No identity or cleanup gate is
 relaxed, and unknown launch outcomes remain reconciliation-only.
+
+## Shutdown timing drain
+
+A retiring parent in the October 9 trial lacked its timing completion marker.
+The default SIGTERM action could terminate Python during EC2 shutdown before the
+entrypoint's finally block drained diagnostic records. Handle SIGTERM by exiting
+through those existing finally blocks: close the control monitor and SDK gateway,
+then run the existing three-second bounded exporter drain. Ignore repeated SIGTERM
+while unwinding so it cannot interrupt that drain. This does not publish STOP to
+accepted descendants or change retirement gates. Failed uploads, drain timeout,
+SIGKILL, and lost completion markers remain explicit incomplete evidence; the
+handler is not a guarantee against every transport or host failure.
