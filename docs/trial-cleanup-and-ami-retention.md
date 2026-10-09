@@ -191,7 +191,11 @@ separate from trial-owned resources in both inventory and human review.
 
 The normal EC2 cleanup path validates all recorded status-check alarm names and
 exact instance dimensions before deleting any alarm. It describes and deletes
-in batches of at most 100 names, with a fresh cycle/cleanup fence for each batch.
+in batches of at most 100 names, following every CloudWatch response page with
+a fresh cycle/cleanup fence before each read and deletion. CloudWatch may return
+50 alarms and a NextToken even when fewer than 100 exact names were requested.
+Validate the entire paginated set before deleting anything; foreign or duplicate
+alarms, repeated tokens, and empty pages with continuation tokens stop cleanup.
 This avoids one DeleteAlarms request per instance exhausting CloudWatch's request
 rate limit during fan-out cleanup. Ambiguous or foreign alarms still stop cleanup;
 partial deletion remains safe to resume through the normal operator path.

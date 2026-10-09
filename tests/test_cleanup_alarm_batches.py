@@ -63,3 +63,43 @@ class AlarmBatchTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'ambiguous'):
                 controller.cleanup_status_alarms(client, resources, resources, 'sandbox', Mock())
         client.delete_alarms.assert_not_called()
+
+    def test_50_alarm_page_is_followed_before_single_delete(self):
+        resources = self.inventory(63); client = self.client(resources)
+        original = client.describe_alarms.side_effect
+        def describe(**kw):
+            result = original(**kw)
+            if 'NextToken' not in kw:
+                return {'MetricAlarms': result['MetricAlarms'][:50], 'NextToken': 'page-two'}
+            self.assertEqual(kw['NextToken'], 'page-two')
+            client.delete_alarms.assert_not_called()
+            return {'MetricAlarms': result['MetricAlarms'][50:]}
+        client.describe_alarms.side_effect = describe
+        controller.cleanup_status_alarms(client, resources, resources, 'sandbox', Mock())
+        self.assertEqual(client.describe_alarms.call_count, 2)
+        self.assertEqual(len(client.delete_alarms.call_args.kwargs['AlarmNames']), 63)
+
+    def test_bad_identity_on_later_page_prevents_all_deletion(self):
+        resources = self.inventory(63); client = self.client(resources)
+        metrics = client.describe_alarms(AlarmNames=sorted(
+            'cloud-glider-sandbox-gen-' + x['PK']['S'][4:] + '-status-check'
+            for x in resources.values()))['MetricAlarms']
+        metrics[-1]['Dimensions'][0]['Value'] = 'foreign'
+        client.describe_alarms.side_effect = [
+            {'MetricAlarms': metrics[:50], 'NextToken': 'page-two'},
+            {'MetricAlarms': metrics[50:]}]
+        with self.assertRaisesRegex(RuntimeError, 'ownership'):
+            controller.cleanup_status_alarms(client, resources, resources, 'sandbox', Mock())
+        client.delete_alarms.assert_not_called()
+
+    def test_repeated_pagination_token_fails_without_deletion(self):
+        resources = self.inventory(3); client = self.client(resources)
+        metrics = client.describe_alarms(AlarmNames=sorted(
+            'cloud-glider-sandbox-gen-' + x['PK']['S'][4:] + '-status-check'
+            for x in resources.values()))['MetricAlarms']
+        client.describe_alarms.side_effect = [
+            {'MetricAlarms': metrics[:1], 'NextToken': 'same'},
+            {'MetricAlarms': metrics[1:2], 'NextToken': 'same'}]
+        with self.assertRaisesRegex(RuntimeError, 'pagination is ambiguous'):
+            controller.cleanup_status_alarms(client, resources, resources, 'sandbox', Mock())
+        client.delete_alarms.assert_not_called()

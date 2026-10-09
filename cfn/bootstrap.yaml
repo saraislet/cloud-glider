@@ -827,18 +827,30 @@ Resources:
               # CloudWatch accepts at most 100 names. Validate the entire recorded set
               # before deleting any alarm, and keep every batch cycle-fenced.
               for offset in range(0, len(names), 100):
-                  guard()
-                  result = alarms.describe_alarms(AlarmNames=names[offset:offset + 100])
-                  require(not result.get('CompositeAlarms') and not result.get('NextToken'),
-                          'Alarm identity is ambiguous')
-                  for metric in result.get('MetricAlarms', []):
-                      name = metric.get('AlarmName')
-                      require(name in names[offset:offset + 100] and name not in verified
-                          and metric.get('Namespace') == 'AWS/EC2'
-                          and metric.get('MetricName') == 'StatusCheckFailed'
-                          and metric.get('Dimensions') == [{'Name': 'InstanceId', 'Value': expected[name]}],
-                          'Alarm ownership mismatch')
-                      verified.append(name)
+                  batch = names[offset:offset + 100]
+                  token = None
+                  seen_tokens = set()
+                  while True:
+                      guard()
+                      kwargs = {'AlarmNames': batch, 'MaxRecords': 100}
+                      if token:
+                          kwargs['NextToken'] = token
+                      result = alarms.describe_alarms(**kwargs)
+                      require(not result.get('CompositeAlarms'), 'Alarm identity is ambiguous')
+                      metrics = result.get('MetricAlarms', [])
+                      for metric in metrics:
+                          name = metric.get('AlarmName')
+                          require(name in batch and name not in verified
+                              and metric.get('Namespace') == 'AWS/EC2'
+                              and metric.get('MetricName') == 'StatusCheckFailed'
+                              and metric.get('Dimensions') == [{'Name': 'InstanceId', 'Value': expected[name]}],
+                              'Alarm ownership mismatch')
+                          verified.append(name)
+                      token = result.get('NextToken')
+                      if not token:
+                          break
+                      require(metrics and token not in seen_tokens, 'Alarm pagination is ambiguous')
+                      seen_tokens.add(token)
               for offset in range(0, len(verified), 100):
                   guard()
                   alarms.delete_alarms(AlarmNames=verified[offset:offset + 100])
