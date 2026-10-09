@@ -66,11 +66,13 @@ family do not contend for a global propagation owner or mutable counter.
 ## Readiness, ownership and retirement
 
 The running successor verifies its own exact EC2/template/image/configuration
-identity and executes a continuation authorization dry run for its next children.
+identity and executes one continuation authorization dry run for the shared launch
+configuration of its next children. See decision 0027 for receipt reuse.
 Terminal leaves use the inherited boundary instead. It publishes a proof with
 exact cycle, lineage, instance, predecessor, handoff token, configuration digest,
 generation and timestamp. Functional proof refresh is five seconds and freshness
-is fifteen seconds, preserving decision 0021's contract. EC2 status alarms remain
+is fifteen seconds for live daemon readiness. Authorization is an instance/configuration-bound
+startup proof, not a refreshed permission assertion (decision 0027). EC2 status alarms remain
 corroborating telemetry, named by unique node path for successors.
 
 A parent verifies that exact child instance and full proof snapshot and transfers

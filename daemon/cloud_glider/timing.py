@@ -63,7 +63,7 @@ def configure_export(config, instance_id, region):
     while _early:
         _exporter.enqueue(_early.popleft())
 
-def close_export(timeout=1.5):
+def close_export(timeout=3):
     if _exporter is not None:
         return _exporter.close(timeout)
     return False

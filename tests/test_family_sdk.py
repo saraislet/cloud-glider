@@ -204,6 +204,39 @@ class FamilySdkTests(unittest.TestCase):
             self.gateway.read_node.return_value = {**receipt, field: value}
             with self.assertRaises(SafetyViolation): self.gateway.parent_terminated()
 
+    def test_shutting_down_parent_allows_detached_fields_only_with_receipt(self):
+        from dataclasses import replace
+        from test_ec2_sdk import template_data
+        from cloud_glider.inherited import specification
+        self.gateway.config = replace(self.cfg, node_path="r0", generation="000001", predecessor_instance_id="i-parent")
+        self.gateway._template_data = template_data()
+        spec = specification(self.gateway.config, "r", "NONE", "OPERATOR_BOOTSTRAP")
+        parent = {"InstanceId": "i-parent", "State": {"Name": "shutting-down"},
+                  "Tags": spec["tags"], "ClientToken": spec["client_token"],
+                  "LaunchTemplate": {"LaunchTemplateId": spec["launch_template_id"], "Version": "1"},
+                  "ImageId": "ami-approved", "InstanceType": "t4g.micro", "Architecture": "arm64",
+                  "MetadataOptions": template_data()["MetadataOptions"]}
+        receipt = {"request_id": self.cfg.request_id, "instance_id": "i-parent", "owner": "i-parent",
+                   "configuration_sha256": self.gateway.configuration_sha256, "status": "RETIRING",
+                   "retirement_children": ["r0", "r1"]}
+        self.gateway.describe_instance = Mock(return_value=parent)
+        self.gateway.read_node = Mock(return_value=receipt)
+        self.assertFalse(self.gateway.parent_terminated())
+        self.assertTrue(self.gateway.parent_launch_ready())
+        self.assertFalse(self.gateway.confirmed_parent_termination)
+        self.assertEqual(self.calls, [])
+        for field, value in (("SubnetId", "foreign"), ("IamInstanceProfile", {"Arn": "foreign"}),
+                             ("SecurityGroups", [{"GroupId": "foreign"}]), ("ImageId", "foreign"),
+                             ("InstanceId", "foreign")):
+            self.gateway.describe_instance.return_value = {**parent, field: value}
+            with self.assertRaises(SafetyViolation): self.gateway.parent_state()
+        self.gateway.describe_instance.return_value = parent
+        self.gateway.read_node.return_value = {**receipt, "status": "OWNER"}
+        with self.assertRaises(SafetyViolation): self.gateway.parent_state()
+        self.gateway.read_node.return_value = receipt
+        self.gateway.describe_instance.return_value = {**parent, "State": {"Name": "running"}}
+        with self.assertRaises(SafetyViolation): self.gateway.parent_state()
+
     def test_family_hold_is_async_and_requires_acceptance(self):
         self.response = {"StatusCode": 202}
         self.gateway.invoke_hold("000000", "TEST", "id")

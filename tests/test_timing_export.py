@@ -42,6 +42,24 @@ class TimingExportTests(unittest.TestCase):
                     if response is None: raise OSError('do not expose credentials')
                     return response
             sink=Failed(); export=Exporter(sink,'group','stream',{},interval=.001); export.enqueue({'event':'phase_timing'}); self.assertTrue(export.close(1)); self.assertGreater(export.errors,0); self.assertEqual(export.uploaded,0)
+    def test_transient_upload_is_retried_without_losing_records(self):
+        class Transient(Sink):
+            attempts = 0
+            def put_log_events(self, **kwargs):
+                self.attempts += 1
+                if self.attempts == 1: raise OSError("temporary transport error")
+                return super().put_log_events(**kwargs)
+        sink = Transient()
+        export = Exporter(sink, 'group', 'stream', {}, interval=.001)
+        export.enqueue({'event': 'phase_timing', 'phase': 'instance_identity_validation',
+                        'ec2_state': 'shutting-down', 'mismatch_fields': 'subnet_id instance_profile',
+                        'inspected_instance_id': 'i-parent', 'retiring': True})
+        self.assertTrue(export.close(2))
+        self.assertTrue(sink.records[-1]['complete'])
+        self.assertEqual(sink.records[-1]['upload_retries'], 1)
+        self.assertEqual(sink.records[0]['mismatch_fields'], 'subnet_id instance_profile')
+        self.assertEqual(sink.records[0]['inspected_instance_id'], 'i-parent')
+
     def test_unknown_record_and_oversize_fields_are_not_exported(self):
         self.assertIsNone(sanitize({'event':'terminal_error','reason':'secret'}))
         self.assertNotIn('phase',sanitize({'event':'boot_timing','phase':'a'*1000}))

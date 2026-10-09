@@ -282,7 +282,7 @@ class FamilySdkGateway(Ec2SdkGateway):
         tags = parent.get("Tags", {})
         spec = specification(self.config, self.config.node_path[:-1],
                              tags.get("predecessor-instance-id"), tags.get("handoff-token"))
-        if parent["State"]["Name"] == "terminated":
+        if parent["State"]["Name"] in ("shutting-down", "terminated"):
             # EC2 removes network/profile fields after termination. Anchor the
             # exact parent to its cycle-fenced, accepted retirement receipt.
             receipt = self.read_node(self.config.node_path[:-1])
@@ -295,7 +295,10 @@ class FamilySdkGateway(Ec2SdkGateway):
                 or any(receipt.get(k) != v for k, v in expected.items())
                 or receipt.get("retirement_children") != list(child_paths(self.config.node_path[:-1], self.settings))
                 or any(tags.get(k) != v for k, v in spec["tags"].items())):
-                raise SafetyViolation("PARENT_RETIREMENT_IDENTITY_MISMATCH", "terminated parent differs from durable retirement receipt or lineage tags")
+                raise SafetyViolation("PARENT_RETIREMENT_IDENTITY_MISMATCH", "retiring parent differs from durable retirement receipt or lineage tags")
+            if parent["State"]["Name"] == "shutting-down":
+                self.verify_instance(parent, spec, retiring=True)
+                return "shutting-down"  # Never confirmation of termination.
             if not self.confirmed_parent_termination:
                 proof = json.dumps(parent, sort_keys=True, default=str, separators=(",", ":"))
                 self.transact([{"Update": {"TableName": self.config.generation_table_name,

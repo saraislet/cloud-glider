@@ -100,6 +100,103 @@ class FamilyDaemonTests(unittest.TestCase):
                 monitor.close.assert_called_once()
 
 
+    def test_readiness_refreshes_without_repeating_continuation(self):
+        world = World()
+        agent = world.agent("r")  # Candidate keeps waiting for ownership.
+        for now in (100, 106, 112):
+            world.now = now
+            self.assertEqual(agent.cycle(), "CANDIDATE")
+            self.assertEqual(world.ready["r"], now)
+        self.assertEqual(world.events, [("dryrun", "r0")])
+
+    def test_receipt_survives_restart_and_rejects_changed_instance(self):
+        world = World()
+        with tempfile.TemporaryDirectory() as directory:
+            receipt = Path(directory) / "continuation.json"
+            first = world.agent("r")
+            first.continuation_file = receipt
+            first.cycle()
+            restarted = FamilyDaemon(first.config, world.gateway("r"),
+                clock=lambda: world.now, monitor=FixedMonitor())
+            restarted.continuation_file = receipt
+            restarted.cycle()
+            self.assertEqual(world.events, [("dryrun", "r0")])
+            changed = FamilyDaemon(replace(first.config, instance_id="i-other"),
+                world.gateway("r"), clock=lambda: world.now, monitor=FixedMonitor())
+            changed.continuation_file = receipt
+            with self.assertRaises(SafetyViolation) as raised:
+                changed.cycle()
+            self.assertEqual(raised.exception.code, "CONTINUATION_RECEIPT_INVALID")
+
+    def test_throttled_authorization_does_not_publish_and_has_bounded_retry(self):
+        world = World()
+        agent = world.agent("r")
+        agent.gateway.dry_run_child = Mock(side_effect=TransientFailure("throttled"))
+        with self.assertRaises(TransientFailure): agent.cycle()
+        self.assertNotIn("r", world.ready)
+        self.assertFalse(agent.continuation_verified)
+        world.now += agent.settings["readiness_timeout_seconds"]
+        with self.assertRaises(SafetyViolation) as raised: agent.cycle()
+        self.assertEqual(raised.exception.code, "CONTINUATION_AUTHORIZATION_TIMEOUT")
+        agent.gateway.dry_run_child.assert_called_once()
+
+    def test_authorization_retry_success_is_cached(self):
+        world = World()
+        agent = world.agent("r")
+        agent.gateway.dry_run_child = Mock(side_effect=[TransientFailure("throttled"), None])
+        with self.assertRaises(TransientFailure): agent.cycle()
+        agent.cycle()
+        world.now += 6
+        agent.cycle()
+        self.assertEqual(agent.gateway.dry_run_child.call_count, 2)
+
+    def test_stop_and_terminal_boundary_do_not_dry_run(self):
+        world = World()
+        agent = world.agent("r")
+        agent.monitor.stopped = True
+        self.assertEqual(agent.cycle(), "STOPPED")
+        self.assertEqual(world.events, [])
+        world = World()
+        world.run()
+        self.assertEqual([p for event, p in world.events if event == "dryrun"],
+                         ["r0", "r00", "r10"])
+
+    def test_configuration_change_cannot_reuse_authorization(self):
+        world = World()
+        agent = world.agent("r")
+        agent.cycle()
+        agent.config.inherited_configuration["settings"]["max_generation"] = 3
+        with self.assertRaises(SafetyViolation): agent.cycle()
+        self.assertEqual(world.events, [("dryrun", "r0")])
+
+    def test_six_generation_tree_checks_once_per_interior_instance(self):
+        world = World()
+        settings = world.configs["r"].inherited_configuration["settings"]
+        settings["max_generation"] = 5
+        world.configs["r"].inherited_configuration["sha256"] = digest(settings)
+        world.run()
+        self.assertEqual(len(world.configs), 63)
+        self.assertEqual(len(world.retired), 31)
+        self.assertEqual(sum(event == "dryrun" for event, _ in world.events), 31)
+
+    def test_stop_during_authorization_prevents_readiness_and_launch(self):
+        world = World()
+        agent = world.agent("r")
+        agent.gateway.dry_run_child = lambda spec: setattr(agent.monitor, "stopped", True)
+        self.assertEqual(agent.cycle(), "STOPPED")
+        self.assertNotIn("r", world.ready)
+        self.assertEqual(world.events, [])
+
+    def test_invalid_receipt_fails_closed_without_new_dry_run(self):
+        world = World()
+        with tempfile.TemporaryDirectory() as directory:
+            agent = world.agent("r")
+            agent.continuation_file = Path(directory) / "continuation.json"
+            agent.continuation_file.write_text("broken json")
+            with self.assertRaises(SafetyViolation) as raised: agent.cycle()
+            self.assertEqual(raised.exception.code, "CONTINUATION_RECEIPT_INVALID")
+            self.assertEqual(world.events, [])
+
     def test_actual_agent_binary_tree_inherits_configuration_and_retains_leaves(self):
         world = World()
         world.run()
