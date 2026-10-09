@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import signal
 import sys
 import time
 from pathlib import Path
@@ -22,7 +23,18 @@ with span("runtime_imports"):
     from cloud_glider.aws_sdk import AwsSdkGateway
 
 
+def install_termination_handler():
+    # systemd sends SIGTERM during EC2 shutdown. Unwind the normal lifecycle
+    # finally blocks so monitor threads close and the bounded exporter drains.
+    # Do not publish STOP to healthy descendants during accepted retirement.
+    def terminate(signum, frame):
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        raise SystemExit(0)
+    signal.signal(signal.SIGTERM, terminate)
+
+
 def main() -> int:
+    install_termination_handler()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", required=True)
     parser.add_argument("--timing-smoke", action="store_true",

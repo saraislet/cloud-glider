@@ -544,6 +544,37 @@ def complete_cleanup(ddb, table, control, current, request, env):
     print(json.dumps({'action': 'CLEANUP_COMPLETE', 'request_id': request_id, 'next_request_id': next_id}))
 
 
+def cleanup_status_alarms(alarms, resources, instance_ids, environment, guard):
+    expected = {}
+    for instance_id in sorted(instance_ids):
+        record = resources.get(instance_id)
+        require(record is not None, 'Missing recorded EC2 inventory')
+        generation = record['PK']['S'].removeprefix('GEN#')
+        name = 'cloud-glider-' + environment + '-gen-' + generation + '-status-check'
+        require(name not in expected, 'Alarm identity is ambiguous')
+        expected[name] = instance_id
+    names = sorted(expected)
+    verified = []
+    # CloudWatch accepts at most 100 names. Validate the entire recorded set
+    # before deleting any alarm, and keep every batch cycle-fenced.
+    for offset in range(0, len(names), 100):
+        guard()
+        result = alarms.describe_alarms(AlarmNames=names[offset:offset + 100])
+        require(not result.get('CompositeAlarms') and not result.get('NextToken'),
+                'Alarm identity is ambiguous')
+        for metric in result.get('MetricAlarms', []):
+            name = metric.get('AlarmName')
+            require(name in names[offset:offset + 100] and name not in verified
+                and metric.get('Namespace') == 'AWS/EC2'
+                and metric.get('MetricName') == 'StatusCheckFailed'
+                and metric.get('Dimensions') == [{'Name': 'InstanceId', 'Value': expected[name]}],
+                'Alarm ownership mismatch')
+            verified.append(name)
+    for offset in range(0, len(verified), 100):
+        guard()
+        alarms.delete_alarms(AlarmNames=verified[offset:offset + 100])
+
+
 def cleanup_step(event_request, ddb, cfn, ec2, env):
     table = env['STATE_TABLE']
     control, current, hold, request = snapshot(ddb, table)
@@ -665,20 +696,8 @@ def cleanup_step(event_request, ddb, cfn, ec2, env):
             from botocore.config import Config
             alarms = boto3.client('cloudwatch', region_name='us-west-2', config=Config(connect_timeout=2, read_timeout=5, retries={'total_max_attempts': 1}))
             try:
-                for instance_id in direct_ids:
-                    record = resources.get(instance_id)
-                    require(record is not None, 'Missing recorded EC2 inventory')
-                    generation = record['PK']['S'].removeprefix('GEN#')
-                    name = 'cloud-glider-' + env['ENVIRONMENT'] + '-gen-' + generation + '-status-check'
-                    result = alarms.describe_alarms(AlarmNames=[name])
-                    require(not result.get('CompositeAlarms'), 'Alarm identity is ambiguous')
-                    metric = result.get('MetricAlarms', [])
-                    require(len(metric) <= 1 and (not metric or (metric[0].get('Namespace') == 'AWS/EC2'
-                        and metric[0].get('MetricName') == 'StatusCheckFailed'
-                        and metric[0].get('Dimensions') == [{'Name': 'InstanceId', 'Value': instance_id}])), 'Alarm ownership mismatch')
-                    if metric:
-                        cleanup_guard(ddb, table, request_id)
-                        alarms.delete_alarms(AlarmNames=[name])
+                cleanup_status_alarms(alarms, resources, direct_ids, env['ENVIRONMENT'],
+                    lambda: cleanup_guard(ddb, table, request_id))
             finally:
                 alarms.close()
         verify_residuals(ec2, env, volumes)
