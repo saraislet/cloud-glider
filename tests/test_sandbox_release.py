@@ -4,7 +4,7 @@ import json
 import unittest
 
 from scripts.request_bootstrap import fingerprint
-from scripts.verify_sandbox_release import smoke_result, verify_pins
+from scripts.verify_sandbox_release import smoke_result, smoke_signal_result, verify_pins
 
 
 class SandboxReleaseTests(unittest.TestCase):
@@ -69,3 +69,15 @@ class SandboxReleaseTests(unittest.TestCase):
                      json.dumps(result) + '\nCLOUD_GLIDER_AMI_SMOKE_FAIL'):
             with self.subTest(text=text), self.assertRaises(ValueError):
                 smoke_result(text, 'digest')
+
+class SmokeSignalTests(unittest.TestCase):
+    def test_retained_signal_requires_explicit_matching_guest_result(self):
+        result = {'result': 'CLOUD_GLIDER_AMI_SMOKE_PASS', 'daemon_sha256': 'digest',
+                  'ec2_contract': 'EC2_BAKED_CONTRACT_PASS', 'free_bytes': 500*1024*1024}
+        def stack(signals):
+            return {'Outputs': [{'OutputKey': 'SmokeResultData', 'OutputValue': json.dumps(signals)}]}
+        self.assertEqual(smoke_signal_result(stack({'runtime': json.dumps(result)}), 'digest'), result)
+        for bad in ({}, {'other': json.dumps(result)}, {'runtime': json.dumps({**result, 'daemon_sha256': 'foreign'})},
+                    {'runtime': json.dumps({**result, 'result': 'CLOUD_GLIDER_AMI_SMOKE_FAIL'})}):
+            with self.assertRaises(ValueError): smoke_signal_result(stack(bad), 'digest')
+        with self.assertRaises(ValueError): smoke_signal_result({}, 'digest')

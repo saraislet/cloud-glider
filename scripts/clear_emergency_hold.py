@@ -47,7 +47,7 @@ def build_transaction(args: argparse.Namespace, *, now: str, event_id: str) -> l
         },
         {
             "Put": {
-                "TableName": args.table_name,
+                "TableName": args.audit_table_name,
                 "Item": audit,
                 "ConditionExpression": "attribute_not_exists(PK) OR occurred_at <= :now",
                 "ExpressionAttributeValues": {":now": av_string(now)},
@@ -59,6 +59,8 @@ def build_transaction(args: argparse.Namespace, *, now: str, event_id: str) -> l
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--table-name", required=True)
+    parser.add_argument("--audit-table-name", required=True,
+                        help="Pinned separate audit table; never expand state-table permissions for audit writes")
     parser.add_argument("--operator-id", required=True)
     parser.add_argument("--reason", required=True)
     parser.add_argument("--environment", default="sandbox")
