@@ -149,6 +149,11 @@ class AwsSdkGateway:
         except Exception:
             outcome, error_code = "FAILED", "UnexpectedError"
             raise
+        except BaseException as exc:
+            # SIGTERM unwinds through SystemExit. An interrupted SDK call has
+            # no confirmed response and must never be reported as successful.
+            outcome, error_code = "INTERRUPTED", type(exc).__name__
+            raise
         finally:
             emit(
                 "api_timing",

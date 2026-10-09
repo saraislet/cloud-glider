@@ -72,3 +72,6 @@ while unwinding so it cannot interrupt that drain. This does not publish STOP to
 accepted descendants or change retirement gates. Failed uploads, drain timeout,
 SIGKILL, and lost completion markers remain explicit incomplete evidence; the
 handler is not a guarantee against every transport or host failure.
+If shutdown interrupts an SDK call before it returns, API timing records report
+INTERRUPTED with the interruption type. They preserve the exception and never
+infer API success, resource absence, or permission to replay the request.

@@ -104,6 +104,20 @@ class SdkTests(unittest.TestCase):
                 self.gateway._call("ec2", "describe_instances", allow_failure=True)
         self.assertEqual(records[0]["outcome"], "TRANSPORT_ERROR")
 
+    def test_shutdown_interruptions_are_unknown_outcomes_not_success(self):
+        client = Mock()
+        self.gateway._clients['ec2'] = client
+        for interruption in (SystemExit(0), KeyboardInterrupt()):
+            records = []
+            client.run_instances.side_effect = interruption
+            with patch('cloud_glider.aws_sdk.emit', side_effect=lambda event, **kw: records.append(kw)):
+                with self.assertRaises(type(interruption)) as raised:
+                    self.gateway._call('ec2', 'run_instances', allow_failure=True)
+            self.assertIs(raised.exception, interruption)
+            self.assertEqual(records[0]['outcome'], 'INTERRUPTED')
+            self.assertEqual(records[0]['error_code'], type(interruption).__name__)
+        self.assertEqual(client.run_instances.call_count, 2)  # no replay or retry
+
     def test_reuses_regional_clients_and_bounded_config(self):
         stub = self.stub("dynamodb")
         expected = {
