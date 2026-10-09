@@ -188,3 +188,10 @@ instances, untagged unattached resources, external operators and deletion-histor
 expiry require separate review. The tool is deliberately conservative and cannot
 claim account-wide absence of residue. Keep retained control-plane infrastructure
 separate from trial-owned resources in both inventory and human review.
+
+The normal EC2 cleanup path validates all recorded status-check alarm names and
+exact instance dimensions before deleting any alarm. It describes and deletes
+in batches of at most 100 names, with a fresh cycle/cleanup fence for each batch.
+This avoids one DeleteAlarms request per instance exhausting CloudWatch's request
+rate limit during fan-out cleanup. Ambiguous or foreign alarms still stop cleanup;
+partial deletion remains safe to resume through the normal operator path.
