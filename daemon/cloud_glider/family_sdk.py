@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import time
+import random
 import hashlib
 import json
 from datetime import datetime, timezone
@@ -180,12 +181,24 @@ class FamilySdkGateway(Ec2SdkGateway):
     def submit_child(self, spec):
         response = self._call("ec2", "run_instances", allow_failure=True, **self.child_request(spec))
         if response.get("_code") == "RequestLimitExceeded":
-            self.transact([{"Update": {"TableName": self.config.generation_table_name,
+            rejection = [{"Update": {"TableName": self.config.generation_table_name,
                 "Key": self.node_key(spec["node_path"], "SUBMISSION"),
                 "UpdateExpression": "SET launch_rejected = :yes",
                 "ConditionExpression": "request_id = :id AND #token = :token AND attribute_not_exists(instance_id)",
                 "ExpressionAttributeNames": {"#token": "token"},
-                "ExpressionAttributeValues": {":id": _av(self.config.request_id), ":token": _av(spec["client_token"]), ":yes": _av(True)}}}], bookkeeping=True)
+                "ExpressionAttributeValues": {":id": _av(self.config.request_id), ":token": _av(spec["client_token"]), ":yes": _av(True)}}}]
+            # A concurrent sibling write/control read can cancel this transaction.
+            # Retain the definitive EC2 rejection while retrying only bookkeeping;
+            # never issue another launch until the fenced receipt is durable.
+            for attempt in range(8):
+                try:
+                    self.transact(rejection, bookkeeping=True)
+                    break
+                except TransientFailure as exc:
+                    if attempt == 7:
+                        raise SafetyViolation("LAUNCH_REJECTION_RECEIPT_FAILED",
+                            "explicit launch rejection could not be recorded; preserve parent and reconcile submission") from exc
+                    time.sleep(random.uniform(0.05, min(1.0, 0.05 * 2 ** attempt)))
             raise TransientFailure("child launch throttled; exact request may retry after backoff")
         if response.get("_code"):
             raise TransientFailure("child launch requires reconciliation: " + response["_code"])

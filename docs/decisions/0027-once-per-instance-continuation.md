@@ -47,3 +47,16 @@ names into private timing evidence before the normal HOLD path.
 Diagnostic uploads now retry a batch at most three times in the independent
 export worker, retaining record IDs for deduplication. Shutdown drain is bounded
 to three seconds. Exhausted or rejected uploads still report incomplete evidence.
+
+## Rejected launch receipt durability
+
+The October 9 trial exposed a definitive RunInstances throttle rejection whose
+receipt transaction was canceled while siblings and control readers overlapped.
+Without that receipt the safe retry path must treat the submission as ambiguous.
+Retry only the same cycle/token-fenced rejection receipt, at most eight attempts
+with bounded jitter. Do not repeat RunInstances during receipt retries. If the
+receipt cannot be recorded, invoke HOLD with LAUNCH_REJECTION_RECEIPT_FAILED,
+preserve the parent, and require exact submission reconciliation before cleanup.
+The existing safe launch retry still consumes the durable rejection receipt
+before submitting the deterministic token again. No identity or cleanup gate is
+relaxed, and unknown launch outcomes remain reconciliation-only.
